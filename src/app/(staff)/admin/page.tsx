@@ -1,0 +1,49 @@
+import OrderQueue from "@/components/admin/OrderQueue";
+import { auth } from "@/lib/auth";
+import db from "@/lib/db";
+
+export default async function AdminPage() {
+  const session = await auth();
+
+  // Quick stats
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const [todayOrders, totalMembers] = await Promise.all([
+    db.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
+    db.user.count({ where: { role: "USER" } }),
+  ]);
+
+  return (
+    <div>
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-navy">Dashboard</h1>
+        <p className="text-gray-500 text-sm">ยินดีต้อนรับ, {session?.user?.username}</p>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="text-gray-400 text-xs">ออเดอร์วันนี้</p>
+          <p className="text-2xl font-bold text-navy">{todayOrders}</p>
+        </div>
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          <p className="text-gray-400 text-xs">สมาชิกทั้งหมด</p>
+          <p className="text-2xl font-bold text-orange">{totalMembers}</p>
+        </div>
+        <div className="bg-orange rounded-2xl p-4 shadow-sm col-span-2 md:col-span-1">
+          <p className="text-white/70 text-xs">เวลาเปิดทำการ</p>
+          <p className="text-lg font-bold text-white">15:00 – 23:00</p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="font-bold text-navy">ออเดอร์ที่รอดำเนินการ</h2>
+        <span className="text-xs text-gray-400">รีเฟรชทุก 10 วินาที</span>
+      </div>
+      <OrderQueue />
+    </div>
+  );
+}

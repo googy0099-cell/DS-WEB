@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            Int        @id @default(autoincrement())
+  email         String     @unique
+  passwordHash  String?
+  googleId      String?    @unique
+  firstName     String
+  lastName      String
+  username      String     @unique
+  phone         String?    @unique
+  memberCode    String     @unique
+  visitCount    Int        @default(0)
+  points        Int        @default(0)
+  totalSpentTHB Int        @default(0)
+  role          String     @default("USER")
+  orders        Order[]    @relation("CustomerOrders")
+  handledOrders Order[]    @relation("StaffOrders")
+  auditLogs     AuditLog[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model Table {
+  id         Int     @id @default(autoincrement())
+  number     Int     @unique
+  isOccupied Boolean @default(false)
+  orders     Order[]
+}
+
+model MenuItem {
+  id          Int         @id @default(autoincrement())
+  nameTh      String
+  nameEn      String
+  category    String
+  priceTHB    Int
+  imageUrl    String?
+  isAvailable Boolean     @default(true)
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  orderName   String      @default("")
+  userId      Int?
+  user        User?       @relation("CustomerOrders", fields: [userId], references: [id])
+  handledById Int?
+  handledBy   User?       @relation("StaffOrders", fields: [handledById], references: [id])
+  tableId     Int?
+  table       Table?      @relation(fields: [tableId], references: [id])
+  status      String      @default("PENDING")
+  totalTHB    Int
+  note        String?
+  items       OrderItem[]
+  payment     Payment?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model OrderItem {
+  id           Int      @id @default(autoincrement())
+  orderId      Int
+  order        Order    @relation(fields: [orderId], references: [id])
+  menuItemId   Int
+  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity     Int
+  unitPriceTHB Int
+}
+
+model Payment {
+  id          Int       @id @default(autoincrement())
+  orderId     Int       @unique
+  order       Order     @relation(fields: [orderId], references: [id])
+  method      String
+  amountTHB   Int
+  status      String    @default("PENDING")
+  confirmedAt DateTime?
+  staffNote   String?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int
+  user       User     @relation(fields: [userId], references: [id])
+  action     String
+  targetType String?
+  targetId   Int?
+  detail     String?
+  createdAt  DateTime @default(now())
+}
+
+model Activity {
+  id        Int      @id @default(autoincrement())
+  emoji     String
+  title     String
+  date      String
+  tag       String
+  desc      String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model GalleryItem {
+  id        Int      @id @default(autoincrement())
+  imageUrl  String
+  caption   String?
+  section   String   @default("gallery") // "gallery" | "hero" | "about"
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model GameGuide {
+  id          Int      @id @default(autoincrement())
+  nameTh      String
+  nameEn      String
+  summaryTh   String
+  youtubeUrl  String?
+  imageUrl    String?
+  minPlayers  Int
+  maxPlayers  Int
+  durationMin Int
+  tags        String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+}
