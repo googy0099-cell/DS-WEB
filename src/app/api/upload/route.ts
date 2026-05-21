@@ -1,17 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { randomUUID } from "crypto";
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) {
-    return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
+  try {
+    const { auth } = await import("@/lib/auth");
+    const session = await auth();
+    if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) {
+      return NextResponse.json({ error: "ไม่มีสิทธิ์ กรุณา login ก่อน" }, { status: 403 });
+    }
+  } catch (e) {
+    return NextResponse.json({ error: `ตรวจสอบสิทธิ์ไม่ได้: ${String(e)}` }, { status: 500 });
   }
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "ไม่พบไฟล์" }, { status: 400 });
+  let file: File | null = null;
+  try {
+    const formData = await req.formData();
+    file = formData.get("file") as File | null;
+  } catch (e) {
+    return NextResponse.json({ error: `อ่านไฟล์ไม่ได้: ${String(e)}` }, { status: 400 });
+  }
 
+  if (!file) return NextResponse.json({ error: "ไม่พบไฟล์" }, { status: 400 });
   if (!file.type.startsWith("image/")) {
     return NextResponse.json({ error: "รองรับเฉพาะไฟล์รูปภาพ" }, { status: 400 });
   }
@@ -24,17 +33,26 @@ export async function POST(req: NextRequest) {
 
   // Vercel Blob (production)
   if (process.env.BLOB_READ_WRITE_TOKEN) {
-    const { put } = await import("@vercel/blob");
-    const blob = await put(filename, file, { access: "public" });
-    return NextResponse.json({ url: blob.url });
+    try {
+      const { put } = await import("@vercel/blob");
+      const blob = await put(filename, file, { access: "public" });
+      return NextResponse.json({ url: blob.url });
+    } catch (e) {
+      return NextResponse.json({ error: `Blob upload ล้มเหลว: ${String(e)}` }, { status: 500 });
+    }
   }
 
   // Local filesystem fallback (development)
-  const { writeFile, mkdir } = await import("fs/promises");
-  const path = await import("path");
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-  const buffer = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(uploadsDir, filename.replace("uploads/", "")), buffer);
-  return NextResponse.json({ url: `/uploads/${filename.replace("uploads/", "")}` });
+  try {
+    const { writeFile, mkdir } = await import("fs/promises");
+    const path = await import("path");
+    const uploadsDir = path.join(process.cwd(), "public", "uploads");
+    await mkdir(uploadsDir, { recursive: true });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const localName = filename.replace("uploads/", "");
+    await writeFile(path.join(uploadsDir, localName), buffer);
+    return NextResponse.json({ url: `/uploads/${localName}` });
+  } catch (e) {
+    return NextResponse.json({ error: `บันทึกไฟล์ไม่ได้: ${String(e)}` }, { status: 500 });
+  }
 }
