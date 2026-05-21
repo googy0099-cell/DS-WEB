@@ -18,7 +18,7 @@ export default function AboutSection() {
   return (
     <section id="about" className="py-16 px-4 bg-cream">
       <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 items-center">
-        <div>
+        <div className="text-center md:text-left">
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">เกี่ยวกับเรา</p>
           <h2 className="text-2xl md:text-2xl font-bold text-navy mb-4 leading-snug">
             พื้นที่สำหรับ<br />ทุกคน
@@ -34,7 +34,7 @@ export default function AboutSection() {
             บอร์ดเกมกว่า 200 เกมพร้อมให้เลือกเล่น พร้อมทีมงานที่คอยแนะนำวิธีเล่น
             อาหารและเครื่องดื่มคุณภาพดี สั่งได้ทันทีไม่ต้องรอนาน
           </p>
-          <div className="flex gap-8">
+          <div className="flex gap-8 justify-center md:justify-start">
             <div>
               <p className="text-2xl font-bold text-orange">200+</p>
               <p className="text-sm text-gray-500">บอร์ดเกม</p>
