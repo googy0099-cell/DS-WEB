@@ -32,7 +32,7 @@ export default async function AdminMembersPage() {
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => (
+              {members.map((m: typeof members[0]) => (
                 <tr key={m.id} className="border-b border-sand/50 last:border-0">
                   <td className="p-3">
                     <p className="font-medium text-navy">{m.firstName} {m.lastName}</p>
