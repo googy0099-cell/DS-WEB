@@ -45,7 +45,15 @@
       "Bash(git init *)",
       "Bash(git remote *)",
       "Bash(git add *)",
-      "Bash(git commit -m 'Initial commit: Dice Shop web app *)"
+      "Bash(git commit -m 'Initial commit: Dice Shop web app *)",
+      "Bash(git push *)",
+      "Bash(open *)",
+      "Bash(git ls-remote *)",
+      "Bash(bash)",
+      "Bash(npm uninstall *)",
+      "Bash(npm install *)",
+      "Bash(sqlite3 *)",
+      "Bash(git commit -m 'Migrate from SQLite to Turso for Vercel deployment *)"
     ]
   }
 }
