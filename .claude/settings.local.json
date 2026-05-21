@@ -54,7 +54,10 @@
       "Bash(npm install *)",
       "Bash(sqlite3 *)",
       "Bash(git commit -m 'Migrate from SQLite to Turso for Vercel deployment *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(~/.turso/bin/turso db *)",
+      "Read(//Users/wisdechsiri/.local/bin/**)",
+      "Read(//Users/wisdechsiri/bin/**)"
     ]
   }
 }
