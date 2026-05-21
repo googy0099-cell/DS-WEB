@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { randomUUID } from "crypto";
 
@@ -22,7 +21,20 @@ export async function POST(req: NextRequest) {
 
   const ext = file.name.split(".").pop() ?? "jpg";
   const filename = `uploads/${randomUUID()}.${ext}`;
-  const blob = await put(filename, file, { access: "public" });
 
-  return NextResponse.json({ url: blob.url });
+  // Vercel Blob (production)
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const { put } = await import("@vercel/blob");
+    const blob = await put(filename, file, { access: "public" });
+    return NextResponse.json({ url: blob.url });
+  }
+
+  // Local filesystem fallback (development)
+  const { writeFile, mkdir } = await import("fs/promises");
+  const path = await import("path");
+  const uploadsDir = path.join(process.cwd(), "public", "uploads");
+  await mkdir(uploadsDir, { recursive: true });
+  const buffer = Buffer.from(await file.arrayBuffer());
+  await writeFile(path.join(uploadsDir, filename.replace("uploads/", "")), buffer);
+  return NextResponse.json({ url: `/uploads/${filename.replace("uploads/", "")}` });
 }
