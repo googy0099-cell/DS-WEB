@@ -8,6 +8,7 @@ import { useSession, signOut } from "next-auth/react";
 const NAV_ITEMS = [
   { label: "หน้าแรก", href: "/#hero" },
   { label: "ดูเมนู", href: "/menu" },
+  { label: "มินิเกม", href: "/play" },
   { label: "เกม", href: "/games" },
   { label: "กิจกรรม", href: "/activities" },
   { label: "เกี่ยวกับเรา", href: "/#about" },

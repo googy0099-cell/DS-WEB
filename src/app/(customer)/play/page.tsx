@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import Navbar from "@/components/shared/Navbar";
+import Footer from "@/components/shared/Footer";
 import LuckyDraw from "@/components/mini-games/LuckyDraw";
 import SpeedTap from "@/components/mini-games/SpeedTap";
 import MindRead from "@/components/mini-games/MindRead";
@@ -34,21 +36,12 @@ export default function PlayPage() {
   const activeGame = GAMES.find((g) => g.id === active);
 
   return (
-    <div className="min-h-screen bg-cream pb-8">
-      <div className="bg-navy px-4 pt-4 pb-5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Image src="/DS-new-logo.png" alt="Dice Shop" width={40} height={22} className="object-contain brightness-0 invert" />
-            <div>
-              <p className="text-cream/70 text-xs">Dice Shop</p>
-              <h1 className="text-cream font-bold text-lg leading-tight">🎮 มินิเกม</h1>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <Link href="/leaderboard" className="text-cream/80 text-xs underline">🏆 อันดับ</Link>
-            <Link href="/" className="text-cream/60 text-xs underline">หน้าหลัก</Link>
-          </div>
-        </div>
+    <>
+    <Navbar />
+    <div className="min-h-screen bg-cream pb-8 pt-16">
+      <div className="bg-navy px-4 pt-6 pb-6 text-center">
+        <h1 className="text-cream font-bold text-xl">🎮 มินิเกม</h1>
+        <p className="text-cream/60 text-xs mt-1">เล่นเพลินๆ ระหว่างรอเพื่อน</p>
       </div>
 
       {/* Game selector tabs */}
@@ -105,5 +98,7 @@ export default function PlayPage() {
         )}
       </div>
     </div>
+    <Footer />
+    </>
   );
 }
