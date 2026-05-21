@@ -22,7 +22,7 @@ export default async function ActivitiesPage() {
           {activities.length === 0 ? (
             <p className="text-center text-gray-400 py-12">ยังไม่มีกิจกรรม</p>
           ) : (
-            activities.map((act) => (
+            activities.map((act: typeof activities[0]) => (
               <div key={act.id} className="bg-white rounded-2xl p-5 shadow-sm flex gap-4 items-start">
                 <span className="text-3xl shrink-0">{act.emoji}</span>
                 <div className="flex-1">
