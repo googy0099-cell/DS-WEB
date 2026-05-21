@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { sendLineNotify } from "@/lib/line-notify";
+import { sendPushToAll } from "@/lib/push-notify";
 import { formatThaiTime } from "@/lib/thai-datetime";
 
 export async function GET(req: NextRequest) {
@@ -100,9 +101,11 @@ export async function POST(req: NextRequest) {
     .map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`)
     .join("\n");
 
-  await sendLineNotify(
-    `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`
-  );
+  const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
+  await Promise.allSettled([
+    sendLineNotify(lineMsg),
+    sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
+  ]);
 
   return NextResponse.json(order, { status: 201 });
 }

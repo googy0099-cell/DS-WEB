@@ -57,7 +57,8 @@
       "Bash(git commit *)",
       "Bash(~/.turso/bin/turso db *)",
       "Read(//Users/wisdechsiri/.local/bin/**)",
-      "Read(//Users/wisdechsiri/bin/**)"
+      "Read(//Users/wisdechsiri/bin/**)",
+      "Bash(npx web-push *)"
     ]
   }
 }

@@ -96,11 +96,33 @@ export default function OrderQueue() {
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // request notification permission
+  // request notification permission + subscribe Web Push
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
+    async function setupPush() {
+      if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+      const permission = Notification.permission === "default"
+        ? await Notification.requestPermission()
+        : Notification.permission;
+      if (permission !== "granted") return;
+
+      const reg = await navigator.serviceWorker.ready.catch(() => null);
+      if (!reg) return;
+
+      const existing = await reg.pushManager.getSubscription();
+      const sub = existing ?? await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+      }).catch(() => null);
+
+      if (sub) {
+        await fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub.toJSON()),
+        });
+      }
     }
+    setupPush();
   }, []);
 
   const pendingOrders = orders?.filter((o) => o.status === "PENDING") ?? [];
