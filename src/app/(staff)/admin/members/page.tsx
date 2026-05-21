@@ -2,6 +2,8 @@ import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function AdminMembersPage() {
   const session = await auth();
   if (session?.user?.role !== "OWNER") redirect("/admin");

@@ -53,7 +53,8 @@
       "Bash(npm uninstall *)",
       "Bash(npm install *)",
       "Bash(sqlite3 *)",
-      "Bash(git commit -m 'Migrate from SQLite to Turso for Vercel deployment *)"
+      "Bash(git commit -m 'Migrate from SQLite to Turso for Vercel deployment *)",
+      "Bash(git commit *)"
     ]
   }
 }

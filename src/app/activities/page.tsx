@@ -3,6 +3,8 @@ import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import db from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 export default async function ActivitiesPage() {
   const activities = await db.activity.findMany({
     where: { isActive: true },

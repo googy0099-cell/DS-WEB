@@ -3,6 +3,8 @@ import Link from "next/link";
 import Navbar from "@/components/shared/Navbar";
 import db from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+
 type Props = { searchParams: Promise<{ orderId?: string }> };
 
 export default async function CheckoutPage({ searchParams }: Props) {

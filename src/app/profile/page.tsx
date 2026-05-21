@@ -5,6 +5,8 @@ import Link from "next/link";
 import Navbar from "@/components/shared/Navbar";
 import { signOut } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProfilePage() {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/profile");
