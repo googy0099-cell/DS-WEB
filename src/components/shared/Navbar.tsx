@@ -7,14 +7,7 @@ import { useSession, signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
   { label: "หน้าแรก", href: "/#hero" },
-  {
-    label: "ดูเมนู",
-    children: [
-      { label: "เครื่องดื่ม", href: "/menu/drink" },
-      { label: "อาหารจานเดียว", href: "/menu/food" },
-      { label: "ของทานเล่น", href: "/menu/snack" },
-    ],
-  },
+  { label: "ดูเมนู", href: "/menu" },
   { label: "เกม", href: "/games" },
   { label: "กิจกรรม", href: "/activities" },
   { label: "เกี่ยวกับเรา", href: "/#about" },
@@ -24,16 +17,11 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const { data: session } = useSession();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [menuDropOpen, setMenuDropOpen] = useState(false);
   const [userDropOpen, setUserDropOpen] = useState(false);
-  const dropRef = useRef<HTMLDivElement>(null);
   const userDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (dropRef.current && !dropRef.current.contains(e.target as Node)) {
-        setMenuDropOpen(false);
-      }
       if (userDropRef.current && !userDropRef.current.contains(e.target as Node)) {
         setUserDropOpen(false);
       }
@@ -59,41 +47,15 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-1">
-          {NAV_ITEMS.map((item) =>
-            item.children ? (
-              <div key={item.label} ref={dropRef} className="relative">
-                <button
-                  onClick={() => setMenuDropOpen((v) => !v)}
-                  className="px-3 py-2 text-cream/80 hover:text-cream text-sm font-medium transition-colors flex items-center gap-1"
-                >
-                  {item.label}
-                  <span className="text-xs">▾</span>
-                </button>
-                {menuDropOpen && (
-                  <div className="absolute top-full left-0 mt-1 w-40 bg-white rounded-xl shadow-xl overflow-hidden">
-                    {item.children.map((sub) => (
-                      <Link
-                        key={sub.href}
-                        href={sub.href}
-                        onClick={() => setMenuDropOpen(false)}
-                        className="block px-4 py-2.5 text-sm text-navy hover:bg-sand transition-colors"
-                      >
-                        {sub.label}
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href!}
-                className="px-3 py-2 text-cream/80 hover:text-cream text-sm font-medium transition-colors"
-              >
-                {item.label}
-              </Link>
-            )
-          )}
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="px-3 py-2 text-cream/80 hover:text-cream text-sm font-medium transition-colors"
+            >
+              {item.label}
+            </Link>
+          ))}
         </div>
 
         {/* Right side */}
@@ -162,34 +124,16 @@ export default function Navbar() {
       {/* Mobile dropdown */}
       {mobileOpen && (
         <div className="md:hidden bg-navy border-t border-cream/10 px-4 pb-4">
-          {NAV_ITEMS.map((item) =>
-            item.children ? (
-              <div key={item.label}>
-                <p className="text-cream/50 text-xs font-semibold uppercase tracking-wider mt-4 mb-1">
-                  {item.label}
-                </p>
-                {item.children.map((sub) => (
-                  <Link
-                    key={sub.href}
-                    href={sub.href}
-                    onClick={() => setMobileOpen(false)}
-                    className="block py-2 pl-3 text-cream/80 hover:text-cream text-sm"
-                  >
-                    {sub.label}
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <Link
-                key={item.href}
-                href={item.href!}
-                onClick={() => setMobileOpen(false)}
-                className="block py-2 text-cream/80 hover:text-cream text-sm font-medium border-b border-cream/10 last:border-0"
-              >
-                {item.label}
-              </Link>
-            )
-          )}
+          {NAV_ITEMS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-cream/80 hover:text-cream text-sm font-medium border-b border-cream/10 last:border-0"
+            >
+              {item.label}
+            </Link>
+          ))}
           {session?.user ? (
             <div className="mt-4 pt-4 border-t border-cream/10">
               <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-2 text-cream/80 text-sm">
