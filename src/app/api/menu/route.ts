@@ -40,6 +40,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   }
   const { id } = await req.json();
+  await db.orderItem.deleteMany({ where: { menuItemId: id } });
   await db.menuItem.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }
