@@ -1,34 +1,34 @@
-import { initializeApp, cert, getApps, getApp } from "firebase-admin/app";
-import { getMessaging } from "firebase-admin/messaging";
-import type { App } from "firebase-admin/app";
 import db from "@/lib/db";
 
-let app: App | null = null;
+// Use main firebase-admin import (not sub-paths) to avoid Turbopack resolution issues
+// firebase-admin is in serverExternalPackages — not bundled, loaded at runtime only
+let initialized = false;
 
-function getFirebaseApp(): App | null {
-  if (app) return app;
+function initFirebase(): boolean {
+  if (initialized) return true;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) return null;
-  if (getApps().length > 0) {
-    app = getApp();
-    return app;
+  if (!raw) return false;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const admin = require("firebase-admin") as typeof import("firebase-admin");
+  if (admin.apps.length === 0) {
+    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) });
   }
-  app = initializeApp({ credential: cert(JSON.parse(raw)) });
-  return app;
+  initialized = true;
+  return true;
 }
 
 export async function sendFcmNotify(title: string, body: string): Promise<void> {
-  const firebaseApp = getFirebaseApp();
-  if (!firebaseApp) return;
+  if (!initFirebase()) return;
 
   const tokens = await db.expoPushToken.findMany({ select: { token: true } });
   if (!tokens.length) return;
 
-  const messaging = getMessaging(firebaseApp);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const admin = require("firebase-admin") as typeof import("firebase-admin");
 
   await Promise.allSettled(
     tokens.map((t) =>
-      messaging.send({
+      admin.messaging().send({
         token: t.token,
         data: { title, body, type: "NEW_ORDER" },
         android: {
