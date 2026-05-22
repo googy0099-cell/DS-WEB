@@ -13,12 +13,15 @@ const sarabun = Sarabun({
 export const metadata: Metadata = {
   title: "Dice Shop",
   description: "ระบบสั่งอาหารและเกม Dice Shop Board Game Cafe",
+  manifest: "/manifest.json",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "DS Admin" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
+  themeColor: "#182a47",
 };
 
 export default function RootLayout({
