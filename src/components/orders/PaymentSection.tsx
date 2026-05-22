@@ -128,6 +128,13 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
             {config?.accountName ?? "นาย ธนวุฒิ พุ่มมาก"}
           </p>
           <p className="text-xs text-gray-400">{config?.bankName ?? "TTB PromptPay"}</p>
+          <a
+            href={config?.qrImageUrl ?? "/promptpay-qr.png"}
+            download="promptpay-qr.png"
+            className="inline-flex items-center gap-1.5 mt-3 text-xs text-orange font-semibold border border-orange/30 bg-orange/5 px-3 py-1.5 rounded-full hover:bg-orange/15 transition-colors"
+          >
+            ⬇ บันทึก QR ลงเครื่อง
+          </a>
         </div>
 
         <div className="border-t border-sand pt-4">
