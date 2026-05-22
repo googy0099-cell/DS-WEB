@@ -47,6 +47,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     ...authConfig.callbacks,
+    async jwt({ token, user, account }) {
+      // Credentials login — user already has our DB fields
+      if (user && account?.provider === "credentials") {
+        token.id = user.id!;
+        token.role = (user as { role?: string }).role;
+        token.username = (user as { username?: string }).username;
+        token.memberCode = (user as { memberCode?: string }).memberCode;
+        token.firstName = (user as { firstName?: string }).firstName;
+      }
+      // Google login — fetch real DB user to populate token
+      if (account?.provider === "google" && user?.email) {
+        const dbUser = await db.user.findUnique({ where: { email: user.email } });
+        if (dbUser) {
+          token.id = String(dbUser.id);
+          token.role = dbUser.role;
+          token.username = dbUser.username;
+          token.memberCode = dbUser.memberCode;
+          token.firstName = dbUser.firstName;
+          token.picture = user.image ?? null;
+        }
+      }
+      return token;
+    },
     async signIn({ user, account }) {
       if (account?.provider === "google" && user.email) {
         let dbUser = await db.user.findUnique({ where: { email: user.email } });

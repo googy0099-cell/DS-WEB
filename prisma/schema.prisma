@@ -16,6 +16,11 @@ model User {
   username      String     @unique
   phone         String?    @unique
   memberCode    String     @unique
+  nickname      String?
+  instagram     String?
+  facebook      String?
+  birthday      String?
+  avatarUrl     String?
   visitCount    Int        @default(0)
   points        Int        @default(0)
   totalSpentTHB Int        @default(0)

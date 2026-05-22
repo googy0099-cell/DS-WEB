@@ -61,7 +61,10 @@
       "Bash(npx web-push *)",
       "Bash(npx dotenv-cli *)",
       "Bash(turso --version)",
-      "Bash(turso db *)"
+      "Bash(turso db *)",
+      "Bash(vercel whoami *)",
+      "Bash(npx vercel *)",
+      "Bash(/Users/wisdechsiri/.turso/turso db *)"
     ]
   }
 }
