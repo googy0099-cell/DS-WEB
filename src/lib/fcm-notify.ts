@@ -1,53 +1,69 @@
+import { createSign } from "crypto";
 import db from "@/lib/db";
 
-// Use main firebase-admin import (not sub-paths) to avoid Turbopack resolution issues
-// firebase-admin is in serverExternalPackages — not bundled, loaded at runtime only
-let initialized = false;
-
-function initFirebase(): boolean {
-  if (initialized) return true;
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) return false;
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const admin = require("firebase-admin") as typeof import("firebase-admin");
-  if (admin.apps.length === 0) {
-    admin.initializeApp({ credential: admin.credential.cert(JSON.parse(raw)) });
-  }
-  initialized = true;
-  return true;
+async function getFcmAccessToken(sa: {
+  client_email: string;
+  private_key: string;
+}): Promise<string> {
+  const now = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const claim = Buffer.from(
+    JSON.stringify({
+      iss: sa.client_email,
+      scope: "https://www.googleapis.com/auth/firebase.messaging",
+      aud: "https://oauth2.googleapis.com/token",
+      iat: now,
+      exp: now + 3600,
+    })
+  ).toString("base64url");
+  const sign = createSign("RSA-SHA256");
+  sign.update(`${header}.${claim}`);
+  const jwt = `${header}.${claim}.${sign.sign(sa.private_key, "base64url")}`;
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
+  });
+  const data = (await res.json()) as { access_token: string };
+  return data.access_token;
 }
 
 export async function sendFcmNotify(title: string, body: string): Promise<void> {
-  if (!initFirebase()) return;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) return;
 
   const tokens = await db.expoPushToken.findMany({ select: { token: true } });
   if (!tokens.length) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const admin = require("firebase-admin") as typeof import("firebase-admin");
+  const sa = JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
+  const accessToken = await getFcmAccessToken(sa);
 
   await Promise.allSettled(
     tokens.map((t) =>
-      admin.messaging().send({
-        token: t.token,
-        data: { title, body, type: "NEW_ORDER" },
-        android: {
-          priority: "high",
-          ttl: 60000,
-          directBootOk: true,
-          notification: {
-            title,
-            body,
-            channelId: "orders",
-            sound: "default",
-            defaultSound: true,
-            vibrateTimingsMillis: [0, 500, 500, 500],
-            priority: "max",
-            visibility: "public",
-            defaultVibrateTimings: false,
-            localOnly: false,
+      fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({
+          message: {
+            token: t.token,
+            data: { title, body, type: "NEW_ORDER" },
+            android: {
+              priority: "HIGH",
+              ttl: "60s",
+              direct_boot_ok: true,
+              notification: {
+                title,
+                body,
+                channel_id: "orders",
+                notification_priority: "PRIORITY_MAX",
+                visibility: "PUBLIC",
+                vibrate_timings: ["0s", "0.5s", "0.5s", "0.5s"],
+                default_vibrate_timings: false,
+                local_only: false,
+              },
+            },
           },
-        },
+        }),
       })
     )
   );
