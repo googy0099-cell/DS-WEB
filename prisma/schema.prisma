@@ -40,9 +40,18 @@ model MenuItem {
   nameEn      String
   category    String
   priceTHB    Int
+  priceS      Int?
+  priceXL     Int?
   imageUrl    String?
   isAvailable Boolean     @default(true)
   orderItems  OrderItem[]
+}
+
+model Addon {
+  id        Int     @id @default(autoincrement())
+  nameTh    String
+  priceTHB  Int
+  isActive  Boolean @default(true)
 }
 
 model Order {
@@ -64,13 +73,15 @@ model Order {
 }
 
 model OrderItem {
-  id           Int      @id @default(autoincrement())
-  orderId      Int
-  order        Order    @relation(fields: [orderId], references: [id])
-  menuItemId   Int
-  menuItem     MenuItem @relation(fields: [menuItemId], references: [id])
-  quantity     Int
-  unitPriceTHB Int
+  id             Int      @id @default(autoincrement())
+  orderId        Int
+  order          Order    @relation(fields: [orderId], references: [id])
+  menuItemId     Int
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity       Int
+  unitPriceTHB   Int
+  selectedSize   String?
+  selectedAddons String?
 }
 
 model Payment {

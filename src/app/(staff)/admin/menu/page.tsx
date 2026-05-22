@@ -10,20 +10,25 @@ type MenuItem = {
   nameEn: string;
   category: string;
   priceTHB: number;
+  priceS: number | null;
+  priceXL: number | null;
   imageUrl: string | null;
   isAvailable: boolean;
 };
 
-const CATEGORIES = ["food", "drink", "snack", "dessert"];
+const CATEGORIES = ["milktea", "coffee", "soda", "drink", "food", "snack", "dessert"];
 const CAT_LABELS: Record<string, string> = {
-  food: "อาหารจานเดียว",
+  milktea: "Milk & Tea",
+  coffee: "Coffee",
+  soda: "Soda Zaa",
   drink: "เครื่องดื่ม",
+  food: "อาหารจานเดียว",
   snack: "ของทานเล่น",
   dessert: "ของหวาน",
 };
 
 const EMPTY: Omit<MenuItem, "id"> = {
-  nameTh: "", nameEn: "", category: "food", priceTHB: 0, imageUrl: null, isAvailable: true,
+  nameTh: "", nameEn: "", category: "milktea", priceTHB: 0, priceS: null, priceXL: null, imageUrl: null, isAvailable: true,
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -142,7 +147,11 @@ export default function AdminMenuPage() {
                   </div>
                 </td>
                 <td className="p-3 text-gray-500 hidden md:table-cell">{CAT_LABELS[item.category]}</td>
-                <td className="p-3 text-right font-bold text-navy">฿{item.priceTHB}</td>
+                <td className="p-3 text-right font-bold text-navy text-sm">
+                  {item.priceS != null && item.priceXL != null
+                    ? `S ฿${item.priceS} / XL ฿${item.priceXL}`
+                    : `฿${item.priceTHB}`}
+                </td>
                 <td className="p-3 text-center">
                   <button
                     onClick={() => toggleAvailable(item)}
@@ -193,25 +202,55 @@ export default function AdminMenuPage() {
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />
               </div>
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">หมวดหมู่</label>
+                <select
+                  value={editing.category ?? "milktea"}
+                  onChange={(e) => setEditing({ ...editing, category: e.target.value })}
+                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{CAT_LABELS[c]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">ราคาปกติ ฿ (สำหรับเมนูที่ไม่มีไซส์)</label>
+                <input
+                  type="number"
+                  value={editing.priceTHB ?? 0}
+                  onChange={(e) => setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })}
+                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                />
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-navy block mb-1">หมวดหมู่</label>
-                  <select
-                    value={editing.category ?? "food"}
-                    onChange={(e) => setEditing({ ...editing, category: e.target.value })}
-                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
-                  >
-                    {CATEGORIES.map((c) => (
-                      <option key={c} value={c}>{CAT_LABELS[c]}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-navy block mb-1">ราคา (฿)</label>
+                  <label className="text-xs font-medium text-navy block mb-1">ราคา S ฿ (ถ้ามีไซส์)</label>
                   <input
                     type="number"
-                    value={editing.priceTHB ?? 0}
-                    onChange={(e) => setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })}
+                    placeholder="ไม่มีไซส์"
+                    value={editing.priceS ?? ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        priceS: e.target.value === "" ? null : parseInt(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-navy block mb-1">ราคา XL ฿ (ถ้ามีไซส์)</label>
+                  <input
+                    type="number"
+                    placeholder="ไม่มีไซส์"
+                    value={editing.priceXL ?? ""}
+                    onChange={(e) =>
+                      setEditing({
+                        ...editing,
+                        priceXL: e.target.value === "" ? null : parseInt(e.target.value) || 0,
+                      })
+                    }
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>

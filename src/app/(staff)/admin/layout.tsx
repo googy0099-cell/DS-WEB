@@ -7,6 +7,7 @@ import RegisterSW from "@/components/admin/RegisterSW";
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
   { href: "/admin/menu", label: "จัดการเมนู", icon: "🍜" },
+  { href: "/admin/addons", label: "Add-on", icon: "➕" },
   { href: "/admin/activities", label: "กิจกรรม", icon: "🎉" },
   { href: "/admin/gallery", label: "Gallery", icon: "🖼️" },
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },

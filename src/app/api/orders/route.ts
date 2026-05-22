@@ -41,7 +41,12 @@ export async function POST(req: NextRequest) {
   const { orderName, userId, items, note } = body as {
     orderName: string;
     userId?: number | null;
-    items: { menuItemId: number; quantity: number }[];
+    items: {
+      menuItemId: number;
+      quantity: number;
+      selectedSize?: string | null;
+      selectedAddons?: { id: number; nameTh: string; priceTHB: number }[];
+    }[];
     note?: string;
   };
 
@@ -72,7 +77,15 @@ export async function POST(req: NextRequest) {
 
   const itemsWithPrice = items.map((item) => {
     const menu = menuItems.find((m) => m.id === item.menuItemId)!;
-    return { ...item, unitPriceTHB: menu.priceTHB, nameTh: menu.nameTh };
+    let basePrice = menu.priceTHB;
+    if (item.selectedSize === "S" && menu.priceS) basePrice = menu.priceS;
+    if (item.selectedSize === "XL" && menu.priceXL) basePrice = menu.priceXL;
+    const addonTotal = (item.selectedAddons ?? []).reduce((s, a) => s + a.priceTHB, 0);
+    return {
+      ...item,
+      unitPriceTHB: basePrice + addonTotal,
+      nameTh: menu.nameTh,
+    };
   });
 
   const totalTHB = itemsWithPrice.reduce(
@@ -91,6 +104,10 @@ export async function POST(req: NextRequest) {
           menuItemId: i.menuItemId,
           quantity: i.quantity,
           unitPriceTHB: i.unitPriceTHB,
+          selectedSize: i.selectedSize ?? null,
+          selectedAddons: i.selectedAddons?.length
+            ? JSON.stringify(i.selectedAddons)
+            : null,
         })),
       },
     },
@@ -98,7 +115,13 @@ export async function POST(req: NextRequest) {
   });
 
   const itemLines = itemsWithPrice
-    .map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`)
+    .map((i) => {
+      const sizePart = i.selectedSize ? ` (${i.selectedSize})` : "";
+      const addonPart = i.selectedAddons?.length
+        ? " + " + i.selectedAddons.map((a) => a.nameTh).join(", ")
+        : "";
+      return `  • ${i.nameTh}${sizePart}${addonPart} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`;
+    })
     .join("\n");
 
   const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;

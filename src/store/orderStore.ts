@@ -8,8 +8,8 @@ interface OrderStore {
   setOrderName: (name: string) => void;
   setUserId: (id: number | null) => void;
   addItem: (item: Omit<CartItem, "quantity">) => void;
-  removeItem: (menuItemId: number) => void;
-  updateQty: (menuItemId: number, quantity: number) => void;
+  removeItem: (cartKey: string) => void;
+  updateQty: (cartKey: string, quantity: number) => void;
   clearCart: () => void;
   total: () => number;
 }
@@ -24,33 +24,41 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
 
   addItem: (item) =>
     set((state) => {
-      const existing = state.cart.find((c) => c.menuItemId === item.menuItemId);
+      const existing = state.cart.find((c) => c.cartKey === item.cartKey);
       if (existing) {
         return {
           cart: state.cart.map((c) =>
-            c.menuItemId === item.menuItemId
-              ? { ...c, quantity: c.quantity + 1 }
-              : c
+            c.cartKey === item.cartKey ? { ...c, quantity: c.quantity + 1 } : c
           ),
         };
       }
       return { cart: [...state.cart, { ...item, quantity: 1 }] };
     }),
 
-  removeItem: (menuItemId) =>
-    set((state) => ({ cart: state.cart.filter((c) => c.menuItemId !== menuItemId) })),
+  removeItem: (cartKey) =>
+    set((state) => ({ cart: state.cart.filter((c) => c.cartKey !== cartKey) })),
 
-  updateQty: (menuItemId, quantity) =>
+  updateQty: (cartKey, quantity) =>
     set((state) => ({
       cart:
         quantity <= 0
-          ? state.cart.filter((c) => c.menuItemId !== menuItemId)
-          : state.cart.map((c) =>
-              c.menuItemId === menuItemId ? { ...c, quantity } : c
-            ),
+          ? state.cart.filter((c) => c.cartKey !== cartKey)
+          : state.cart.map((c) => (c.cartKey === cartKey ? { ...c, quantity } : c)),
     })),
 
   clearCart: () => set({ cart: [], orderName: "", userId: null }),
 
   total: () => get().cart.reduce((sum, c) => sum + c.priceTHB * c.quantity, 0),
 }));
+
+export function makeCartKey(
+  menuItemId: number,
+  selectedSize: string | null,
+  selectedAddons: { id: number }[]
+): string {
+  const addonPart = selectedAddons
+    .map((a) => a.id)
+    .sort()
+    .join(",");
+  return `${menuItemId}-${selectedSize ?? ""}-${addonPart}`;
+}

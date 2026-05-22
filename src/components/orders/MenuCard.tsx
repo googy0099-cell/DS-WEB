@@ -3,7 +3,7 @@
 import { Plus, Minus } from "lucide-react";
 import ThaiPrice from "@/components/shared/ThaiPrice";
 import type { MenuItemType } from "@/types";
-import { useOrderStore } from "@/store/orderStore";
+import { useOrderStore, makeCartKey } from "@/store/orderStore";
 
 interface Props {
   item: MenuItemType;
@@ -11,7 +11,8 @@ interface Props {
 
 export default function MenuCard({ item }: Props) {
   const { cart, addItem, updateQty } = useOrderStore();
-  const cartItem = cart.find((c) => c.menuItemId === item.id);
+  const cartKey = makeCartKey(item.id, null, []);
+  const cartItem = cart.find((c) => c.cartKey === cartKey);
   const qty = cartItem?.quantity ?? 0;
 
   return (
@@ -26,14 +27,23 @@ export default function MenuCard({ item }: Props) {
         {qty > 0 ? (
           <>
             <button
-              onClick={() => updateQty(item.id, qty - 1)}
+              onClick={() => updateQty(cartKey, qty - 1)}
               className="w-7 h-7 rounded-full bg-sand flex items-center justify-center text-navy"
             >
               <Minus size={14} />
             </button>
             <span className="w-5 text-center font-bold text-navy text-sm">{qty}</span>
             <button
-              onClick={() => addItem({ menuItemId: item.id, nameTh: item.nameTh, priceTHB: item.priceTHB })}
+              onClick={() =>
+                addItem({
+                  cartKey,
+                  menuItemId: item.id,
+                  nameTh: item.nameTh,
+                  priceTHB: item.priceTHB,
+                  selectedSize: null,
+                  selectedAddons: [],
+                })
+              }
               className="w-7 h-7 rounded-full bg-orange flex items-center justify-center text-white"
             >
               <Plus size={14} />
@@ -41,7 +51,16 @@ export default function MenuCard({ item }: Props) {
           </>
         ) : (
           <button
-            onClick={() => addItem({ menuItemId: item.id, nameTh: item.nameTh, priceTHB: item.priceTHB })}
+            onClick={() =>
+              addItem({
+                cartKey,
+                menuItemId: item.id,
+                nameTh: item.nameTh,
+                priceTHB: item.priceTHB,
+                selectedSize: null,
+                selectedAddons: [],
+              })
+            }
             className="w-7 h-7 rounded-full bg-orange flex items-center justify-center text-white"
           >
             <Plus size={14} />

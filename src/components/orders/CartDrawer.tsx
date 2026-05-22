@@ -13,20 +13,16 @@ export default function CartDrawer() {
   const [nameInput, setNameInput] = useState("");
   const [loading, setLoading] = useState(false);
   const { data: session } = useSession();
-  const { cart, orderName, userId, total, removeItem, clearCart, setOrderName, setUserId } =
-    useOrderStore();
+  const { cart, total, removeItem, clearCart, setOrderName, setUserId } = useOrderStore();
   const router = useRouter();
   const itemCount = cart.reduce((s, c) => s + c.quantity, 0);
 
-  // sync session → store
   useEffect(() => {
     if (session?.user) {
       setOrderName(session.user.username);
       setUserId(parseInt(session.user.id));
     }
   }, [session, setOrderName, setUserId]);
-
-  const displayName = session?.user ? session.user.username : nameInput;
 
   async function submitOrder() {
     const finalName = session?.user ? session.user.username : nameInput.trim();
@@ -44,7 +40,12 @@ export default function CartDrawer() {
           orderName: finalName,
           userId: session?.user ? parseInt(session.user.id) : null,
           note,
-          items: cart.map((c) => ({ menuItemId: c.menuItemId, quantity: c.quantity })),
+          items: cart.map((c) => ({
+            menuItemId: c.menuItemId,
+            quantity: c.quantity,
+            selectedSize: c.selectedSize,
+            selectedAddons: c.selectedAddons,
+          })),
         }),
       });
       if (!res.ok) throw new Error();
@@ -61,7 +62,6 @@ export default function CartDrawer() {
 
   return (
     <>
-      {/* Floating cart button */}
       <button
         onClick={() => setOpen(true)}
         className="fixed bottom-6 right-4 bg-orange text-white rounded-full p-4 shadow-lg flex items-center gap-2 z-40"
@@ -74,12 +74,10 @@ export default function CartDrawer() {
         )}
       </button>
 
-      {/* Overlay */}
       {open && (
         <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setOpen(false)} />
       )}
 
-      {/* Drawer */}
       <div
         className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 transition-transform duration-300 ${
           open ? "translate-y-0" : "translate-y-full"
@@ -93,11 +91,11 @@ export default function CartDrawer() {
         </div>
 
         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
-          {/* Name field */}
           <div className="bg-sand/40 rounded-xl p-3">
             <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
             {session?.user ? (
-              <p className="font-bold text-navy">{session.user.username}
+              <p className="font-bold text-navy">
+                {session.user.username}
                 <span className="text-xs text-gray-400 ml-2 font-normal">(@{session.user.username})</span>
               </p>
             ) : (
@@ -115,19 +113,31 @@ export default function CartDrawer() {
             <p className="text-center text-gray-400 py-8">ยังไม่มีรายการ</p>
           ) : (
             cart.map((item) => (
-              <div key={item.menuItemId} className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-navy text-sm">{item.nameTh}</p>
-                  <p className="text-xs text-gray-400">
+              <div key={item.cartKey} className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-navy text-sm leading-tight">
+                    {item.nameTh}
+                    {item.selectedSize && (
+                      <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
+                        {item.selectedSize}
+                      </span>
+                    )}
+                  </p>
+                  {item.selectedAddons.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      + {item.selectedAddons.map((a) => a.nameTh).join(", ")}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">
                     {item.quantity} x <ThaiPrice amount={item.priceTHB} />
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <ThaiPrice
                     amount={item.priceTHB * item.quantity}
                     className="font-bold text-orange text-sm"
                   />
-                  <button onClick={() => removeItem(item.menuItemId)}>
+                  <button onClick={() => removeItem(item.cartKey)}>
                     <Trash2 size={16} className="text-gray-300" />
                   </button>
                 </div>
