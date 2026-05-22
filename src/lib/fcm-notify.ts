@@ -1,13 +1,18 @@
+import { initializeApp, cert, getApps, getApp } from "firebase-admin/app";
+import { getMessaging } from "firebase-admin/messaging";
+import type { App } from "firebase-admin/app";
 import db from "@/lib/db";
 
-let app: import("firebase-admin/app").App | null = null;
+let app: App | null = null;
 
-function getFirebaseApp() {
+function getFirebaseApp(): App | null {
   if (app) return app;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return null;
-  const { initializeApp, cert, getApps } = require("firebase-admin/app");
-  if (getApps().length > 0) { app = getApps()[0]; return app; }
+  if (getApps().length > 0) {
+    app = getApp();
+    return app;
+  }
   app = initializeApp({ credential: cert(JSON.parse(raw)) });
   return app;
 }
@@ -19,14 +24,12 @@ export async function sendFcmNotify(title: string, body: string): Promise<void> 
   const tokens = await db.expoPushToken.findMany({ select: { token: true } });
   if (!tokens.length) return;
 
-  const { getMessaging } = require("firebase-admin/messaging");
   const messaging = getMessaging(firebaseApp);
 
   await Promise.allSettled(
     tokens.map((t) =>
       messaging.send({
         token: t.token,
-        // data message เพื่อ trigger AlarmActivity
         data: { title, body, type: "NEW_ORDER" },
         android: {
           priority: "high",
