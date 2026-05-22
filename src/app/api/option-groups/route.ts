@@ -45,12 +45,12 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
 
   if (body.action === "update-group") {
-    const { id, ...data } = body;
+    const { id, action: _a, ...data } = body;
     const group = await db.optionGroup.update({ where: { id }, data });
     return NextResponse.json(group);
   }
   if (body.action === "update-choice") {
-    const { id, ...data } = body;
+    const { id, action: _a, ...data } = body;
     const choice = await db.optionChoice.update({ where: { id }, data });
     return NextResponse.json(choice);
   }

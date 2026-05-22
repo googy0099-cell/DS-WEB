@@ -40,12 +40,12 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
 
   if (body.action === "update-group") {
-    const { id, ...data } = body;
+    const { id, action: _a, ...data } = body;
     const group = await db.addonGroup.update({ where: { id }, data });
     return NextResponse.json(group);
   }
   if (body.action === "update-item") {
-    const { id, ...data } = body;
+    const { id, action: _a, ...data } = body;
     const item = await db.addonItem.update({ where: { id }, data });
     return NextResponse.json(item);
   }
