@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { sendLineNotify } from "@/lib/line-notify";
+import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 const STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "✅ ยืนยันออเดอร์แล้ว",
@@ -46,8 +46,8 @@ export async function PATCH(
   }
 
   if (STATUS_LABELS[status]) {
-    await sendLineNotify(
-      `\n${STATUS_LABELS[status]}\nชื่อ: ${order.orderName} | ออเดอร์ #${order.id}`
+    await sendTelegramNotify(
+      `${STATUS_LABELS[status]}\nชื่อ: ${order.orderName} | ออเดอร์ #${order.id}`
     );
   }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { sendLineNotify } from "@/lib/line-notify";
+import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 export async function PATCH(req: NextRequest) {
   const { paymentId, userId } = await req.json();
@@ -28,8 +28,8 @@ export async function PATCH(req: NextRequest) {
     });
   }
 
-  await sendLineNotify(
-    `\n💸 ได้รับเงินแล้ว (พร้อมเพย์)\nชื่อ: ${payment.order.orderName} | ฿${payment.amountTHB}\nออเดอร์ #${payment.orderId}`
+  await sendTelegramNotify(
+    `💸 ได้รับเงินแล้ว (พร้อมเพย์)\nชื่อ: ${payment.order.orderName} | ฿${payment.amountTHB}\nออเดอร์ #${payment.orderId}`
   );
 
   return NextResponse.json(payment);

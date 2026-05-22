@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import db from "@/lib/db";
-import { sendLineNotify } from "@/lib/line-notify";
+import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
 
 export async function POST(req: NextRequest) {
@@ -65,9 +65,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const msg = `\n💳 สลิปใหม่! 👤 ${order.orderName}\n฿${order.totalTHB}\nกรุณาตรวจสอบใน /admin/payment`;
+  const msg = `💳 สลิปใหม่! 👤 ${order.orderName}\n฿${order.totalTHB}\nกรุณาตรวจสอบใน /admin/payment`;
   await Promise.allSettled([
-    sendLineNotify(msg),
+    sendTelegramNotify(msg),
     sendPushToAll("💳 สลิปใหม่!", `${order.orderName} • ฿${order.totalTHB}`),
   ]);
 
