@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import useSWR from "swr";
 import Image from "next/image";
 import ImageUpload from "@/components/admin/ImageUpload";
@@ -36,43 +36,165 @@ const EMPTY: Omit<GameGuide, "id"> = {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function parseTags(raw: string): string[] {
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+// ─── Tag Picker Component ─────────────────────────────────────────────────────
+function TagPicker({
+  selected,
+  allTags,
+  onChange,
+  onAddTag,
+}: {
+  selected: string[];
+  allTags: string[];
+  onChange: (tags: string[]) => void;
+  onAddTag: (tag: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [newTag, setNewTag] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  function toggle(tag: string) {
+    onChange(
+      selected.includes(tag) ? selected.filter((t) => t !== tag) : [...selected, tag]
+    );
+  }
+
+  function addNew() {
+    const t = newTag.trim();
+    if (!t) return;
+    onAddTag(t);
+    if (!selected.includes(t)) onChange([...selected, t]);
+    setNewTag("");
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      {/* Selected tags display */}
+      <div
+        onClick={() => setOpen((v) => !v)}
+        className="min-h-[42px] w-full border border-sand rounded-xl px-3 py-2 flex flex-wrap gap-1.5 cursor-pointer hover:border-orange transition-colors"
+      >
+        {selected.length === 0 && (
+          <span className="text-gray-400 text-sm self-center">เลือกหรือเพิ่มแท็ก...</span>
+        )}
+        {selected.map((tag) => (
+          <span
+            key={tag}
+            className="flex items-center gap-1 bg-navy/10 text-navy text-xs font-medium px-2 py-0.5 rounded-full"
+          >
+            {tag}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(selected.filter((t) => t !== tag));
+              }}
+              className="text-navy/50 hover:text-red-500 leading-none"
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <span className="ml-auto text-gray-400 text-xs self-center">▾</span>
+      </div>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-sand rounded-xl shadow-xl overflow-hidden">
+          {/* Existing tags */}
+          <div className="max-h-44 overflow-y-auto p-2 space-y-0.5">
+            {allTags.length === 0 && (
+              <p className="text-xs text-gray-400 px-2 py-1">ยังไม่มีแท็ก — เพิ่มด้านล่าง</p>
+            )}
+            {allTags.map((tag) => (
+              <label
+                key={tag}
+                className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-sand/50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(tag)}
+                  onChange={() => toggle(tag)}
+                  className="accent-orange"
+                />
+                <span className="text-sm text-navy">{tag}</span>
+              </label>
+            ))}
+          </div>
+
+          {/* Add new tag */}
+          <div className="border-t border-sand p-2 flex gap-2">
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addNew())}
+              placeholder="เพิ่มแท็กใหม่..."
+              className="flex-1 text-sm border border-sand rounded-lg px-2 py-1.5 focus:border-orange focus:outline-none"
+            />
+            <button
+              onClick={addNew}
+              disabled={!newTag.trim()}
+              className="bg-orange text-white text-xs font-bold px-3 py-1.5 rounded-lg disabled:opacity-40"
+            >
+              + เพิ่ม
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function AdminGamesPage() {
   const { data: items = [], mutate } = useSWR<GameGuide[]>("/api/games?all=1", fetcher);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<GameGuide> | null>(null);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [tagsInput, setTagsInput] = useState("");
+
+  // Derive all unique tags across every game + a base set
+  const [extraTags, setExtraTags] = useState<string[]>([]);
+  const allTags = Array.from(
+    new Set([
+      ...items.flatMap((g) => parseTags(g.tags)),
+      ...extraTags,
+    ])
+  ).sort();
 
   function openAdd() {
     setEditing({ ...EMPTY });
-    setTagsInput("");
+    setSelectedTags([]);
     setShowModal(true);
   }
 
   function openEdit(game: GameGuide) {
     setEditing({ ...game });
-    try {
-      setTagsInput(JSON.parse(game.tags).join(", "));
-    } catch {
-      setTagsInput("");
-    }
+    setSelectedTags(parseTags(game.tags));
     setShowModal(true);
   }
 
   function closeModal() {
     setShowModal(false);
     setEditing(null);
-    setTagsInput("");
+    setSelectedTags([]);
   }
 
   async function save() {
     if (!editing || !editing.nameTh) return;
     setSaving(true);
-    const tagsArray = tagsInput
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    const payload = { ...editing, tags: JSON.stringify(tagsArray) };
+    const payload = { ...editing, tags: JSON.stringify(selectedTags) };
     const method = editing.id ? "PATCH" : "POST";
     await fetch("/api/games", {
       method,
@@ -84,7 +206,7 @@ export default function AdminGamesPage() {
     setSaving(false);
   }
 
-  async function toggle(game: GameGuide) {
+  async function toggleActive(game: GameGuide) {
     await fetch("/api/games", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -117,13 +239,10 @@ export default function AdminGamesPage() {
 
       <div className="space-y-3">
         {items.map((game) => {
-          let tags: string[] = [];
-          try { tags = JSON.parse(game.tags); } catch { /* empty */ }
-
+          const tags = parseTags(game.tags);
           return (
             <div key={game.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
               <div className="flex gap-4 p-4 items-start">
-                {/* Image */}
                 <div className="shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-sand flex items-center justify-center">
                   {game.imageUrl ? (
                     <Image src={game.imageUrl} alt={game.nameTh} width={80} height={80} className="object-cover w-full h-full" />
@@ -137,7 +256,7 @@ export default function AdminGamesPage() {
                     <span className="font-bold text-navy">{game.nameTh}</span>
                     {game.nameEn && <span className="text-gray-400 text-xs">{game.nameEn}</span>}
                     <button
-                      onClick={() => toggle(game)}
+                      onClick={() => toggleActive(game)}
                       className={`text-xs px-2 py-0.5 rounded-full font-medium ${game.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}
                     >
                       {game.isActive ? "แสดง" : "ซ่อน"}
@@ -146,13 +265,13 @@ export default function AdminGamesPage() {
                   <p className="text-xs text-gray-500 mb-1">
                     {game.minPlayers}–{game.maxPlayers} คน · {game.durationMin} นาที
                   </p>
-                  <div className="flex flex-wrap gap-1 mb-1">
+                  <div className="flex flex-wrap gap-1">
                     {tags.map((t) => (
                       <span key={t} className="text-xs bg-sand text-navy px-2 py-0.5 rounded-full">{t}</span>
                     ))}
                   </div>
                   {game.youtubeUrl && (
-                    <p className="text-xs text-red-500 truncate">▶ {game.youtubeUrl}</p>
+                    <p className="text-xs text-red-500 truncate mt-1">▶ {game.youtubeUrl}</p>
                   )}
                 </div>
 
@@ -179,7 +298,6 @@ export default function AdminGamesPage() {
             </h2>
 
             <div className="space-y-3">
-              {/* Image */}
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">รูปเกม</label>
                 <ImageUpload
@@ -188,7 +306,6 @@ export default function AdminGamesPage() {
                 />
               </div>
 
-              {/* Names */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ชื่อ (ไทย) *</label>
@@ -212,7 +329,6 @@ export default function AdminGamesPage() {
                 </div>
               </div>
 
-              {/* Players / Duration */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ผู้เล่นน้อยสุด</label>
@@ -246,21 +362,17 @@ export default function AdminGamesPage() {
                 </div>
               </div>
 
-              {/* Tags */}
+              {/* Tags — dropdown picker */}
               <div>
-                <label className="text-xs font-medium text-navy block mb-1">
-                  แท็ก <span className="text-gray-400 font-normal">(คั่นด้วยจุลภาค เช่น บลัฟฟิ่ง, ทีม)</span>
-                </label>
-                <input
-                  type="text"
-                  value={tagsInput}
-                  onChange={(e) => setTagsInput(e.target.value)}
-                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
-                  placeholder="บลัฟฟิ่ง, ทีม, เล่นเร็ว"
+                <label className="text-xs font-medium text-navy block mb-1">ประเภทเกม (แท็ก)</label>
+                <TagPicker
+                  selected={selectedTags}
+                  allTags={allTags}
+                  onChange={setSelectedTags}
+                  onAddTag={(tag) => setExtraTags((prev) => Array.from(new Set([...prev, tag])))}
                 />
               </div>
 
-              {/* YouTube */}
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">
                   ลิงก์คลิปสอนเกม (YouTube)
@@ -274,7 +386,6 @@ export default function AdminGamesPage() {
                 />
               </div>
 
-              {/* Summary */}
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">วิธีเล่น / รายละเอียด</label>
                 <textarea
@@ -286,7 +397,6 @@ export default function AdminGamesPage() {
                 />
               </div>
 
-              {/* Sort order + isActive */}
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
                   <input
