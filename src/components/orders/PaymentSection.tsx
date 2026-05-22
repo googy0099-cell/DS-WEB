@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
-import Image from "next/image";
+import { useState, useRef, useEffect } from "react";
+
+interface PaymentConfig {
+  qrImageUrl: string | null;
+  accountName: string;
+  bankName: string;
+}
 
 interface Props {
   orderId: number;
@@ -17,7 +22,15 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [config, setConfig] = useState<PaymentConfig | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetch("/api/payment-config")
+      .then((r) => r.json())
+      .then(setConfig)
+      .catch(() => {});
+  }, []);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -101,11 +114,20 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
         <div className="text-center mb-4">
           <p className="text-sm text-gray-500 mb-1">สแกนเพื่อชำระ</p>
           <p className="text-2xl font-bold text-orange mb-4">฿{totalTHB}</p>
-          <div className="relative w-56 h-56 mx-auto rounded-2xl overflow-hidden shadow-md">
-            <Image src="/promptpay-qr.png" alt="PromptPay QR" fill className="object-contain" />
-          </div>
-          <p className="text-sm font-semibold text-navy mt-3">นาย ธนวุฒิ พุ่มมาก</p>
-          <p className="text-xs text-gray-400">TTB PromptPay</p>
+          {(config?.qrImageUrl ?? "/promptpay-qr.png") && (
+            <div className="w-56 h-56 mx-auto rounded-2xl overflow-hidden shadow-md bg-white flex items-center justify-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={config?.qrImageUrl ?? "/promptpay-qr.png"}
+                alt="PromptPay QR"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          )}
+          <p className="text-sm font-semibold text-navy mt-3">
+            {config?.accountName ?? "นาย ธนวุฒิ พุ่มมาก"}
+          </p>
+          <p className="text-xs text-gray-400">{config?.bankName ?? "TTB PromptPay"}</p>
         </div>
 
         <div className="border-t border-sand pt-4">

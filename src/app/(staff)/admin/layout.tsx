@@ -20,6 +20,7 @@ const OWNER_NAV = [
   { href: "/admin/users", label: "ผู้ใช้งานระบบ", icon: "🔑" },
   { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "📈" },
   { href: "/admin/audit", label: "Log การทำงาน", icon: "📋" },
+  { href: "/admin/settings", label: "ตั้งค่าการชำระ", icon: "⚙️" },
 ];
 
 export default async function AdminLayout({
