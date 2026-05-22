@@ -82,14 +82,17 @@ function LoginForm() {
 
           <button
             type="button"
-            disabled
-            title="กรุณาตั้งค่า Google OAuth ก่อน (ดู AUTH_GUIDE.md)"
-            className="w-full border-2 border-sand text-gray-400 font-semibold py-3 rounded-xl text-sm cursor-not-allowed flex items-center justify-center gap-2"
+            onClick={() => signIn("google", { callbackUrl })}
+            className="w-full border-2 border-sand hover:border-navy text-navy font-semibold py-3 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors"
           >
-            <span className="text-lg">🔵</span>
-            เข้าสู่ระบบด้วย Google (ยังไม่เปิดใช้)
+            <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M47.5 24.5c0-1.6-.1-3.2-.4-4.7H24v9h13.2c-.6 3-2.3 5.5-4.8 7.2v6h7.7c4.5-4.2 7.1-10.3 7.1-17.5z" fill="#4285F4"/>
+              <path d="M24 48c6.5 0 12-2.1 16-5.8l-7.7-6c-2.1 1.4-4.8 2.3-8.3 2.3-6.4 0-11.8-4.3-13.7-10.1H2.3v6.2C6.3 42.6 14.6 48 24 48z" fill="#34A853"/>
+              <path d="M10.3 28.4A14.7 14.7 0 0 1 9.5 24c0-1.5.3-3 .8-4.4v-6.2H2.3A24 24 0 0 0 0 24c0 3.9.9 7.5 2.3 10.6l8-6.2z" fill="#FBBC04"/>
+              <path d="M24 9.5c3.6 0 6.8 1.2 9.3 3.6l7-7C36 2.1 30.5 0 24 0 14.6 0 6.3 5.4 2.3 13.4l8 6.2C12.2 13.8 17.6 9.5 24 9.5z" fill="#EA4335"/>
+            </svg>
+            เข้าสู่ระบบด้วย Google
           </button>
-          <p className="text-center text-xs text-gray-400">ต้องตั้งค่า Google OAuth ก่อน — ดู AUTH_GUIDE.md</p>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-4">
