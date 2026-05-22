@@ -26,14 +26,23 @@ export async function sendFcmNotify(title: string, body: string): Promise<void> 
     tokens.map((t) =>
       messaging.send({
         token: t.token,
-        notification: { title, body },
+        // data message เพื่อ trigger AlarmActivity
+        data: { title, body, type: "NEW_ORDER" },
         android: {
           priority: "high",
+          ttl: 60000,
+          directBootOk: true,
           notification: {
+            title,
+            body,
             channelId: "orders",
             sound: "default",
             defaultSound: true,
-            vibrateTimingsMillis: [0, 250, 250, 250],
+            vibrateTimingsMillis: [0, 500, 500, 500],
+            priority: "max",
+            visibility: "public",
+            defaultVibrateTimings: false,
+            localOnly: false,
           },
         },
       })
