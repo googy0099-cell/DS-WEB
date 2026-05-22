@@ -128,13 +128,32 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
             {config?.accountName ?? "นาย ธนวุฒิ พุ่มมาก"}
           </p>
           <p className="text-xs text-gray-400">{config?.bankName ?? "TTB PromptPay"}</p>
-          <a
-            href={config?.qrImageUrl ?? "/promptpay-qr.png"}
-            download="promptpay-qr.png"
+          <button
+            onClick={async () => {
+              const url = config?.qrImageUrl ?? "/promptpay-qr.png";
+              try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const file = new File([blob], "promptpay-qr.png", { type: blob.type || "image/png" });
+                if (navigator.canShare?.({ files: [file] })) {
+                  await navigator.share({ files: [file], title: "QR PromptPay Dice Shop" });
+                  return;
+                }
+              } catch {}
+              // fallback blob download
+              try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = "promptpay-qr.png";
+                a.click();
+              } catch {}
+            }}
             className="inline-flex items-center gap-1.5 mt-3 text-xs text-orange font-semibold border border-orange/30 bg-orange/5 px-3 py-1.5 rounded-full hover:bg-orange/15 transition-colors"
           >
             ⬇ บันทึก QR ลงเครื่อง
-          </a>
+          </button>
         </div>
 
         <div className="border-t border-sand pt-4">
