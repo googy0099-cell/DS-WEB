@@ -19,13 +19,18 @@ export default function CartDrawer() {
 
   useEffect(() => {
     if (session?.user) {
-      setOrderName(session.user.username);
       setUserId(parseInt(session.user.id));
+      // ตั้งค่า default name สำหรับ logged-in user ถ้ายังไม่ได้พิมพ์
+      if (!nameInput) {
+        const defaultName = `${session.user.username} (${session.user.memberCode})`;
+        setNameInput(defaultName);
+      }
     }
-  }, [session, setOrderName, setUserId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session]);
 
   async function submitOrder() {
-    const finalName = session?.user ? session.user.username : nameInput.trim();
+    const finalName = nameInput.trim() || (session?.user ? `${session.user.username} (${session.user.memberCode})` : "");
     if (!cart.length) return;
     if (!finalName) {
       alert("กรุณากรอกชื่อก่อนสั่งอาหาร");
@@ -94,19 +99,15 @@ export default function CartDrawer() {
         <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
           <div className="bg-sand/40 rounded-xl p-3">
             <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
-            {session?.user ? (
-              <p className="font-bold text-navy">
-                {session.user.username}
-                <span className="text-xs text-gray-400 ml-2 font-normal">(@{session.user.username})</span>
-              </p>
-            ) : (
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                placeholder="กรอกชื่อของคุณ"
-                className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
-              />
+            <input
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder={session?.user ? `${session.user.username} (${session.user.memberCode})` : "กรอกชื่อของคุณ"}
+              className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            />
+            {session?.user && (
+              <p className="text-[10px] text-gray-400 mt-1">login แล้ว — แก้ชื่อได้ตามต้องการ</p>
             )}
           </div>
 
@@ -174,6 +175,7 @@ export default function CartDrawer() {
             >
               {loading ? "กำลังส่งออเดอร์..." : "ยืนยันการสั่งอาหาร"}
             </button>
+            <p className="text-center text-xs text-gray-400 mt-2">จะเริ่มทำเมื่อชำระเงินแล้วเท่านั้น</p>
           </div>
         )}
       </div>

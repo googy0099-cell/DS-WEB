@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
   const orders = await db.order.findMany({
     where: whereClause,
-    include: { items: { include: { menuItem: true } }, user: true },
+    include: { items: { include: { menuItem: true } }, user: true, payment: true },
     orderBy: { createdAt: "asc" },
   });
 
@@ -55,22 +55,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
   }
 
-  // Duplicate name check: ถ้ามีชื่อซ้ำวันเดียวกัน → append #2, #3
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  let finalName = orderName.trim();
-  const sameDay = await db.order.findMany({
-    where: {
-      orderName: { startsWith: finalName },
-      createdAt: { gte: today, lt: tomorrow },
-    },
+  const finalName = orderName.trim();
+
+  // ถ้ามีออเดอร์ที่ยังไม่ชำระของคนนี้วันนี้ → เพิ่มรายการเข้าออเดอร์เดิม
+  const unpaidWhere = userId
+    ? { userId, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } }
+    : { orderName: finalName, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } };
+
+  const existingUnpaid = await db.order.findFirst({
+    where: unpaidWhere,
+    include: { items: { include: { menuItem: true } } },
   });
-  if (sameDay.length > 0) {
-    finalName = `${finalName} #${sameDay.length + 1}`;
-  }
 
   const menuItems = await db.menuItem.findMany({
     where: { id: { in: items.map((i) => i.menuItemId) } },
@@ -90,10 +90,32 @@ export async function POST(req: NextRequest) {
     };
   });
 
-  const totalTHB = itemsWithPrice.reduce(
-    (sum, i) => sum + i.unitPriceTHB * i.quantity,
-    0
-  );
+  const newTotal = itemsWithPrice.reduce((sum, i) => sum + i.unitPriceTHB * i.quantity, 0);
+
+  // ถ้ามีออเดอร์เดิมที่ยังไม่ชำระ → เพิ่มรายการเข้าไป
+  if (existingUnpaid) {
+    await db.orderItem.createMany({
+      data: itemsWithPrice.map((i) => ({
+        orderId: existingUnpaid.id,
+        menuItemId: i.menuItemId,
+        quantity: i.quantity,
+        unitPriceTHB: i.unitPriceTHB,
+        selectedSize: i.selectedSize ?? null,
+        selectedAddons: i.selectedAddons?.length ? JSON.stringify(i.selectedAddons) : null,
+        selectedOptions: i.selectedOptions?.length ? JSON.stringify(i.selectedOptions) : null,
+      })),
+    });
+    const updatedOrder = await db.order.update({
+      where: { id: existingUnpaid.id },
+      data: { totalTHB: existingUnpaid.totalTHB + newTotal, note: note || existingUnpaid.note },
+      include: { items: { include: { menuItem: true } } },
+    });
+    const addMsg = `\n➕ สั่งเพิ่ม! 👤 ${updatedOrder.orderName}\n${itemsWithPrice.map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`).join("\n")}\n💰 รวมใหม่ ฿${updatedOrder.totalTHB}`;
+    await Promise.allSettled([sendLineNotify(addMsg), sendPushToAll("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`)]);
+    return NextResponse.json(updatedOrder, { status: 200 });
+  }
+
+  const totalTHB = newTotal;
 
   const order = await db.order.create({
     data: {

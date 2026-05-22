@@ -324,16 +324,29 @@ function OrderCard({
           </span>
         </div>
 
-        <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-1.5">
-          {order.items.map((item) => (
-            <div key={item.id} className="flex justify-between text-sm">
-              <span className="text-gray-800 font-medium">
-                {item.menuItem.nameTh}
-                <span className="text-gray-400 font-normal"> ×{item.quantity}</span>
-              </span>
-              <span className="text-navy font-semibold">฿{item.unitPriceTHB * item.quantity}</span>
-            </div>
-          ))}
+        <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
+          {order.items.map((item) => {
+            const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+            const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+            return (
+              <div key={item.id} className="flex justify-between text-sm gap-2">
+                <div className="flex-1 min-w-0">
+                  <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
+                  {item.selectedSize && (
+                    <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">{item.selectedSize}</span>
+                  )}
+                  <span className="text-gray-400 font-normal"> ×{item.quantity}</span>
+                  {addons.length > 0 && (
+                    <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>
+                  )}
+                  {options.length > 0 && (
+                    <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>
+                  )}
+                </div>
+                <span className="text-navy font-semibold shrink-0">฿{item.unitPriceTHB * item.quantity}</span>
+              </div>
+            );
+          })}
           <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold text-navy">
             <span>รวม</span>
             <span>฿{order.totalTHB}</span>
@@ -344,6 +357,19 @@ function OrderCard({
           <p className="mb-3 text-xs text-orange bg-orange/10 rounded-lg px-3 py-1.5">
             📝 หมายเหตุ: {order.note}
           </p>
+        )}
+
+        {order.payment?.slipUrl && (
+          <div className="mb-3">
+            <p className="text-xs text-gray-400 mb-1">💳 สลิปจากลูกค้า</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={order.payment.slipUrl}
+              alt="slip"
+              className="w-full max-h-48 object-contain rounded-xl border border-sand cursor-pointer"
+              onClick={() => window.open(order.payment!.slipUrl!, "_blank")}
+            />
+          </div>
         )}
 
         <div className="flex gap-2">
