@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
+import { sendExpoPush } from "@/lib/expo-push-notify";
 import { formatThaiTime } from "@/lib/thai-datetime";
 
 export async function GET(req: NextRequest) {
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest) {
       include: { items: { include: { menuItem: true } } },
     });
     const addMsg = `\n➕ สั่งเพิ่ม! 👤 ${updatedOrder.orderName}\n${itemsWithPrice.map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`).join("\n")}\n💰 รวมใหม่ ฿${updatedOrder.totalTHB}`;
-    await Promise.allSettled([sendTelegramNotify(addMsg), sendPushToAll("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`)]);
+    await Promise.allSettled([sendTelegramNotify(addMsg), sendPushToAll("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`), sendExpoPush("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`)]);
     return NextResponse.json(updatedOrder, { status: 200 });
   }
 
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
   await Promise.allSettled([
     sendTelegramNotify(lineMsg),
     sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
+    sendExpoPush("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
   ]);
 
   return NextResponse.json(order, { status: 201 });
