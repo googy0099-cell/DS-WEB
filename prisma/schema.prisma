@@ -139,6 +139,7 @@ model Payment {
   method      String
   amountTHB   Int
   status      String    @default("PENDING")
+  slipUrl     String?
   confirmedAt DateTime?
   staffNote   String?
   createdAt   DateTime  @default(now())
