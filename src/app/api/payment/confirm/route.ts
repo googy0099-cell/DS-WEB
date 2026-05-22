@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { sendTelegramNotify } from "@/lib/telegram-notify";
-import { sendExpoPush } from "@/lib/expo-push-notify";
+import { sendFcmNotify } from "@/lib/fcm-notify";
 
 export async function PATCH(req: NextRequest) {
   const { paymentId, userId } = await req.json();
@@ -31,7 +31,7 @@ export async function PATCH(req: NextRequest) {
 
   await Promise.allSettled([
     sendTelegramNotify(`💸 ได้รับเงินแล้ว (พร้อมเพย์)\nชื่อ: ${payment.order.orderName} | ฿${payment.amountTHB}\nออเดอร์ #${payment.orderId}`),
-    sendExpoPush("💸 ได้รับเงินแล้ว!", `${payment.order.orderName} • ฿${payment.amountTHB}`),
+    sendFcmNotify("💸 ได้รับเงินแล้ว!", `${payment.order.orderName} • ฿${payment.amountTHB}`),
   ]);
 
   return NextResponse.json(payment);
