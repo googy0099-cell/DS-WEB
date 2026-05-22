@@ -32,7 +32,9 @@ export async function sendFcmNotify(title: string, body: string): Promise<void> 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return;
 
-  const tokens = await db.expoPushToken.findMany({ select: { token: true } });
+  const all = await db.expoPushToken.findMany({ select: { token: true } });
+  // ExponentPushToken[...] คือ Expo format ใช้กับ FCM HTTP v1 ไม่ได้
+  const tokens = all.filter((t) => !t.token.startsWith("ExponentPushToken["));
   if (!tokens.length) return;
 
   const sa = JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
