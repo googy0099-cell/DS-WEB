@@ -70,7 +70,7 @@ export async function GET() {
             message: {
               token: tokens[0].token,
               data: { title: "🔔 ทดสอบ", body: "test notification", type: "NEW_ORDER" },
-              android: { priority: "HIGH" },
+              android: { priority: "HIGH", ttl: "60s", direct_boot_ok: true },
             },
           }),
         }

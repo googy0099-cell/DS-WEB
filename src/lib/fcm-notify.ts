@@ -48,21 +48,13 @@ export async function sendFcmNotify(title: string, body: string): Promise<void> 
         body: JSON.stringify({
           message: {
             token: t.token,
+            // data-only (no notification field) → Android calls onMessageReceived()
+            // even when app is killed → DiceShopMessagingService starts AlarmActivity
             data: { title, body, type: "NEW_ORDER" },
             android: {
               priority: "HIGH",
               ttl: "60s",
               direct_boot_ok: true,
-              notification: {
-                title,
-                body,
-                channel_id: "orders",
-                notification_priority: "PRIORITY_MAX",
-                visibility: "PUBLIC",
-                vibrate_timings: ["0s", "0.5s", "0.5s", "0.5s"],
-                default_vibrate_timings: false,
-                local_only: false,
-              },
             },
           },
         }),
