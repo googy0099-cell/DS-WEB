@@ -54,11 +54,13 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
 export function makeCartKey(
   menuItemId: number,
   selectedSize: string | null,
-  selectedAddons: { id: number }[]
+  selectedAddons: { id: number }[],
+  selectedOptions: { groupId: number; choiceId: number }[]
 ): string {
-  const addonPart = selectedAddons
-    .map((a) => a.id)
+  const addonPart = selectedAddons.map((a) => a.id).sort().join(",");
+  const optionPart = selectedOptions
+    .map((o) => `${o.groupId}:${o.choiceId}`)
     .sort()
     .join(",");
-  return `${menuItemId}-${selectedSize ?? ""}-${addonPart}`;
+  return `${menuItemId}-${selectedSize ?? ""}-${addonPart}-${optionPart}`;
 }

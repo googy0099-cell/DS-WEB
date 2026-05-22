@@ -35,23 +35,70 @@ model Table {
 }
 
 model MenuItem {
-  id          Int         @id @default(autoincrement())
-  nameTh      String
-  nameEn      String
-  category    String
-  priceTHB    Int
-  priceS      Int?
-  priceXL     Int?
-  imageUrl    String?
-  isAvailable Boolean     @default(true)
-  orderItems  OrderItem[]
+  id           Int                   @id @default(autoincrement())
+  nameTh       String
+  nameEn       String
+  category     String
+  priceTHB     Int
+  priceS       Int?
+  priceXL      Int?
+  imageUrl     String?
+  isAvailable  Boolean               @default(true)
+  orderItems   OrderItem[]
+  addonGroups  MenuItemAddonGroup[]
+  optionGroups MenuItemOptionGroup[]
 }
 
-model Addon {
-  id        Int     @id @default(autoincrement())
+model AddonGroup {
+  id        Int                  @id @default(autoincrement())
   nameTh    String
-  priceTHB  Int
-  isActive  Boolean @default(true)
+  isActive  Boolean              @default(true)
+  items     AddonItem[]
+  menuItems MenuItemAddonGroup[]
+}
+
+model AddonItem {
+  id           Int        @id @default(autoincrement())
+  addonGroupId Int
+  addonGroup   AddonGroup @relation(fields: [addonGroupId], references: [id])
+  nameTh       String
+  priceTHB     Int
+  isActive     Boolean    @default(true)
+}
+
+model OptionGroup {
+  id         Int                   @id @default(autoincrement())
+  nameTh     String
+  isRequired Boolean               @default(false)
+  isActive   Boolean               @default(true)
+  choices    OptionChoice[]
+  menuItems  MenuItemOptionGroup[]
+}
+
+model OptionChoice {
+  id            Int         @id @default(autoincrement())
+  optionGroupId Int
+  optionGroup   OptionGroup @relation(fields: [optionGroupId], references: [id])
+  nameTh        String
+  priceTHB      Int         @default(0)
+  isDefault     Boolean     @default(false)
+  isActive      Boolean     @default(true)
+}
+
+model MenuItemAddonGroup {
+  menuItemId   Int
+  addonGroupId Int
+  menuItem     MenuItem   @relation(fields: [menuItemId], references: [id])
+  addonGroup   AddonGroup @relation(fields: [addonGroupId], references: [id])
+  @@id([menuItemId, addonGroupId])
+}
+
+model MenuItemOptionGroup {
+  menuItemId    Int
+  optionGroupId Int
+  menuItem      MenuItem    @relation(fields: [menuItemId], references: [id])
+  optionGroup   OptionGroup @relation(fields: [optionGroupId], references: [id])
+  @@id([menuItemId, optionGroupId])
 }
 
 model Order {
@@ -73,15 +120,16 @@ model Order {
 }
 
 model OrderItem {
-  id             Int      @id @default(autoincrement())
-  orderId        Int
-  order          Order    @relation(fields: [orderId], references: [id])
-  menuItemId     Int
-  menuItem       MenuItem @relation(fields: [menuItemId], references: [id])
-  quantity       Int
-  unitPriceTHB   Int
-  selectedSize   String?
-  selectedAddons String?
+  id              Int      @id @default(autoincrement())
+  orderId         Int
+  order           Order    @relation(fields: [orderId], references: [id])
+  menuItemId      Int
+  menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
+  quantity        Int
+  unitPriceTHB    Int
+  selectedSize    String?
+  selectedAddons  String?
+  selectedOptions String?
 }
 
 model Payment {
@@ -124,14 +172,14 @@ model GalleryItem {
   id        Int      @id @default(autoincrement())
   imageUrl  String
   caption   String?
-  section   String   @default("gallery") // "gallery" | "hero" | "about"
+  section   String   @default("gallery")
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 }
 
 model GameGuide {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   nameTh      String
   nameEn      String
   summaryTh   String
@@ -141,8 +189,8 @@ model GameGuide {
   maxPlayers  Int
   durationMin Int
   tags        String
-  isActive    Boolean  @default(true)
-  sortOrder   Int      @default(0)
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
 }
 
 model PushSubscription {

@@ -45,6 +45,7 @@ export default function CartDrawer() {
             quantity: c.quantity,
             selectedSize: c.selectedSize,
             selectedAddons: c.selectedAddons,
+            selectedOptions: c.selectedOptions,
           })),
         }),
       });
@@ -126,6 +127,11 @@ export default function CartDrawer() {
                   {item.selectedAddons.length > 0 && (
                     <p className="text-xs text-gray-400 mt-0.5">
                       + {item.selectedAddons.map((a) => a.nameTh).join(", ")}
+                    </p>
+                  )}
+                  {item.selectedOptions.length > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {item.selectedOptions.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}
                     </p>
                   )}
                   <p className="text-xs text-gray-400 mt-0.5">

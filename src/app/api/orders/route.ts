@@ -45,7 +45,8 @@ export async function POST(req: NextRequest) {
       menuItemId: number;
       quantity: number;
       selectedSize?: string | null;
-      selectedAddons?: { id: number; nameTh: string; priceTHB: number }[];
+      selectedAddons?: { id: number; groupId: number; nameTh: string; priceTHB: number }[];
+      selectedOptions?: { groupId: number; groupName: string; choiceId: number; choiceName: string; priceTHB: number }[];
     }[];
     note?: string;
   };
@@ -81,9 +82,10 @@ export async function POST(req: NextRequest) {
     if (item.selectedSize === "S" && menu.priceS) basePrice = menu.priceS;
     if (item.selectedSize === "XL" && menu.priceXL) basePrice = menu.priceXL;
     const addonTotal = (item.selectedAddons ?? []).reduce((s, a) => s + a.priceTHB, 0);
+    const optionTotal = (item.selectedOptions ?? []).reduce((s, o) => s + o.priceTHB, 0);
     return {
       ...item,
-      unitPriceTHB: basePrice + addonTotal,
+      unitPriceTHB: basePrice + addonTotal + optionTotal,
       nameTh: menu.nameTh,
     };
   });
@@ -105,9 +107,8 @@ export async function POST(req: NextRequest) {
           quantity: i.quantity,
           unitPriceTHB: i.unitPriceTHB,
           selectedSize: i.selectedSize ?? null,
-          selectedAddons: i.selectedAddons?.length
-            ? JSON.stringify(i.selectedAddons)
-            : null,
+          selectedAddons: i.selectedAddons?.length ? JSON.stringify(i.selectedAddons) : null,
+          selectedOptions: i.selectedOptions?.length ? JSON.stringify(i.selectedOptions) : null,
         })),
       },
     },
@@ -120,7 +121,10 @@ export async function POST(req: NextRequest) {
       const addonPart = i.selectedAddons?.length
         ? " + " + i.selectedAddons.map((a) => a.nameTh).join(", ")
         : "";
-      return `  • ${i.nameTh}${sizePart}${addonPart} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`;
+      const optionPart = i.selectedOptions?.length
+        ? " [" + i.selectedOptions.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") + "]"
+        : "";
+      return `  • ${i.nameTh}${sizePart}${addonPart}${optionPart} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`;
     })
     .join("\n");
 

@@ -11,7 +11,7 @@ interface Props {
 
 export default function MenuCard({ item }: Props) {
   const { cart, addItem, updateQty } = useOrderStore();
-  const cartKey = makeCartKey(item.id, null, []);
+  const cartKey = makeCartKey(item.id, null, [], []);
   const cartItem = cart.find((c) => c.cartKey === cartKey);
   const qty = cartItem?.quantity ?? 0;
 
@@ -42,6 +42,7 @@ export default function MenuCard({ item }: Props) {
                   priceTHB: item.priceTHB,
                   selectedSize: null,
                   selectedAddons: [],
+                  selectedOptions: [],
                 })
               }
               className="w-7 h-7 rounded-full bg-orange flex items-center justify-center text-white"
@@ -59,6 +60,7 @@ export default function MenuCard({ item }: Props) {
                 priceTHB: item.priceTHB,
                 selectedSize: null,
                 selectedAddons: [],
+                selectedOptions: [],
               })
             }
             className="w-7 h-7 rounded-full bg-orange flex items-center justify-center text-white"

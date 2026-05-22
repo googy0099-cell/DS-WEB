@@ -7,7 +7,7 @@ import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import CartDrawer from "@/components/orders/CartDrawer";
 import { useOrderStore, makeCartKey } from "@/store/orderStore";
-import type { MenuItemType, AddonType } from "@/types";
+import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
 const CATEGORIES = [
   { id: "milktea", label: "Milk & Tea", icon: "🧋" },
@@ -21,21 +21,18 @@ const CATEGORIES = [
 
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItemType[]>([]);
-  const [addons, setAddons] = useState<AddonType[]>([]);
   const [loading, setLoading] = useState(true);
   const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
   const [pickerSize, setPickerSize] = useState<"S" | "XL">("S");
-  const [pickerAddons, setPickerAddons] = useState<AddonType[]>([]);
+  const [pickerAddons, setPickerAddons] = useState<CartSelectedAddon[]>([]);
+  const [pickerOptions, setPickerOptions] = useState<CartSelectedOption[]>([]);
   const { addItem } = useOrderStore();
 
   useEffect(() => {
-    Promise.all([
-      fetch("/api/menu").then((r) => r.json()),
-      fetch("/api/addons").then((r) => r.json()),
-    ])
-      .then(([menuData, addonData]) => {
-        setItems(menuData);
-        setAddons(addonData);
+    fetch("/api/menu")
+      .then((r) => r.json())
+      .then((data) => {
+        setItems(data);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -47,70 +44,101 @@ export default function MenuPage() {
     setPickerItem(item);
     setPickerSize("S");
     setPickerAddons([]);
+    const defaults: CartSelectedOption[] = [];
+    for (const og of item.optionGroups) {
+      const defaultChoice = og.choices.find((c) => c.isDefault && c.isActive);
+      if (defaultChoice) {
+        defaults.push({
+          groupId: og.id,
+          groupName: og.nameTh,
+          choiceId: defaultChoice.id,
+          choiceName: defaultChoice.nameTh,
+          priceTHB: defaultChoice.priceTHB,
+        });
+      }
+    }
+    setPickerOptions(defaults);
   }
 
   function closePicker() {
     setPickerItem(null);
     setPickerAddons([]);
+    setPickerOptions([]);
   }
 
   function confirmPicker() {
     if (!pickerItem) return;
+    for (const og of pickerItem.optionGroups) {
+      if (og.isRequired && !pickerOptions.find((o) => o.groupId === og.id)) {
+        alert(`กรุณาเลือก ${og.nameTh}`);
+        return;
+      }
+    }
     const hasSizes = pickerItem.priceS != null || pickerItem.priceXL != null;
     const size = hasSizes ? pickerSize : null;
     let basePrice = pickerItem.priceTHB;
-    if (size === "S" && pickerItem.priceS) basePrice = pickerItem.priceS;
-    if (size === "XL" && pickerItem.priceXL) basePrice = pickerItem.priceXL;
+    if (size === "S" && pickerItem.priceS != null) basePrice = pickerItem.priceS;
+    if (size === "XL" && pickerItem.priceXL != null) basePrice = pickerItem.priceXL;
     const addonTotal = pickerAddons.reduce((s, a) => s + a.priceTHB, 0);
+    const optionTotal = pickerOptions.reduce((s, o) => s + o.priceTHB, 0);
     addItem({
-      cartKey: makeCartKey(pickerItem.id, size, pickerAddons),
+      cartKey: makeCartKey(pickerItem.id, size, pickerAddons, pickerOptions),
       menuItemId: pickerItem.id,
       nameTh: pickerItem.nameTh,
-      priceTHB: basePrice + addonTotal,
+      priceTHB: basePrice + addonTotal + optionTotal,
       selectedSize: size,
-      selectedAddons: pickerAddons.map((a) => ({
-        id: a.id,
-        nameTh: a.nameTh,
-        priceTHB: a.priceTHB,
-      })),
+      selectedAddons: pickerAddons,
+      selectedOptions: pickerOptions,
     });
     closePicker();
   }
 
   function handleAddDirect(item: MenuItemType) {
-    if (item.priceS != null || item.priceXL != null || addons.length > 0) {
+    const hasSizes = item.priceS != null || item.priceXL != null;
+    const hasGroups = item.addonGroups.length > 0 || item.optionGroups.length > 0;
+    if (hasSizes || hasGroups) {
       openPicker(item);
     } else {
       addItem({
-        cartKey: makeCartKey(item.id, null, []),
+        cartKey: makeCartKey(item.id, null, [], []),
         menuItemId: item.id,
         nameTh: item.nameTh,
         priceTHB: item.priceTHB,
         selectedSize: null,
         selectedAddons: [],
+        selectedOptions: [],
       });
     }
   }
 
-  function toggleAddon(addon: AddonType) {
-    setPickerAddons((prev) =>
-      prev.find((a) => a.id === addon.id)
-        ? prev.filter((a) => a.id !== addon.id)
-        : [...prev, addon]
-    );
+  function toggleAddonItem(groupId: number, itemId: number, itemName: string, price: number) {
+    setPickerAddons((prev) => {
+      const existing = prev.find((a) => a.id === itemId);
+      if (existing) return prev.filter((a) => a.id !== itemId);
+      return [...prev, { id: itemId, groupId, nameTh: itemName, priceTHB: price }];
+    });
   }
 
-  const pickerHasSizes =
-    pickerItem && (pickerItem.priceS != null || pickerItem.priceXL != null);
+  function selectOption(groupId: number, groupName: string, choiceId: number, choiceName: string, price: number) {
+    setPickerOptions((prev) => {
+      const filtered = prev.filter((o) => o.groupId !== groupId);
+      if (choiceId === -1) return filtered;
+      return [...filtered, { groupId, groupName, choiceId, choiceName, priceTHB: price }];
+    });
+  }
+
+  const pickerHasSizes = pickerItem && (pickerItem.priceS != null || pickerItem.priceXL != null);
   const pickerBasePrice = pickerItem
     ? pickerHasSizes
       ? pickerSize === "S"
-        ? pickerItem.priceS ?? pickerItem.priceTHB
-        : pickerItem.priceXL ?? pickerItem.priceTHB
+        ? (pickerItem.priceS ?? pickerItem.priceTHB)
+        : (pickerItem.priceXL ?? pickerItem.priceTHB)
       : pickerItem.priceTHB
     : 0;
   const pickerTotal =
-    pickerBasePrice + pickerAddons.reduce((s, a) => s + a.priceTHB, 0);
+    pickerBasePrice +
+    pickerAddons.reduce((s, a) => s + a.priceTHB, 0) +
+    pickerOptions.reduce((s, o) => s + o.priceTHB, 0);
 
   return (
     <>
@@ -121,7 +149,6 @@ export default function MenuPage() {
           <p className="text-cream/60 text-sm">เลือกรายการแล้วเพิ่มลงตะกร้าได้เลย</p>
         </div>
 
-        {/* Category tabs */}
         <div className="sticky top-16 z-10 bg-cream border-b border-sand flex overflow-x-auto no-scrollbar">
           {CATEGORIES.filter(
             (cat) => loading || availableItems.some((i) => i.category === cat.id)
@@ -205,14 +232,14 @@ export default function MenuPage() {
 
       <CartDrawer />
 
-      {/* Size / Addon Picker */}
       {pickerItem && (
         <>
           <div className="fixed inset-0 bg-black/40 z-50" onClick={closePicker} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 p-5 max-h-[80vh] overflow-y-auto">
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 p-5 max-h-[85vh] overflow-y-auto">
             <h3 className="font-bold text-navy text-lg mb-1">{pickerItem.nameTh}</h3>
             <p className="text-xs text-gray-400 mb-4">{pickerItem.nameEn}</p>
 
+            {/* Size selector */}
             {pickerHasSizes && (
               <div className="mb-5">
                 <p className="text-sm font-semibold text-navy mb-2">เลือกขนาด</p>
@@ -221,9 +248,7 @@ export default function MenuPage() {
                     <button
                       onClick={() => setPickerSize("S")}
                       className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                        pickerSize === "S"
-                          ? "border-orange bg-orange/10 text-orange"
-                          : "border-sand text-navy"
+                        pickerSize === "S" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"
                       }`}
                     >
                       S — ฿{pickerItem.priceS}
@@ -233,9 +258,7 @@ export default function MenuPage() {
                     <button
                       onClick={() => setPickerSize("XL")}
                       className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${
-                        pickerSize === "XL"
-                          ? "border-orange bg-orange/10 text-orange"
-                          : "border-sand text-navy"
+                        pickerSize === "XL" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"
                       }`}
                     >
                       XL — ฿{pickerItem.priceXL}
@@ -245,42 +268,88 @@ export default function MenuPage() {
               </div>
             )}
 
-            {addons.length > 0 && (
-              <div className="mb-5">
-                <p className="text-sm font-semibold text-navy mb-2">Add-on</p>
+            {/* Addon Groups */}
+            {pickerItem.addonGroups.map((group) => (
+              <div key={group.id} className="mb-5">
+                <p className="text-sm font-semibold text-navy mb-2">{group.nameTh}</p>
                 <div className="space-y-2">
-                  {addons.map((addon) => {
-                    const selected = pickerAddons.some((a) => a.id === addon.id);
+                  {group.items.filter((i) => i.isActive).map((addonItem) => {
+                    const selected = pickerAddons.some((a) => a.id === addonItem.id);
                     return (
                       <button
-                        key={addon.id}
-                        onClick={() => toggleAddon(addon)}
+                        key={addonItem.id}
+                        onClick={() => toggleAddonItem(group.id, addonItem.id, addonItem.nameTh, addonItem.priceTHB)}
                         className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
-                          selected
-                            ? "border-orange bg-orange/10"
-                            : "border-sand"
+                          selected ? "border-orange bg-orange/10" : "border-sand"
                         }`}
                       >
-                        <span className={`text-sm font-medium ${selected ? "text-orange" : "text-navy"}`}>
-                          {selected ? "✓ " : ""}{addon.nameTh}
+                        <span className={`text-sm font-medium flex items-center gap-1.5 ${selected ? "text-orange" : "text-navy"}`}>
+                          {selected && <span>✓</span>}
+                          {addonItem.nameTh}
                         </span>
-                        <span className="text-sm text-gray-500">+฿{addon.priceTHB}</span>
+                        <span className="text-sm text-gray-500">+฿{addonItem.priceTHB}</span>
                       </button>
                     );
                   })}
                 </div>
               </div>
-            )}
+            ))}
 
-            <div className="flex items-center justify-between mb-4">
+            {/* Option Groups */}
+            {pickerItem.optionGroups.map((group) => {
+              const selectedChoice = pickerOptions.find((o) => o.groupId === group.id);
+              return (
+                <div key={group.id} className="mb-5">
+                  <p className="text-sm font-semibold text-navy mb-2 flex items-center gap-2">
+                    {group.nameTh}
+                    {group.isRequired && (
+                      <span className="text-xs text-orange font-normal">*บังคับ</span>
+                    )}
+                  </p>
+                  <div className="space-y-2">
+                    {!group.isRequired && (
+                      <button
+                        onClick={() => selectOption(group.id, group.nameTh, -1, "", 0)}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
+                          !selectedChoice ? "border-orange bg-orange/10" : "border-sand"
+                        }`}
+                      >
+                        <span className={`text-sm font-medium ${!selectedChoice ? "text-orange" : "text-navy"}`}>
+                          {!selectedChoice && "✓ "}ไม่ระบุ
+                        </span>
+                        <span className="text-sm text-gray-400">ฟรี</span>
+                      </button>
+                    )}
+                    {group.choices.filter((c) => c.isActive).map((choice) => {
+                      const isSelected = selectedChoice?.choiceId === choice.id;
+                      return (
+                        <button
+                          key={choice.id}
+                          onClick={() => selectOption(group.id, group.nameTh, choice.id, choice.nameTh, choice.priceTHB)}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${
+                            isSelected ? "border-orange bg-orange/10" : "border-sand"
+                          }`}
+                        >
+                          <span className={`text-sm font-medium ${isSelected ? "text-orange" : "text-navy"}`}>
+                            {isSelected && "✓ "}{choice.nameTh}
+                          </span>
+                          <span className="text-sm text-gray-500">
+                            {choice.priceTHB > 0 ? `+฿${choice.priceTHB}` : "ฟรี"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="flex items-center justify-between mb-4 pt-2 border-t border-sand">
               <span className="text-sm text-gray-500">รวม</span>
               <span className="font-bold text-orange text-lg">฿{pickerTotal}</span>
             </div>
 
-            <button
-              onClick={confirmPicker}
-              className="w-full bg-orange text-white font-bold py-3 rounded-xl"
-            >
+            <button onClick={confirmPicker} className="w-full bg-orange text-white font-bold py-3 rounded-xl">
               เพิ่มลงตะกร้า
             </button>
           </div>
