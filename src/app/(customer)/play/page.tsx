@@ -1,13 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import LuckyDraw from "@/components/mini-games/LuckyDraw";
 import SpeedTap from "@/components/mini-games/SpeedTap";
 import MindRead from "@/components/mini-games/MindRead";
+
+type CustomGame = {
+  id: number;
+  name: string;
+  description: string | null;
+  coverUrl: string | null;
+};
 
 const GAMES = [
   {
@@ -32,7 +40,12 @@ const GAMES = [
 
 export default function PlayPage() {
   const [active, setActive] = useState<string | null>(null);
+  const [customGames, setCustomGames] = useState<CustomGame[]>([]);
   const { data: session, status } = useSession();
+
+  useEffect(() => {
+    fetch("/api/mini-games").then((r) => r.json()).then(setCustomGames).catch(() => {});
+  }, []);
 
   const activeGame = GAMES.find((g) => g.id === active);
 
@@ -80,6 +93,35 @@ export default function PlayPage() {
         <h1 className="text-cream font-bold text-xl">🎮 มินิเกม</h1>
         <p className="text-cream/60 text-xs mt-1">เล่นเพลินๆ ระหว่างรอเพื่อน</p>
       </div>
+
+      {/* Custom games from admin */}
+      {customGames.length > 0 && (
+        <div className="px-4 pt-4">
+          <p className="text-xs font-semibold text-navy/60 uppercase tracking-wider mb-3">เกมพิเศษ</p>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            {customGames.map((g) => (
+              <Link
+                key={g.id}
+                href={`/play/game/${g.id}`}
+                className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform"
+              >
+                <div className="relative aspect-video bg-sand flex items-center justify-center">
+                  {g.coverUrl ? (
+                    <Image src={g.coverUrl} alt={g.name} fill className="object-cover" />
+                  ) : (
+                    <span className="text-4xl">🎮</span>
+                  )}
+                </div>
+                <div className="p-3">
+                  <p className="font-bold text-navy text-sm">{g.name}</p>
+                  {g.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{g.description}</p>}
+                </div>
+              </Link>
+            ))}
+          </div>
+          <hr className="border-sand mb-4" />
+        </div>
+      )}
 
       {/* Game selector tabs */}
       <div className="flex gap-2 p-4 overflow-x-auto no-scrollbar">
