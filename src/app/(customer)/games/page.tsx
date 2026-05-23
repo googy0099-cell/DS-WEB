@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Search, X } from "lucide-react";
-import GameCard from "@/components/games/GameCard";
+import { Search, X, Users, Clock } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -138,17 +137,58 @@ export default function GamesPage() {
         </div>
       </div>
 
-      {/* Game list */}
-      <div className="p-4 space-y-3">
+      {/* Game grid */}
+      <div className="max-w-2xl mx-auto px-4 py-4">
         {loading ? (
-          <p className="text-center py-12 text-gray-400">กำลังโหลด...</p>
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm animate-pulse">
+                <div className="aspect-square bg-sand" />
+                <div className="p-2.5 space-y-1.5">
+                  <div className="h-3 bg-sand rounded w-3/4" />
+                  <div className="h-2.5 bg-sand rounded w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : games.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <p className="text-3xl mb-2">🎲</p>
+          <div className="text-center py-16 text-gray-400">
+            <p className="text-4xl mb-2">🎲</p>
             <p>ไม่พบเกมที่ค้นหา</p>
           </div>
         ) : (
-          games.map((game) => <GameCard key={game.id} game={game} />)
+          <div className="grid grid-cols-2 gap-3">
+            {games.map((game) => {
+              const tags: string[] = (() => { try { return JSON.parse(game.tags ?? "[]"); } catch { return []; } })();
+              return (
+                <Link
+                  key={game.id}
+                  href={`/games/${game.id}`}
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform"
+                >
+                  <div className="relative aspect-square w-full bg-sand flex items-center justify-center">
+                    {game.imageUrl ? (
+                      <Image src={game.imageUrl} alt={game.nameTh} fill className="object-cover" />
+                    ) : (
+                      <span className="text-4xl">🎲</span>
+                    )}
+                  </div>
+                  <div className="p-2.5">
+                    <p className="font-bold text-navy text-sm leading-tight line-clamp-2">{game.nameTh}</p>
+                    <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                      <span className="flex items-center gap-0.5"><Users size={10} />{game.minPlayers}–{game.maxPlayers}</span>
+                      <span className="flex items-center gap-0.5"><Clock size={10} />{game.durationMin}น.</span>
+                    </div>
+                    {tags[0] && (
+                      <span className="inline-block mt-1.5 text-[10px] bg-orange/10 text-orange px-2 py-0.5 rounded-full">
+                        {tags[0]}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
