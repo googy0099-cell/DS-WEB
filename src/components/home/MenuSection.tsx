@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 type MenuItem = {
@@ -9,38 +10,43 @@ type MenuItem = {
   nameEn: string;
   category: string;
   priceTHB: number;
+  priceS: number | null;
+  priceXL: number | null;
+  imageUrl: string | null;
+  isFeatured: boolean;
 };
 
 const CATEGORY_ICON: Record<string, string> = {
-  food: "🍜",
-  drink: "🧋",
-  snack: "🍿",
-  dessert: "🍮",
+  milktea: "🧋", coffee: "☕", soda: "🥤",
+  drink: "🧃", food: "🍜", snack: "🍿", dessert: "🍮",
 };
 
 export default function MenuSection() {
   const [items, setItems] = useState<MenuItem[]>([]);
 
   useEffect(() => {
-    fetch("/api/menu")
+    fetch("/api/menu?featured=1")
       .then((r) => r.json())
-      .then((data) => {
-        const featured = [
-          ...data.filter((i: MenuItem) => i.category === "food").slice(0, 2),
-          ...data.filter((i: MenuItem) => i.category === "drink").slice(0, 2),
-          ...data.filter((i: MenuItem) => i.category === "snack").slice(0, 1),
-        ];
-        setItems(featured);
-      })
+      .then((data: MenuItem[]) => setItems(data))
       .catch(() => {});
   }, []);
+
+  const displayPrice = (item: MenuItem) => {
+    if (item.priceS) return `฿${item.priceS}`;
+    if (item.priceTHB) return `฿${item.priceTHB}`;
+    return "";
+  };
 
   return (
     <section className="py-16 px-4 bg-cream">
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-8">
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">เมนูแนะนำ</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-navy">อาหาร &amp; เครื่องดื่ม</h2>
+          <Link href="/menu" className="group inline-block">
+            <h2 className="text-2xl md:text-3xl font-bold text-navy group-hover:text-orange transition-colors">
+              อาหาร &amp; เครื่องดื่ม →
+            </h2>
+          </Link>
         </div>
 
         {/* Promo banner */}
@@ -50,31 +56,45 @@ export default function MenuSection() {
         </div>
 
         {/* Featured items */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
-          {items.length > 0
-            ? items.map((item) => (
-                <div key={item.id} className="bg-white rounded-2xl p-4 shadow-sm text-center">
-                  <div className="text-3xl mb-2">{CATEGORY_ICON[item.category] ?? "🍽️"}</div>
-                  <p className="font-semibold text-navy text-sm leading-tight mb-1">{item.nameTh}</p>
-                  <p className="text-orange font-bold text-sm">฿{item.priceTHB}</p>
+        {items.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+            {items.map((item) => (
+              <Link
+                key={item.id}
+                href="/menu"
+                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+              >
+                {item.imageUrl ? (
+                  <div className="relative aspect-square w-full">
+                    <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover" />
+                  </div>
+                ) : (
+                  <div className="aspect-square flex items-center justify-center bg-sand">
+                    <span className="text-4xl">{CATEGORY_ICON[item.category] ?? "🍽️"}</span>
+                  </div>
+                )}
+                <div className="p-3 text-center">
+                  <p className="font-semibold text-navy text-sm leading-tight mb-1 line-clamp-2">{item.nameTh}</p>
+                  <p className="text-orange font-bold text-sm">{displayPrice(item)}</p>
                 </div>
-              ))
-            : Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl p-4 shadow-sm text-center animate-pulse">
-                  <div className="w-8 h-8 bg-sand rounded-full mx-auto mb-2" />
-                  <div className="h-3 bg-sand rounded w-3/4 mx-auto mb-2" />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm animate-pulse">
+                <div className="aspect-square bg-sand" />
+                <div className="p-3 space-y-1.5">
+                  <div className="h-3 bg-sand rounded w-3/4 mx-auto" />
                   <div className="h-3 bg-sand rounded w-1/2 mx-auto" />
                 </div>
-              ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
 
-        <div className="flex justify-center gap-3">
-          <Link
-            href="/menu"
-            className="bg-orange text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-orange/90 transition-colors"
-          >
-            🍽️ สั่งอาหารออนไลน์
-          </Link>
+        <div className="flex justify-center">
           <Link
             href="/menu"
             className="bg-navy text-cream font-bold px-6 py-3 rounded-xl text-sm hover:bg-navy/90 transition-colors"

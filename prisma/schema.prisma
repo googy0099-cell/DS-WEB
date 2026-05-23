@@ -49,6 +49,7 @@ model MenuItem {
   priceXL      Int?
   imageUrl     String?
   isAvailable  Boolean               @default(true)
+  isFeatured   Boolean               @default(false)
   orderItems   OrderItem[]
   addonGroups  MenuItemAddonGroup[]
   optionGroups MenuItemOptionGroup[]

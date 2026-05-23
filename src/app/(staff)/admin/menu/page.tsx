@@ -14,6 +14,7 @@ type MenuItem = {
   priceXL: number | null;
   imageUrl: string | null;
   isAvailable: boolean;
+  isFeatured: boolean;
   addonGroups: { id: number; nameTh: string }[];
   optionGroups: { id: number; nameTh: string; isRequired: boolean }[];
 };
@@ -35,7 +36,7 @@ const CAT_LABELS: Record<string, string> = {
 const EMPTY = {
   nameTh: "", nameEn: "", category: "milktea", priceTHB: 0,
   priceS: null as number | null, priceXL: null as number | null,
-  imageUrl: null as string | null, isAvailable: true,
+  imageUrl: null as string | null, isAvailable: true, isFeatured: false,
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -94,6 +95,15 @@ export default function AdminMenuPage() {
     mutate();
   }
 
+  async function toggleFeatured(item: MenuItem) {
+    await fetch("/api/menu", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: item.id, isFeatured: !item.isFeatured }),
+    });
+    mutate();
+  }
+
   async function deleteItem(id: number) {
     if (!confirm("ลบรายการนี้?")) return;
     await fetch("/api/menu", {
@@ -138,6 +148,7 @@ export default function AdminMenuPage() {
               <th className="text-left p-3 text-navy font-semibold hidden md:table-cell">หมวด</th>
               <th className="text-right p-3 text-navy font-semibold">ราคา</th>
               <th className="text-center p-3 text-navy font-semibold">สถานะ</th>
+              <th className="text-center p-3 text-navy font-semibold">หน้าแรก</th>
               <th className="p-3"></th>
             </tr>
           </thead>
@@ -177,6 +188,15 @@ export default function AdminMenuPage() {
                 <td className="p-3 text-center">
                   <button onClick={() => toggleAvailable(item)} className={`text-xs px-2 py-1 rounded-full font-medium ${item.isAvailable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
                     {item.isAvailable ? "เปิด" : "ปิด"}
+                  </button>
+                </td>
+                <td className="p-3 text-center">
+                  <button
+                    onClick={() => toggleFeatured(item)}
+                    title="แสดงบนหน้าแรก"
+                    className={`text-lg transition-transform ${item.isFeatured ? "scale-110" : "opacity-30"}`}
+                  >
+                    ⭐
                   </button>
                 </td>
                 <td className="p-3">
@@ -274,6 +294,10 @@ export default function AdminMenuPage() {
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={editing.isAvailable ?? true} onChange={(e) => setEditing({ ...editing, isAvailable: e.target.checked })} />
                 เปิดให้สั่ง
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={(editing as { isFeatured?: boolean }).isFeatured ?? false} onChange={(e) => setEditing({ ...editing, isFeatured: e.target.checked })} />
+                ⭐ แสดงบนหน้าแรก (เมนูแนะนำ)
               </label>
             </div>
 

@@ -42,8 +42,13 @@ function flattenItem(item: {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const featured = searchParams.get("featured") === "1";
   const items = await db.menuItem.findMany({
+    where: {
+      ...(featured ? { isFeatured: true, isAvailable: true } : {}),
+    },
     orderBy: [{ category: "asc" }, { nameTh: "asc" }],
     include: includeGroups(),
   });
