@@ -15,8 +15,10 @@ type MiniGame = {
   sortOrder: number;
 };
 
-const EMPTY = {
-  name: "", description: "", htmlUrl: "", coverUrl: null as string | null,
+type EditingGame = Partial<MiniGame>;
+
+const EMPTY: EditingGame = {
+  name: "", description: null, htmlUrl: "", coverUrl: null,
   isActive: true, sortOrder: 0,
 };
 
@@ -25,7 +27,7 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 export default function AdminMiniGamesPage() {
   const { data: games = [], mutate } = useSWR<MiniGame[]>("/api/mini-games", fetcher);
   const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState<Partial<typeof EMPTY> & { id?: number } | null>(null);
+  const [editing, setEditing] = useState<EditingGame | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -46,7 +48,7 @@ export default function AdminMiniGamesPage() {
   }
 
   async function save() {
-    if (!editing || !editing.name || !editing.htmlUrl) return;
+    if (!editing?.name || !editing?.htmlUrl) return;
     setSaving(true);
     const method = editing.id ? "PATCH" : "POST";
     await fetch("/api/mini-games", {
@@ -150,7 +152,7 @@ export default function AdminMiniGamesPage() {
                 <input
                   type="text"
                   value={editing.description ?? ""}
-                  onChange={(e) => setEditing({ ...editing, description: e.target.value })}
+                  onChange={(e) => setEditing({ ...editing, description: e.target.value || null })}
                   placeholder="อธิบายสั้นๆ"
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />
@@ -220,7 +222,7 @@ export default function AdminMiniGamesPage() {
               <button onClick={() => setShowModal(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
               <button
                 onClick={save}
-                disabled={saving || !editing.name || !editing.htmlUrl || uploading}
+                disabled={saving || !editing?.name || !editing?.htmlUrl || uploading}
                 className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50"
               >
                 {saving ? "กำลังบันทึก..." : "บันทึก"}
