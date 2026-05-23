@@ -18,9 +18,12 @@ interface GameGuide {
 }
 
 function getYoutubeEmbedId(url: string): string | null {
+  // Handle full iframe embed code pasted from YouTube (e.g. <iframe src="...embed/ID?...">)
+  const iframeMatch = url.match(/youtube\.com\/embed\/([a-zA-Z0-9_-]+)/);
+  if (iframeMatch) return iframeMatch[1];
   try {
     const u = new URL(url);
-    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1);
+    if (u.hostname.includes("youtu.be")) return u.pathname.slice(1).split("?")[0];
     return u.searchParams.get("v");
   } catch {
     return null;
