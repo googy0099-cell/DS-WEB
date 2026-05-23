@@ -14,20 +14,35 @@ export default function MiniGamePlayerPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [game, setGame] = useState<MiniGame | null>(null);
+  const [htmlContent, setHtmlContent] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     fetch("/api/mini-games")
       .then((r) => r.json())
       .then((data: MiniGame[]) => {
         const found = data.find((g) => g.id === Number(id));
-        setGame(found ?? null);
-      });
+        if (!found) { setError(true); return; }
+        setGame(found);
+        // Fetch HTML content as text to avoid Content-Disposition download
+        return fetch(found.htmlUrl).then((r) => r.text()).then(setHtmlContent);
+      })
+      .catch(() => setError(true));
   }, [id]);
 
-  if (!game) {
+  if (error) {
+    return (
+      <div className="min-h-screen bg-navy flex flex-col items-center justify-center gap-4">
+        <p className="text-cream/60">ไม่พบเกม</p>
+        <button onClick={() => router.back()} className="text-orange text-sm underline">ย้อนกลับ</button>
+      </div>
+    );
+  }
+
+  if (!htmlContent) {
     return (
       <div className="min-h-screen bg-navy flex items-center justify-center">
-        <p className="text-cream/60">กำลังโหลด...</p>
+        <p className="text-cream/60">กำลังโหลดเกม...</p>
       </div>
     );
   }
@@ -42,13 +57,14 @@ export default function MiniGamePlayerPage() {
           <ChevronLeft size={18} />
           ออก
         </button>
-        <p className="text-cream font-semibold text-sm">{game.name}</p>
+        <p className="text-cream font-semibold text-sm">{game?.name}</p>
       </div>
       <iframe
-        src={game.htmlUrl}
+        srcDoc={htmlContent}
         className="flex-1 w-full border-0 bg-white"
         allow="fullscreen"
-        title={game.name}
+        title={game?.name}
+        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
       />
     </div>
   );
