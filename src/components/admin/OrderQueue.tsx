@@ -45,16 +45,23 @@ const STATUS_CONFIG = {
   },
 };
 
+interface EditItem {
+  id: number;
+  nameTh: string;
+  selectedSize: string | null;
+  unitPrice: number;
+  quantity: number;
+}
+
 function playBeep(ctx: AudioContext) {
   const now = ctx.currentTime;
-  // 4 beeps ถี่ๆ แบบกระตุ้น
   const pattern = [0, 0.15, 0.3, 0.45];
   pattern.forEach((t) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
     gain.connect(ctx.destination);
-    osc.type = "square"; // เสียงแหลมกว่า sine
+    osc.type = "square";
     osc.frequency.setValueAtTime(1050, now + t);
     osc.frequency.setValueAtTime(780, now + t + 0.06);
     gain.gain.setValueAtTime(0.6, now + t);
@@ -67,7 +74,6 @@ function playBeep(ctx: AudioContext) {
 async function showBrowserNotification(orderName: string, total: number) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const body = `${orderName} • ฿${total}`;
-  // ใช้ service worker เพื่อให้แจ้งเตือนได้แม้ไม่ได้อยู่ในแท็บ
   if ("serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.ready.catch(() => null);
     if (reg) {
@@ -84,7 +90,7 @@ export default function OrderQueue() {
     fetcher,
     { refreshInterval: 8000 }
   );
-  const { data: todayOrders } = useSWR<OrderWithItems[]>(
+  const { data: todayOrders, mutate: mutateTodayOrders } = useSWR<OrderWithItems[]>(
     "/api/orders?status=today",
     fetcher,
     { refreshInterval: 30000 }
@@ -96,24 +102,34 @@ export default function OrderQueue() {
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // request notification permission + subscribe Web Push
+  // Loading state per order (prevents double-click)
+  const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
+
+  // Edit modal state
+  const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
+  const [editItems, setEditItems] = useState<EditItem[]>([]);
+  const [editNote, setEditNote] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
   useEffect(() => {
     async function setupPush() {
       if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
-      const permission = Notification.permission === "default"
-        ? await Notification.requestPermission()
-        : Notification.permission;
+      const permission =
+        Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
       if (permission !== "granted") return;
-
       const reg = await navigator.serviceWorker.ready.catch(() => null);
       if (!reg) return;
-
       const existing = await reg.pushManager.getSubscription();
-      const sub = existing ?? await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-      }).catch(() => null);
-
+      const sub =
+        existing ??
+        (await reg.pushManager
+          .subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
+          })
+          .catch(() => null));
       if (sub) {
         await fetch("/api/push/subscribe", {
           method: "POST",
@@ -127,14 +143,11 @@ export default function OrderQueue() {
 
   const pendingOrders = orders?.filter((o) => o.status === "PENDING") ?? [];
 
-  // เริ่ม/หยุด interval เสียงตามจำนวน PENDING
-  // ทำงานทันทีที่มี PENDING ไม่ว่าจะ refresh หรือออเดอร์ใหม่เข้า
   useEffect(() => {
     const getCtx = () => {
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
       return audioCtxRef.current;
     };
-
     if (!alertEnabled || pendingOrders.length === 0) {
       if (alertIntervalRef.current) {
         clearInterval(alertIntervalRef.current);
@@ -142,14 +155,16 @@ export default function OrderQueue() {
       }
       return;
     }
-
     if (!alertIntervalRef.current) {
-      try { playBeep(getCtx()); } catch {}
+      try {
+        playBeep(getCtx());
+      } catch {}
       alertIntervalRef.current = setInterval(() => {
-        try { playBeep(getCtx()); } catch {}
+        try {
+          playBeep(getCtx());
+        } catch {}
       }, 3000);
     }
-
     return () => {
       if (alertIntervalRef.current) {
         clearInterval(alertIntervalRef.current);
@@ -158,7 +173,6 @@ export default function OrderQueue() {
     };
   }, [pendingOrders.length, alertEnabled]);
 
-  // ตรวจ pending ใหม่ → browser notification
   useEffect(() => {
     if (!orders) return;
     const incoming = orders.filter(
@@ -170,18 +184,93 @@ export default function OrderQueue() {
     prevIdsRef.current = new Set(orders.map((o) => o.id));
   }, [orders]);
 
-  async function updateStatus(orderId: number, status: string) {
-    await fetch(`/api/orders/${orderId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+  function setLoading(id: number, on: boolean) {
+    setLoadingIds((prev) => {
+      const s = new Set(prev);
+      on ? s.add(id) : s.delete(id);
+      return s;
     });
-    mutate();
+  }
+
+  async function updateStatus(orderId: number, status: string) {
+    if (loadingIds.has(orderId)) return;
+    setLoading(orderId, true);
+    try {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      await mutate();
+    } finally {
+      setLoading(orderId, false);
+    }
+  }
+
+  async function deleteOrder(orderId: number) {
+    if (!window.confirm("ลบออเดอร์นี้ถาวร?")) return;
+    setLoading(orderId, true);
+    try {
+      await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
+      await Promise.all([mutate(), mutateTodayOrders()]);
+    } finally {
+      setLoading(orderId, false);
+    }
+  }
+
+  function openEdit(order: OrderWithItems) {
+    setEditOrder(order);
+    setEditItems(
+      order.items.map((item) => ({
+        id: item.id,
+        nameTh: item.menuItem.nameTh,
+        selectedSize: item.selectedSize,
+        unitPrice: item.unitPriceTHB,
+        quantity: item.quantity,
+      }))
+    );
+    setEditNote(order.note ?? "");
+  }
+
+  function changeQty(itemId: number, delta: number) {
+    setEditItems((prev) =>
+      prev.map((i) =>
+        i.id === itemId ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i
+      )
+    );
+  }
+
+  async function saveEdit() {
+    if (!editOrder || savingEdit) return;
+    const hasItems = editItems.some((i) => i.quantity > 0);
+    if (!hasItems) {
+      alert("ต้องมีสินค้าอย่างน้อย 1 รายการ หรือลบออเดอร์แทน");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await fetch(`/api/orders/${editOrder.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: editItems.map((i) => ({ id: i.id, quantity: i.quantity })),
+          note: editNote,
+        }),
+      });
+      await mutate();
+      setEditOrder(null);
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   const activeOrders = orders?.filter((o) => o.status !== "PENDING") ?? [];
 
   if (!orders) return <div className="text-center py-8 text-gray-400">กำลังโหลด...</div>;
+
+  const editTotal = editItems
+    .filter((i) => i.quantity > 0)
+    .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
 
   return (
     <div className="space-y-6">
@@ -192,7 +281,9 @@ export default function OrderQueue() {
           <div>
             <p className="text-sm font-medium text-navy">เสียงแจ้งเตือนออเดอร์ใหม่</p>
             {alertEnabled && pendingOrders.length > 0 && (
-              <p className="text-xs text-red-500 font-medium animate-pulse">กำลังดัง — กด "รับออเดอร์แล้ว" เพื่อหยุด</p>
+              <p className="text-xs text-red-500 font-medium animate-pulse">
+                กำลังดัง — กด "รับออเดอร์แล้ว" เพื่อหยุด
+              </p>
             )}
           </div>
         </div>
@@ -200,7 +291,9 @@ export default function OrderQueue() {
           onClick={() => setAlertEnabled((v) => !v)}
           className={`relative w-11 h-6 rounded-full transition-colors ${alertEnabled ? "bg-orange" : "bg-gray-300"}`}
         >
-          <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${alertEnabled ? "left-5" : "left-0.5"}`} />
+          <span
+            className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${alertEnabled ? "left-5" : "left-0.5"}`}
+          />
         </button>
       </div>
 
@@ -215,7 +308,15 @@ export default function OrderQueue() {
           </h3>
           <div className="space-y-3">
             {pendingOrders.map((order) => (
-              <OrderCard key={order.id} order={order} isNew onUpdate={updateStatus} />
+              <OrderCard
+                key={order.id}
+                order={order}
+                isNew
+                isLoading={loadingIds.has(order.id)}
+                onUpdate={updateStatus}
+                onEdit={openEdit}
+                onDelete={deleteOrder}
+              />
             ))}
           </div>
         </div>
@@ -227,7 +328,15 @@ export default function OrderQueue() {
           <h3 className="font-bold text-navy mb-3">กำลังดำเนินการ</h3>
           <div className="space-y-3">
             {activeOrders.map((order) => (
-              <OrderCard key={order.id} order={order} isNew={false} onUpdate={updateStatus} />
+              <OrderCard
+                key={order.id}
+                order={order}
+                isNew={false}
+                isLoading={loadingIds.has(order.id)}
+                onUpdate={updateStatus}
+                onEdit={openEdit}
+                onDelete={deleteOrder}
+              />
             ))}
           </div>
         </div>
@@ -269,14 +378,18 @@ export default function OrderQueue() {
                       <p className="font-semibold text-navy">👤 {order.orderName || `ออเดอร์ #${order.id}`}</p>
                       <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
                     </div>
-                    <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.color ?? "bg-gray-100 text-gray-500"}`}>
+                    <span
+                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.color ?? "bg-gray-100 text-gray-500"}`}
+                    >
                       {STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.label ?? order.status}
                     </span>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-2 space-y-1">
                     {order.items.map((item) => (
                       <div key={item.id} className="flex justify-between text-xs text-gray-600">
-                        <span>{item.menuItem.nameTh} ×{item.quantity}</span>
+                        <span>
+                          {item.menuItem.nameTh} ×{item.quantity}
+                        </span>
                         <span>฿{item.unitPriceTHB * item.quantity}</span>
                       </div>
                     ))}
@@ -285,12 +398,117 @@ export default function OrderQueue() {
                       <span>฿{order.totalTHB}</span>
                     </div>
                   </div>
+                  {/* Delete from history */}
+                  <button
+                    onClick={() => deleteOrder(order.id)}
+                    disabled={loadingIds.has(order.id)}
+                    className="mt-2 text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
+                  >
+                    🗑️ ลบ
+                  </button>
                 </div>
               ))
             )}
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editOrder && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center p-0 md:p-4">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-md flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-100 flex items-start justify-between shrink-0">
+              <div>
+                <h3 className="font-bold text-navy text-lg">✏️ แก้ไขออเดอร์ #{editOrder.id}</h3>
+                <p className="text-sm text-gray-500">👤 {editOrder.orderName}</p>
+              </div>
+              <button
+                onClick={() => setEditOrder(null)}
+                className="text-gray-400 text-2xl leading-none px-1"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Items */}
+            <div className="overflow-y-auto flex-1 p-4 space-y-3">
+              {editItems.map((item) => (
+                <div
+                  key={item.id}
+                  className={`flex items-center justify-between gap-3 p-3 rounded-xl border transition-all ${
+                    item.quantity === 0 ? "border-red-200 bg-red-50 opacity-50" : "border-gray-100 bg-gray-50"
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium ${item.quantity === 0 ? "line-through text-gray-400" : "text-navy"}`}>
+                      {item.nameTh}
+                      {item.selectedSize && (
+                        <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
+                          {item.selectedSize}
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-xs text-gray-400">฿{item.unitPrice} / ชิ้น</p>
+                    {item.quantity === 0 && (
+                      <p className="text-xs text-red-400 font-medium">จะถูกลบออก</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => changeQty(item.id, -1)}
+                      className="w-8 h-8 rounded-full bg-white border border-gray-200 text-gray-600 font-bold text-lg leading-none flex items-center justify-center shadow-sm"
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center font-bold text-navy">{item.quantity}</span>
+                    <button
+                      onClick={() => changeQty(item.id, +1)}
+                      className="w-8 h-8 rounded-full bg-orange text-white font-bold text-lg leading-none flex items-center justify-center shadow-sm"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Note */}
+              <div>
+                <label className="text-xs text-gray-400 mb-1 block">📝 หมายเหตุ</label>
+                <input
+                  value={editNote}
+                  onChange={(e) => setEditNote(e.target.value)}
+                  placeholder="หมายเหตุ..."
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange/30"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-100 shrink-0">
+              <div className="flex justify-between font-bold text-navy mb-3">
+                <span>รวมทั้งหมด</span>
+                <span className="text-orange">฿{editTotal}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditOrder(null)}
+                  className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={savingEdit}
+                  className="flex-1 py-3 rounded-xl bg-navy text-white font-bold text-sm disabled:opacity-50"
+                >
+                  {savingEdit ? "กำลังบันทึก..." : "💾 บันทึก"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -298,25 +516,40 @@ export default function OrderQueue() {
 function OrderCard({
   order,
   isNew,
+  isLoading,
   onUpdate,
+  onEdit,
+  onDelete,
 }: {
   order: OrderWithItems;
   isNew: boolean;
+  isLoading: boolean;
   onUpdate: (id: number, status: string) => void;
+  onEdit: (order: OrderWithItems) => void;
+  onDelete: (id: number) => void;
 }) {
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
+  const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
+  const canEdit = order.status === "PENDING" || order.status === "CONFIRMED" || order.status === "PAID";
 
   return (
-    <div className={`bg-white rounded-xl shadow-sm border-2 transition-all ${isNew ? "border-yellow-400 shadow-yellow-100 shadow-lg" : "border-transparent"}`}>
+    <div
+      className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
+        isNew ? "border-yellow-400 shadow-yellow-100 shadow-lg" : "border-transparent"
+      }`}
+    >
       {isNew && (
         <div className="bg-yellow-400 text-white text-xs font-bold text-center py-1 rounded-t-xl animate-pulse">
           🔔 ออเดอร์ใหม่! กรุณารับออเดอร์
         </div>
       )}
       <div className="p-4">
+        {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div>
-            <p className="font-bold text-navy text-lg">👤 {order.orderName || `ออเดอร์ #${order.id}`}</p>
+            <p className="font-bold text-navy text-lg">
+              👤 {order.orderName || `ออเดอร์ #${order.id}`}
+            </p>
             <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
           </div>
           <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${cfg.color}`}>
@@ -324,26 +557,37 @@ function OrderCard({
           </span>
         </div>
 
+        {/* Items */}
         <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
           {order.items.map((item) => {
-            const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-            const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+            const addons: { nameTh: string }[] = item.selectedAddons
+              ? JSON.parse(item.selectedAddons)
+              : [];
+            const options: { groupName: string; choiceName: string }[] = item.selectedOptions
+              ? JSON.parse(item.selectedOptions)
+              : [];
             return (
               <div key={item.id} className="flex justify-between text-sm gap-2">
                 <div className="flex-1 min-w-0">
                   <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
                   {item.selectedSize && (
-                    <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">{item.selectedSize}</span>
+                    <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
+                      {item.selectedSize}
+                    </span>
                   )}
                   <span className="text-gray-400 font-normal"> ×{item.quantity}</span>
                   {addons.length > 0 && (
                     <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>
                   )}
                   {options.length > 0 && (
-                    <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>
+                    <p className="text-xs text-gray-400">
+                      {options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}
+                    </p>
                   )}
                 </div>
-                <span className="text-navy font-semibold shrink-0">฿{item.unitPriceTHB * item.quantity}</span>
+                <span className="text-navy font-semibold shrink-0">
+                  ฿{item.unitPriceTHB * item.quantity}
+                </span>
               </div>
             );
           })}
@@ -353,12 +597,14 @@ function OrderCard({
           </div>
         </div>
 
+        {/* Note */}
         {order.note && (
           <p className="mb-3 text-xs text-orange bg-orange/10 rounded-lg px-3 py-1.5">
             📝 หมายเหตุ: {order.note}
           </p>
         )}
 
+        {/* Slip */}
         {order.payment?.slipUrl && (
           <div className="mb-3">
             <p className="text-xs text-gray-400 mb-1">💳 สลิปจากลูกค้า</p>
@@ -372,23 +618,44 @@ function OrderCard({
           </div>
         )}
 
+        {/* Primary action */}
+        {cfg.next && (
+          <button
+            onClick={() => onUpdate(order.id, cfg.next!)}
+            disabled={isLoading}
+            className={`w-full text-sm font-bold py-3 rounded-xl mb-2 transition-opacity disabled:opacity-60 ${cfg.nextColor}`}
+          >
+            {isLoading ? "กำลังบันทึก..." : cfg.nextLabel}
+          </button>
+        )}
+
+        {/* Secondary actions */}
         <div className="flex gap-2">
-          {cfg.next && (
+          {canEdit && (
             <button
-              onClick={() => onUpdate(order.id, cfg.next!)}
-              className={`flex-1 text-sm font-bold py-2.5 rounded-xl ${cfg.nextColor}`}
+              onClick={() => onEdit(order)}
+              disabled={isLoading}
+              className="flex-1 bg-gray-50 text-gray-600 border border-gray-200 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
             >
-              {cfg.nextLabel}
+              ✏️ แก้ไข
             </button>
           )}
-          {order.status === "PENDING" && (
+          {canCancel && (
             <button
               onClick={() => onUpdate(order.id, "CANCELLED")}
-              className="bg-red-50 text-red-600 text-sm font-medium px-3 py-2.5 rounded-xl"
+              disabled={isLoading}
+              className="flex-1 bg-red-50 text-red-600 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
             >
-              ยกเลิก
+              ❌ ยกเลิก
             </button>
           )}
+          <button
+            onClick={() => onDelete(order.id)}
+            disabled={isLoading}
+            className="bg-gray-50 text-gray-400 border border-gray-100 text-sm px-3 py-2 rounded-xl disabled:opacity-40 hover:text-red-500 hover:border-red-100"
+          >
+            🗑️
+          </button>
         </div>
       </div>
     </div>

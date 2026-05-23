@@ -1,4 +1,4 @@
-export type OrderStatus = "PENDING" | "CONFIRMED" | "SERVED" | "CANCELLED";
+export type OrderStatus = "PENDING" | "CONFIRMED" | "PAID" | "SERVED" | "CANCELLED";
 export type PaymentMethod = "PROMPTPAY" | "CASH" | "CREDIT";
 export type PaymentStatus = "PENDING" | "CONFIRMED";
 
