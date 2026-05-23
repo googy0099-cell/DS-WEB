@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import LuckyDraw from "@/components/mini-games/LuckyDraw";
@@ -32,8 +32,45 @@ const GAMES = [
 
 export default function PlayPage() {
   const [active, setActive] = useState<string | null>(null);
+  const { data: session, status } = useSession();
 
   const activeGame = GAMES.find((g) => g.id === active);
+
+  if (status === "loading") {
+    return (
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-cream pt-16 flex items-center justify-center">
+          <p className="text-gray-400">กำลังโหลด...</p>
+        </div>
+      </>
+    );
+  }
+
+  if (!session?.user) {
+    return (
+      <>
+        <Navbar />
+        <div className="min-h-screen bg-cream pt-16 flex flex-col items-center justify-center px-4 text-center">
+          <span className="text-6xl mb-4">🎮</span>
+          <h1 className="text-2xl font-bold text-navy mb-2">มินิเกม</h1>
+          <p className="text-gray-500 mb-6 max-w-sm">
+            กรุณาสมัครสมาชิกและเข้าสู่ระบบก่อน เพื่อเล่นมินิเกม
+          </p>
+          <Link
+            href="/login?callbackUrl=/play"
+            className="bg-orange text-white font-bold px-8 py-3 rounded-xl text-base hover:bg-orange/90 transition-colors"
+          >
+            เข้าสู่ระบบ / สมัครสมาชิก
+          </Link>
+          <Link href="/" className="mt-4 text-sm text-gray-400 underline">
+            กลับหน้าแรก
+          </Link>
+        </div>
+        <Footer />
+      </>
+    );
+  }
 
   return (
     <>

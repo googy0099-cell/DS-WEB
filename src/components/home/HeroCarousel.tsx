@@ -11,7 +11,7 @@ type Slide = {
 };
 
 const DEFAULT_SLIDES: Slide[] = [
-  { bg: "from-navy to-navy/80", image: "/Web-ref.png", title: "ร้านเกมกระดาน", subtitle: "นั่งสบาย อาหารอร่อย เกมเพียบ" },
+  { bg: "from-navy to-navy/80", image: null, title: "ร้านเกมกระดาน", subtitle: "นั่งสบาย อาหารอร่อย เกมเพียบ" },
   { bg: "from-orange/80 to-sand", image: null, title: "บรรยากาศอบอุ่น", subtitle: "พื้นที่พักผ่อนสำหรับทุกวัย" },
   { bg: "from-sage/80 to-cream", image: null, title: "เกมหลากหลาย", subtitle: "บอร์ดเกมกว่า 50 ชื่อ พร้อมให้เล่น" },
   { bg: "from-navy/90 to-orange/50", image: null, title: "อาหาร & เครื่องดื่ม", subtitle: "เมนูอร่อยสั่งได้ทันที ไม่ต้องรอนาน" },
@@ -81,9 +81,9 @@ export default function HeroCarousel() {
           <Image
             src="/DS-new-logo.png"
             alt="Dice Shop"
-            width={220}
-            height={80}
-            className="object-contain brightness-0 invert w-48 md:w-72 h-auto"
+            width={264}
+            height={96}
+            className="object-contain brightness-0 invert w-56 md:w-80 h-auto"
             priority
           />
         </div>

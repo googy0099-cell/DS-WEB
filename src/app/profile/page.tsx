@@ -129,7 +129,16 @@ export default function ProfilePage() {
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
               const f = e.target.files?.[0]; if (!f) return;
               const url = await uploadAvatar(f);
-              if (url) setForm(p => ({ ...p, avatarUrl: url }));
+              if (url) {
+                const updated = { ...form, avatarUrl: url };
+                setForm(updated);
+                await fetch("/api/profile", {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(updated),
+                });
+                setProfile(prev => prev ? { ...prev, avatarUrl: url } : prev);
+              }
             }} />
             <h1 className="text-cream font-bold text-xl">
               {form.nickname || profile.firstName} {!form.nickname && profile.lastName}

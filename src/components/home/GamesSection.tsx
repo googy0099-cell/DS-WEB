@@ -27,7 +27,12 @@ export default function GamesSection() {
 
   const displayGames =
     games.length > 0
-      ? games
+      ? (() => {
+          const popular = games.filter(g => {
+            try { return (JSON.parse(g.tags) as string[]).includes("ยอดนิยม"); } catch { return false; }
+          });
+          return (popular.length > 0 ? popular : games).slice(0, 6);
+        })()
       : Array.from({ length: 5 }).map((_, i) => ({
           id: i,
           nameTh: "กำลังโหลด...",

@@ -84,19 +84,26 @@ export default function CartDrawer() {
         <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setOpen(false)} />
       )}
 
+      {/* Mobile: slide-up drawer | Desktop: centered modal */}
       <div
-        className={`fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 transition-transform duration-300 ${
-          open ? "translate-y-0" : "translate-y-full"
-        }`}
+        className={`fixed z-50 bg-white shadow-xl flex flex-col
+          bottom-0 left-0 right-0 rounded-t-2xl max-h-[85vh]
+          md:inset-auto md:bottom-auto md:left-1/2 md:top-1/2 md:right-auto
+          md:w-[480px] md:rounded-2xl md:max-h-[85vh]
+          transition-all duration-300
+          ${open
+            ? "translate-y-0 md:-translate-x-1/2 md:-translate-y-1/2 md:opacity-100"
+            : "translate-y-full md:-translate-x-1/2 md:-translate-y-1/2 md:opacity-0 md:pointer-events-none"
+          }`}
       >
-        <div className="flex items-center justify-between p-4 border-b border-sand">
+        <div className="flex items-center justify-between p-4 border-b border-sand shrink-0">
           <h2 className="font-bold text-navy text-lg">ตะกร้าสินค้า</h2>
           <button onClick={() => setOpen(false)}>
             <X size={22} className="text-gray-400" />
           </button>
         </div>
 
-        <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+        <div className="p-4 flex-1 overflow-y-auto space-y-3">
           <div className="bg-sand/40 rounded-xl p-3">
             <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
             <input
@@ -163,7 +170,7 @@ export default function CartDrawer() {
         </div>
 
         {cart.length > 0 && (
-          <div className="p-4 border-t border-sand">
+          <div className="p-4 border-t border-sand shrink-0">
             <div className="flex justify-between mb-3">
               <span className="font-semibold text-navy">รวมทั้งหมด</span>
               <ThaiPrice amount={total()} className="font-bold text-orange text-lg" />

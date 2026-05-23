@@ -46,9 +46,9 @@ export default async function AdminLayout({
             <Image
               src="/DS-new-logo.png"
               alt="Dice Shop"
-              width={100}
-              height={36}
-              className="object-contain brightness-0 invert h-8 w-auto"
+              width={124}
+              height={44}
+              className="object-contain brightness-0 invert h-10 w-auto"
             />
           </Link>
           <p className="text-cream/40 text-xs mt-1">Admin Panel</p>

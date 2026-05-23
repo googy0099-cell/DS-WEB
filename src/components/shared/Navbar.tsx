@@ -7,7 +7,7 @@ import { useSession, signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
   { label: "หน้าแรก", href: "/#hero" },
-  { label: "ดูเมนู", href: "/menu" },
+  { label: "สั่งอาหาร", href: "/menu" },
   { label: "มินิเกม", href: "/play" },
   { label: "เกม", href: "/games" },
   { label: "กิจกรรม", href: "/activities" },
@@ -39,9 +39,9 @@ export default function Navbar() {
           <Image
             src="/DS-new-logo.png"
             alt="Dice Shop"
-            width={120}
-            height={40}
-            className="object-contain brightness-0 invert h-9 w-auto"
+            width={144}
+            height={48}
+            className="object-contain brightness-0 invert h-11 w-auto"
             priority
           />
         </Link>
@@ -124,28 +124,28 @@ export default function Navbar() {
 
       {/* Mobile dropdown */}
       {mobileOpen && (
-        <div className="md:hidden bg-navy border-t border-cream/10 px-4 pb-4">
+        <div className="md:hidden bg-navy border-t border-cream/10 px-4 pb-6">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className="block py-2 text-cream/80 hover:text-cream text-sm font-medium border-b border-cream/10 last:border-0"
+              className="block py-4 text-cream/90 hover:text-cream text-lg font-semibold border-b border-cream/10 last:border-0"
             >
               {item.label}
             </Link>
           ))}
           {session?.user ? (
-            <div className="mt-4 pt-4 border-t border-cream/10">
-              <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-2 text-cream/80 text-sm">
+            <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
+              <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-3 text-cream/80 text-base font-medium">
                 👤 โปรไฟล์ ({session.user.memberCode})
               </Link>
-              <button onClick={() => signOut({ callbackUrl: "/" })} className="text-red-400 text-sm py-2">
+              <button onClick={() => signOut({ callbackUrl: "/" })} className="text-red-400 text-base font-medium py-3">
                 ออกจากระบบ
               </button>
             </div>
           ) : (
-            <Link href="/login" onClick={() => setMobileOpen(false)} className="block mt-4 text-orange font-semibold text-sm">
+            <Link href="/login" onClick={() => setMobileOpen(false)} className="block mt-5 py-4 text-orange font-bold text-lg text-center bg-orange/10 rounded-xl">
               เข้าสู่ระบบ / สมัครสมาชิก
             </Link>
           )}

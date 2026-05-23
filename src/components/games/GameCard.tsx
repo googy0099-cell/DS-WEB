@@ -36,7 +36,7 @@ export default function GameCard({ game }: { game: GameGuide }) {
     <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
       {/* Game image */}
       {game.imageUrl && (
-        <div className="relative aspect-[16/9] w-full">
+        <div className="relative aspect-[3/2] w-full max-h-48 overflow-hidden">
           <Image
             src={game.imageUrl}
             alt={game.nameTh}

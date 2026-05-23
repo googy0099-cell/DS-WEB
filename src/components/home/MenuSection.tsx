@@ -68,7 +68,13 @@ export default function MenuSection() {
               ))}
         </div>
 
-        <div className="flex justify-center">
+        <div className="flex justify-center gap-3">
+          <Link
+            href="/menu"
+            className="bg-orange text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-orange/90 transition-colors"
+          >
+            🍽️ สั่งอาหารออนไลน์
+          </Link>
           <Link
             href="/menu"
             className="bg-navy text-cream font-bold px-6 py-3 rounded-xl text-sm hover:bg-navy/90 transition-colors"
