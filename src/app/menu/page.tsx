@@ -235,7 +235,7 @@ export default function MenuPage() {
       {pickerItem && (
         <>
           <div className="fixed inset-0 bg-black/40 z-50" onClick={closePicker} />
-          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 p-5 max-h-[85vh] overflow-y-auto">
+          <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 p-5 max-h-[85vh] overflow-y-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:w-[480px] md:max-h-[85vh]">
             <h3 className="font-bold text-navy text-lg mb-1">{pickerItem.nameTh}</h3>
             <p className="text-xs text-gray-400 mb-4">{pickerItem.nameEn}</p>
 
