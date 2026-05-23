@@ -74,21 +74,23 @@ export default async function AdminLayout({
       </aside>
 
       {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-navy flex overflow-x-auto z-50 border-t border-cream/10">
-        {allNav.slice(0, 5).map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className="flex flex-col items-center gap-0.5 px-3 py-2 text-cream/60 hover:text-cream min-w-fit"
-          >
-            <span className="text-lg">{item.icon}</span>
-            <span className="text-[9px]">{item.label}</span>
-          </Link>
-        ))}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-navy z-50 border-t border-cream/10">
+        <div className="flex overflow-x-auto scrollbar-none">
+          {allNav.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex flex-col items-center gap-0.5 px-3 py-2.5 text-cream/60 active:text-cream min-w-[64px] shrink-0"
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-[9px] whitespace-nowrap">{item.label}</span>
+            </Link>
+          ))}
+        </div>
       </div>
 
       {/* Main content */}
-      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 max-w-5xl">
+      <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 w-full overflow-x-hidden">
         <RegisterSW />
         {children}
       </main>

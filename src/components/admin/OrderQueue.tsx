@@ -45,6 +45,14 @@ const STATUS_CONFIG = {
   },
 };
 
+interface ConfirmState {
+  message: string;
+  detail?: string;
+  confirmLabel: string;
+  confirmColor: string;
+  onConfirm: () => void;
+}
+
 interface EditItem {
   id: number;
   nameTh: string;
@@ -102,8 +110,8 @@ export default function OrderQueue() {
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Loading state per order (prevents double-click)
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
+  const [confirmAction, setConfirmAction] = useState<ConfirmState | null>(null);
 
   // Edit modal state
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
@@ -207,8 +215,30 @@ export default function OrderQueue() {
     }
   }
 
+  // handleUpdate intercepts actions that need confirmation
+  function handleUpdate(orderId: number, status: string) {
+    if (status === "CANCELLED") {
+      setConfirmAction({
+        message: "ยืนยันการยกเลิกออเดอร์?",
+        detail: "ออเดอร์จะถูกยกเลิกทันที",
+        confirmLabel: "ยกเลิกออเดอร์",
+        confirmColor: "bg-red-500 text-white",
+        onConfirm: () => updateStatus(orderId, status),
+      });
+    } else if (status === "PAID") {
+      setConfirmAction({
+        message: "ยืนยันว่าลูกค้าชำระเงินแล้ว?",
+        detail: "ตรวจสอบยอดเงินให้ถูกต้องก่อนยืนยัน",
+        confirmLabel: "ยืนยันการชำระ",
+        confirmColor: "bg-green-600 text-white",
+        onConfirm: () => updateStatus(orderId, status),
+      });
+    } else {
+      updateStatus(orderId, status);
+    }
+  }
+
   async function deleteOrder(orderId: number) {
-    if (!window.confirm("ลบออเดอร์นี้ถาวร?")) return;
     setLoading(orderId, true);
     try {
       await fetch(`/api/orders/${orderId}`, { method: "DELETE" });
@@ -216,6 +246,16 @@ export default function OrderQueue() {
     } finally {
       setLoading(orderId, false);
     }
+  }
+
+  function handleDelete(orderId: number) {
+    setConfirmAction({
+      message: "ลบออเดอร์ถาวร?",
+      detail: "ข้อมูลออเดอร์จะหายไปและไม่สามารถกู้คืนได้",
+      confirmLabel: "ลบถาวร",
+      confirmColor: "bg-red-600 text-white",
+      onConfirm: () => deleteOrder(orderId),
+    });
   }
 
   function openEdit(order: OrderWithItems) {
@@ -313,9 +353,9 @@ export default function OrderQueue() {
                 order={order}
                 isNew
                 isLoading={loadingIds.has(order.id)}
-                onUpdate={updateStatus}
+                onUpdate={handleUpdate}
                 onEdit={openEdit}
-                onDelete={deleteOrder}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -333,9 +373,9 @@ export default function OrderQueue() {
                 order={order}
                 isNew={false}
                 isLoading={loadingIds.has(order.id)}
-                onUpdate={updateStatus}
+                onUpdate={handleUpdate}
                 onEdit={openEdit}
-                onDelete={deleteOrder}
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -398,9 +438,8 @@ export default function OrderQueue() {
                       <span>฿{order.totalTHB}</span>
                     </div>
                   </div>
-                  {/* Delete from history */}
                   <button
-                    onClick={() => deleteOrder(order.id)}
+                    onClick={() => handleDelete(order.id)}
                     disabled={loadingIds.has(order.id)}
                     className="mt-2 text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
                   >
@@ -412,6 +451,35 @@ export default function OrderQueue() {
           </div>
         )}
       </div>
+
+      {/* Confirm Modal */}
+      {confirmAction && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-sm p-6">
+            <p className="font-bold text-navy text-lg mb-1">{confirmAction.message}</p>
+            {confirmAction.detail && (
+              <p className="text-sm text-gray-500 mb-2">{confirmAction.detail}</p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={() => setConfirmAction(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium text-sm"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={() => {
+                  confirmAction.onConfirm();
+                  setConfirmAction(null);
+                }}
+                className={`flex-1 py-3 rounded-xl font-bold text-sm ${confirmAction.confirmColor}`}
+              >
+                {confirmAction.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {editOrder && (
