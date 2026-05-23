@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import ImageUpload from "@/components/admin/ImageUpload";
 
 type Activity = {
   id: number;
@@ -10,12 +11,18 @@ type Activity = {
   date: string;
   tag: string;
   desc: string;
+  imageUrl: string | null;
+  content: string | null;
+  link: string | null;
+  linkLabel: string | null;
   isActive: boolean;
   sortOrder: number;
 };
 
 const EMPTY: Omit<Activity, "id"> = {
-  emoji: "🎉", title: "", date: "", tag: "", desc: "", isActive: true, sortOrder: 0,
+  emoji: "🎉", title: "", date: "", tag: "", desc: "",
+  imageUrl: null, content: null, link: null, linkLabel: null,
+  isActive: true, sortOrder: 0,
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -116,7 +123,7 @@ export default function AdminActivitiesPage() {
                 { label: "ชื่อกิจกรรม *", field: "title", placeholder: "Tournament ประจำเดือน" },
                 { label: "วัน/เวลา", field: "date", placeholder: "ทุกสิ้นเดือน เวลา 18:00 น." },
                 { label: "Tag", field: "tag", placeholder: "การแข่งขัน" },
-                { label: "รายละเอียด", field: "desc", placeholder: "..." },
+                { label: "คำอธิบายสั้น", field: "desc", placeholder: "สรุปสั้นๆ ที่เห็นในหน้า list" },
               ].map(({ label, field, placeholder }) => (
                 <div key={field}>
                   <label className="text-xs font-medium text-navy block mb-1">{label}</label>
@@ -129,6 +136,48 @@ export default function AdminActivitiesPage() {
                   />
                 </div>
               ))}
+
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">รูปหน้าปก</label>
+                <ImageUpload
+                  value={(editing as Activity).imageUrl ?? ""}
+                  onChange={(url) => setEditing({ ...editing, imageUrl: url || null })}
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">เนื้อหาเพิ่มเติม (แสดงในหน้า detail)</label>
+                <textarea
+                  value={(editing as Activity).content ?? ""}
+                  onChange={(e) => setEditing({ ...editing, content: e.target.value || null })}
+                  placeholder="รายละเอียดเต็มๆ กติกา เงื่อนไข ฯลฯ"
+                  rows={5}
+                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-navy block mb-1">ลิงก์ (URL)</label>
+                  <input
+                    type="text"
+                    value={(editing as Activity).link ?? ""}
+                    onChange={(e) => setEditing({ ...editing, link: e.target.value || null })}
+                    placeholder="https://..."
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-navy block mb-1">ชื่อปุ่มลิงก์</label>
+                  <input
+                    type="text"
+                    value={(editing as Activity).linkLabel ?? ""}
+                    onChange={(e) => setEditing({ ...editing, linkLabel: e.target.value || null })}
+                    placeholder="สมัครเข้าร่วม →"
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowModal(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>

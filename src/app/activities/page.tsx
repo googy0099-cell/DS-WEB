@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import db from "@/lib/db";
@@ -20,25 +21,51 @@ export default async function ActivitiesPage() {
           <p className="text-cream/60 text-sm">อัพเดทล่าสุดจาก Dice Shop</p>
         </div>
 
-        <div className="max-w-4xl mx-auto px-4 py-10 space-y-4">
+        <div className="max-w-4xl mx-auto px-4 py-8">
           {activities.length === 0 ? (
-            <p className="text-center text-gray-400 py-12">ยังไม่มีกิจกรรม</p>
+            <p className="text-center text-gray-400 py-16">ยังไม่มีกิจกรรม</p>
           ) : (
-            activities.map((act: typeof activities[0]) => (
-              <div key={act.id} className="bg-white rounded-2xl p-5 shadow-sm flex gap-4 items-start">
-                <span className="text-3xl shrink-0">{act.emoji}</span>
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <h3 className="font-bold text-navy">{act.title}</h3>
-                    <span className="text-xs bg-orange/10 text-orange px-2 py-0.5 rounded-full font-medium">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {activities.map((act) => (
+                <Link
+                  key={act.id}
+                  href={`/activities/${act.id}`}
+                  className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                >
+                  {/* Cover image or emoji banner */}
+                  <div className="relative h-44 bg-gradient-to-br from-navy/80 to-orange/40 flex items-center justify-center overflow-hidden">
+                    {act.imageUrl ? (
+                      <Image
+                        src={act.imageUrl}
+                        alt={act.title}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <span className="text-6xl drop-shadow">{act.emoji}</span>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
+                    <span className="absolute bottom-3 left-3 text-xs bg-orange text-white px-2.5 py-1 rounded-full font-semibold">
                       {act.tag}
                     </span>
                   </div>
-                  <p className="text-orange text-xs font-semibold mb-2">{act.date}</p>
-                  <p className="text-gray-500 text-sm leading-relaxed">{act.desc}</p>
-                </div>
-              </div>
-            ))
+
+                  {/* Content */}
+                  <div className="p-4">
+                    <p className="text-orange text-xs font-semibold mb-1">{act.date}</p>
+                    <h3 className="font-bold text-navy text-base leading-tight mb-1 group-hover:text-orange transition-colors">
+                      {act.title}
+                    </h3>
+                    <p className="text-gray-500 text-sm line-clamp-2">{act.desc}</p>
+                    {(act.content || act.link) && (
+                      <p className="text-orange text-xs font-semibold mt-2">
+                        ดูรายละเอียด →
+                      </p>
+                    )}
+                  </div>
+                </Link>
+              ))}
+            </div>
           )}
         </div>
 
