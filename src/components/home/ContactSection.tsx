@@ -51,7 +51,7 @@ export default function ContactSection() {
               <p className="font-bold text-navy mb-3">ติดตามเรา</p>
               <div className="flex flex-wrap gap-2">
                 <a
-                  href="https://www.facebook.com/diceshop"
+                  href="https://www.facebook.com/profile.php?id=61557368743890"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-[#1877F2] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
@@ -60,7 +60,7 @@ export default function ContactSection() {
                   Facebook
                 </a>
                 <a
-                  href="https://www.instagram.com/diceshop"
+                  href="https://www.instagram.com/looktaodiceshop/"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-gradient-to-br from-purple-500 via-pink-500 to-orange text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
@@ -69,7 +69,7 @@ export default function ContactSection() {
                   Instagram
                 </a>
                 <a
-                  href="https://www.tiktok.com/@diceshop"
+                  href="https://www.tiktok.com/@looktao.diceshop?is_from_webapp=1&sender_device=pc"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-black text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
@@ -87,7 +87,7 @@ export default function ContactSection() {
                   YouTube
                 </a>
                 <a
-                  href="https://line.me/ti/p/~diceshop"
+                  href="www.youtube.com/@ร้านลูกเต๋าDiceshop"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-[#00B900] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
