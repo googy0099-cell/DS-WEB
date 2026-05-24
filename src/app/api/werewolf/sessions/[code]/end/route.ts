@@ -1,0 +1,51 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import db from "@/lib/db";
+
+async function requireGM() {
+  const session = await auth();
+  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  return session;
+}
+
+export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const gmSession = await requireGM();
+  if (!gmSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { winTeam } = await req.json();
+  if (!winTeam) return NextResponse.json({ error: "ต้องระบุ winTeam" }, { status: 400 });
+
+  const room = await db.werewolfRoom.findUnique({
+    where: { code },
+    include: {
+      session: { include: { playerRoles: true } },
+    },
+  });
+
+  if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
+  const s = room.session;
+
+  const game = await db.werewolfGame.create({
+    data: {
+      roomId: room.id,
+      gmId: Number(gmSession.user.id),
+      winTeam,
+      results: {
+        create: s.playerRoles.map((sp) => ({
+          userId: sp.userId,
+          team: sp.team,
+          role: sp.role,
+          isWin: sp.team === winTeam,
+        })),
+      },
+    },
+  });
+
+  await db.werewolfSession.update({
+    where: { id: s.id },
+    data: { phase: "ENDED", winTeam, gameId: game.id },
+  });
+
+  return NextResponse.json({ gameId: game.id });
+}

@@ -29,7 +29,10 @@ export async function GET() {
     where: { gmId: Number(session.user.id) },
     orderBy: { createdAt: "desc" },
     take: 20,
-    include: { _count: { select: { players: true, games: true } } },
+    include: {
+      _count: { select: { players: true, games: true } },
+      session: { select: { id: true, phase: true } },
+    },
   });
 
   return NextResponse.json(rooms);

@@ -28,10 +28,11 @@ model User {
   orders              Order[]              @relation("CustomerOrders")
   handledOrders       Order[]              @relation("StaffOrders")
   auditLogs           AuditLog[]
-  werewolfRoomsGM     WerewolfRoom[]       @relation("WerewolfRoomsGM")
-  werewolfRoomPlayers WerewolfRoomPlayer[] @relation("WerewolfRoomPlayers")
-  werewolfGamesGM     WerewolfGame[]       @relation("WerewolfGamesGM")
-  werewolfGameResults WerewolfGameResult[] @relation("WerewolfGameResults")
+  werewolfRoomsGM        WerewolfRoom[]          @relation("WerewolfRoomsGM")
+  werewolfRoomPlayers    WerewolfRoomPlayer[]    @relation("WerewolfRoomPlayers")
+  werewolfGamesGM        WerewolfGame[]          @relation("WerewolfGamesGM")
+  werewolfGameResults    WerewolfGameResult[]    @relation("WerewolfGameResults")
+  werewolfSessionPlayers WerewolfSessionPlayer[] @relation("WerewolfSessionPlayers")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -250,6 +251,7 @@ model WerewolfRoom {
   createdAt DateTime             @default(now())
   players   WerewolfRoomPlayer[]
   games     WerewolfGame[]
+  session   WerewolfSession?     @relation("WerewolfRoomSession")
 }
 
 model WerewolfRoomPlayer {
@@ -274,6 +276,7 @@ model WerewolfGame {
   notes    String?
   playedAt DateTime             @default(now())
   results  WerewolfGameResult[]
+  session  WerewolfSession?     @relation("WerewolfSessionGame")
 }
 
 model WerewolfGameResult {
@@ -287,4 +290,32 @@ model WerewolfGameResult {
   isWin  Boolean
 
   @@unique([gameId, userId])
+}
+
+model WerewolfSession {
+  id            Int                     @id @default(autoincrement())
+  roomId        Int                     @unique
+  room          WerewolfRoom            @relation("WerewolfRoomSession", fields: [roomId], references: [id])
+  phase         String                  @default("SETUP")
+  selectedRoles String
+  decoyRoles    String                  @default("[]")
+  currentStep   String?
+  winTeam       String?
+  gameId        Int?                    @unique
+  game          WerewolfGame?           @relation("WerewolfSessionGame", fields: [gameId], references: [id])
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+  playerRoles   WerewolfSessionPlayer[]
+}
+
+model WerewolfSessionPlayer {
+  id        Int             @id @default(autoincrement())
+  sessionId Int
+  session   WerewolfSession @relation(fields: [sessionId], references: [id])
+  userId    Int
+  user      User            @relation("WerewolfSessionPlayers", fields: [userId], references: [id])
+  role      String
+  team      String
+
+  @@unique([sessionId, userId])
 }

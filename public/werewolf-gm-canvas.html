@@ -345,8 +345,13 @@
             'ภูตเลปริคอน (Leprechaun)': 'ภูตเลปริคอน ลืมตา เบี่ยงเบนเป้าหมายหมาป่าหรือไม่?',
             'คนอดนอน (Insomniac)': 'คนอดนอน ลืมตาดูว่ามีคนข้างๆ ตื่นหรือไม่'
         };
-        let nightSteps = []; 
+        let nightSteps = [];
         let currentNightStepIndex = 0;
+
+        // === SESSION CONNECTION ===
+        let connectedRoomCode = null;
+        let _gameEndDetected = false;
+        let _pendingWinTeam = null;
 
         // === DOM Elements ===
         const tableEl = document.getElementById('table-element');
@@ -367,14 +372,26 @@
                 zoomLevel: zoomLevel,
                 panX: panX,
                 panY: panY,
-                canvasData: canvas.toDataURL(), 
+                canvasData: canvas.toDataURL(),
                 bgColor: document.getElementById('bgColorPicker').value,
                 tableColor: document.getElementById('tableColorPicker').value,
                 penColor: penColorPicker.value,
                 timerSeconds: timerSeconds,
-                favoriteRoles: favoriteRoles 
+                favoriteRoles: favoriteRoles
             };
-            localStorage.setItem('werewolfGMState', JSON.stringify(state));
+            // Use room-specific key when connected to a session
+            var storageKey = connectedRoomCode ? 'werewolfGMState_' + connectedRoomCode : 'werewolfGMState';
+            localStorage.setItem(storageKey, JSON.stringify(state));
+            try {
+                if (window !== window.parent) {
+                    window.parent.postMessage({
+                        type: 'WEREWOLF_GM_STATE',
+                        players: players,
+                        nightSteps: nightSteps,
+                        currentNightStepIndex: currentNightStepIndex
+                    }, '*');
+                }
+            } catch(e) {}
         }
 
         function loadGameState() {
@@ -442,6 +459,98 @@
         }
 
         window.onload = () => { loadGameState(); };
+
+        // Receive messages from parent page (canvas connected to room session)
+        window._decoyRoles = [];
+        window.addEventListener('message', function(e) {
+            if (!e.data) return;
+
+            if (e.data.type === 'SET_DECOY_ROLES') {
+                window._decoyRoles = e.data.decoyRoles || [];
+            }
+
+            if (e.data.type === 'LOAD_SESSION') {
+                var roomCode = e.data.roomCode || null;
+                var sessionPlayers = e.data.players || [];
+
+                // Set connected room code
+                if (roomCode) connectedRoomCode = roomCode;
+
+                if (connectedRoomCode) {
+                    var roomKey = 'werewolfGMState_' + connectedRoomCode;
+                    var roomSavedState = localStorage.getItem(roomKey);
+
+                    if (roomSavedState) {
+                        // Load existing room-specific state (positions preserved)
+                        try {
+                            var rs = JSON.parse(roomSavedState);
+                            players = rs.players || players;
+                            tableState = rs.tableState || tableState;
+                            zoomLevel = rs.zoomLevel || zoomLevel;
+                            panX = rs.panX || panX;
+                            panY = rs.panY || panY;
+                            if (rs.bgColor) {
+                                document.getElementById('bgColorPicker').value = rs.bgColor;
+                                document.getElementById('board-container').style.backgroundColor = rs.bgColor;
+                                document.getElementById('tableColorPicker').value = rs.tableColor || '#2d1a11';
+                                document.getElementById('table-element').style.backgroundColor = rs.tableColor || '#2d1a11';
+                            }
+                            if (rs.penColor) penColorPicker.value = rs.penColor;
+                            // Update roles from session (roles may have changed)
+                            sessionPlayers.forEach(function(sp) {
+                                var token = players.find(function(p) { return p.name === sp.seatName; });
+                                if (token) token.role = sp.role;
+                            });
+                            applyWorkspaceTransform();
+                            updateTableStyle();
+                            updateLockButtonUI();
+                        } catch(err) {}
+                    } else if (sessionPlayers.length > 0) {
+                        // No saved state for this room — create tokens from session
+                        var total = sessionPlayers.length;
+                        var radius = Math.max(200, total * 30);
+                        players = sessionPlayers.map(function(sp, i) {
+                            var angle = (i / total) * 2 * Math.PI - Math.PI / 2;
+                            return {
+                                id: Date.now() + i,
+                                name: sp.seatName,
+                                role: sp.role,
+                                gender: '',
+                                status: 'alive',
+                                x: 1500 - 37.5 + Math.cos(angle) * radius,
+                                y: 1500 - 37.5 + Math.sin(angle) * radius
+                            };
+                        });
+                    }
+                } else if (sessionPlayers.length > 0) {
+                    // No room code — match by seatName or create if empty
+                    var matched = 0;
+                    sessionPlayers.forEach(function(sp) {
+                        var token = players.find(function(p) { return p.name === sp.seatName; });
+                        if (token) { token.role = sp.role; matched++; }
+                    });
+                    if (matched === 0) {
+                        var total2 = sessionPlayers.length;
+                        var radius2 = Math.max(200, total2 * 30);
+                        players = sessionPlayers.map(function(sp, i) {
+                            var angle = (i / total2) * 2 * Math.PI - Math.PI / 2;
+                            return {
+                                id: Date.now() + i,
+                                name: sp.seatName,
+                                role: sp.role,
+                                gender: '',
+                                status: 'alive',
+                                x: 1500 - 37.5 + Math.cos(angle) * radius2,
+                                y: 1500 - 37.5 + Math.sin(angle) * radius2
+                            };
+                        });
+                    }
+                }
+
+                renderTokens();
+                saveGameState();
+            }
+        });
 
         // === SYSTEM: FAVORITE ROLES ===
         function renderRoleDropdown() {
@@ -1149,6 +1258,7 @@
                 players[currentIndex].gender = document.getElementById('playerGender').value;
                 renderTokens(); closeModal();
                 saveGameState();
+                checkGameEnd();
             }
         }
 
@@ -1196,14 +1306,46 @@
                 else if (roleKey === 'หมอดู_นักสืบ' && hasSeer) { nightSteps.push(roleInstructions['หมอดู_นักสืบ']); }
                 else if (aliveRolesSet.has(roleKey)) { nightSteps.push(roleInstructions[roleKey]); }
             });
+            // Insert decoy roles at random positions (to obscure which roles are actually in play)
+            if (window._decoyRoles && window._decoyRoles.length > 0) {
+                window._decoyRoles.forEach(function(roleKey) {
+                    var instruction = roleInstructions[roleKey];
+                    if (instruction && !nightSteps.includes(instruction)) {
+                        var insertAt = Math.floor(Math.random() * (nightSteps.length - 1)) + 1;
+                        nightSteps.splice(insertAt, 0, '[เรียกหลอก] ' + instruction);
+                    }
+                });
+            }
+
             nightSteps.push('☀️ เช้าแล้ว! ลืมตาทุกคน\n(กดปุ่ม "🌞 เช้า" ด้านบนเพื่อปลดโล่)');
-            
+
             currentNightStepIndex = 0;
             document.getElementById('night-guide').classList.remove('hidden');
             updateNightUI();
         }
 
-        function updateNightUI() { document.getElementById('night-text').innerText = nightSteps[currentNightStepIndex]; }
+        function updateNightUI() {
+            var stepText = nightSteps[currentNightStepIndex] || '';
+            document.getElementById('night-text').innerText = stepText;
+            // Direct API sync (faster + reliable than postMessage chain)
+            if (connectedRoomCode) {
+                fetch('/api/werewolf/sessions/' + connectedRoomCode, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentStep: stepText, phase: 'PLAYING' })
+                }).catch(function() {});
+            }
+            try {
+                if (window !== window.parent) {
+                    window.parent.postMessage({
+                        type: 'WEREWOLF_GM_STATE',
+                        players: players,
+                        nightSteps: nightSteps,
+                        currentNightStepIndex: currentNightStepIndex
+                    }, '*');
+                }
+            } catch(e) {}
+        }
         function nextNightStep() { if (currentNightStepIndex < nightSteps.length - 1) { currentNightStepIndex++; updateNightUI(); } else { endNight(); } }
         function prevNightStep() { if (currentNightStepIndex > 0) { currentNightStepIndex--; updateNightUI(); } }
         function endNight() { document.getElementById('night-guide').classList.add('hidden'); }
@@ -1268,6 +1410,87 @@
         canvas.addEventListener('touchstart', startDrawing, {passive: false}); canvas.addEventListener('touchmove', draw, {passive: false});
         canvas.addEventListener('touchend', stopDrawing);
 
+        // === GAME-END DETECTION (connected to session) ===
+        function checkGameEnd() {
+            if (!connectedRoomCode || _gameEndDetected) return;
+            var alive = players.filter(function(p) { return p.status === 'alive' || p.status === 'protected'; });
+            if (alive.length === 0) return;
+
+            var wolvesAlive = alive.filter(function(p) { return wolfRoles.includes(p.role); }).length;
+            var vampiresAlive = alive.filter(function(p) { return vampireRoles.includes(p.role); }).length;
+            var villageAlive = alive.filter(function(p) {
+                return !wolfRoles.includes(p.role) && !vampireRoles.includes(p.role);
+            }).length;
+
+            var winTeam = null;
+            if (wolvesAlive === 0 && vampiresAlive === 0) winTeam = 'village';
+            else if (wolvesAlive >= villageAlive && vampiresAlive === 0) winTeam = 'wolf';
+            else if (vampiresAlive >= villageAlive && wolvesAlive === 0) winTeam = 'vampire';
+
+            if (winTeam) {
+                _gameEndDetected = true;
+                _pendingWinTeam = winTeam;
+                var labels = { village: '🏘️ ชาวบ้านชนะ!', wolf: '🐺 หมาป่าชนะ!', vampire: '🧛 แวมไพร์ชนะ!' };
+                document.getElementById('gameEndWinner').innerText = labels[winTeam] || winTeam;
+                document.getElementById('gameEndBanner').classList.remove('hidden');
+            }
+        }
+
+        function dismissGameEnd() {
+            _gameEndDetected = false;
+            _pendingWinTeam = null;
+            document.getElementById('gameEndBanner').classList.add('hidden');
+        }
+
+        function confirmGameEnd() {
+            if (!connectedRoomCode || !_pendingWinTeam) return;
+            var btn = document.getElementById('gameEndConfirmBtn');
+            btn.disabled = true; btn.innerText = 'กำลังบันทึก...';
+            fetch('/api/werewolf/sessions/' + connectedRoomCode + '/end', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ winTeam: _pendingWinTeam })
+            }).then(function(res) {
+                if (res.ok) {
+                    document.getElementById('gameEndBanner').classList.add('hidden');
+                    document.getElementById('gameEndSuccessBanner').classList.remove('hidden');
+                    try {
+                        if (window !== window.parent) {
+                            window.parent.postMessage({ type: 'GAME_ENDED', winTeam: _pendingWinTeam }, '*');
+                        }
+                    } catch(err) {}
+                } else {
+                    btn.disabled = false; btn.innerText = '✅ ยืนยันจบเกม';
+                    alert('เกิดข้อผิดพลาด กรุณาลองใหม่');
+                }
+            }).catch(function() {
+                btn.disabled = false; btn.innerText = '✅ ยืนยันจบเกม';
+                alert('เกิดข้อผิดพลาด — ตรวจสอบการเชื่อมต่อ');
+            });
+        }
+
     </script>
+
+    <!-- Game-end banner (shows when connected to room session) -->
+    <div id="gameEndBanner" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);">
+        <div class="bg-gray-900 border-2 border-yellow-500 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
+            <p class="text-5xl mb-3">🏆</p>
+            <h2 class="text-white text-2xl font-bold mb-1">เกมจบแล้ว!</h2>
+            <p id="gameEndWinner" class="text-yellow-400 text-xl font-bold mb-5"></p>
+            <p class="text-gray-400 text-sm mb-5">ระบบตรวจพบเงื่อนไขจบเกม<br>กด "ยืนยัน" เพื่อบันทึกผลและอัปเดต Ranking</p>
+            <button id="gameEndConfirmBtn" onclick="confirmGameEnd()" class="w-full bg-yellow-500 text-black font-bold py-4 rounded-xl text-base mb-3 active:bg-yellow-400">✅ ยืนยันจบเกม</button>
+            <button onclick="dismissGameEnd()" class="w-full bg-gray-700 text-gray-300 font-bold py-3 rounded-xl text-sm active:bg-gray-600">ยังไม่จบ (เล่นต่อ)</button>
+        </div>
+    </div>
+
+    <!-- Success banner after confirming game end -->
+    <div id="gameEndSuccessBanner" class="hidden fixed inset-0 z-50 flex items-center justify-center" style="background:rgba(0,0,0,0.9);">
+        <div class="text-center px-8">
+            <p class="text-6xl mb-4">🎉</p>
+            <p class="text-white text-2xl font-bold mb-2">บันทึกผลสำเร็จ!</p>
+            <p class="text-gray-400 text-sm">กำลังกลับหน้าห้อง...</p>
+        </div>
+    </div>
+
 </body>
 </html>

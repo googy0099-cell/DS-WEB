@@ -1,8 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -13,10 +12,26 @@ interface RoomInfo {
   gmName: string;
 }
 
+interface GameState {
+  phase: string;
+  role: string | null;
+  team: string | null;
+  currentStep: string | null;
+  isMyTurn: boolean;
+  winTeam: string | null;
+  isWin: boolean | null;
+}
+
+const TEAM_STYLES: Record<string, { chip: string; emoji: string }> = {
+  wolf:    { chip: "bg-red-900/60 text-red-300 border-red-700",    emoji: "🐺" },
+  village: { chip: "bg-blue-900/60 text-blue-300 border-blue-700", emoji: "🏘️" },
+  indy:    { chip: "bg-green-900/60 text-green-300 border-green-700", emoji: "🟢" },
+  vampire: { chip: "bg-purple-900/60 text-purple-300 border-purple-700", emoji: "🧛" },
+};
+
 export default function JoinRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const { data: session, status } = useSession();
-  const router = useRouter();
 
   const [room, setRoom] = useState<RoomInfo | null>(null);
   const [roomError, setRoomError] = useState("");
@@ -24,6 +39,8 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const [joining, setJoining] = useState(false);
   const [joined, setJoined] = useState(false);
   const [joinError, setJoinError] = useState("");
+  const [gameState, setGameState] = useState<GameState | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetch(`/api/werewolf/rooms/${code}`)
@@ -38,6 +55,22 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   useEffect(() => {
     if (session?.user?.firstName) setSeatName(session.user.firstName);
   }, [session]);
+
+  // Start polling once joined and logged in
+  useEffect(() => {
+    if (!joined || !session?.user) return;
+
+    function poll() {
+      fetch(`/api/werewolf/sessions/${code}/me`)
+        .then((r) => r.json())
+        .then((data: GameState) => setGameState(data))
+        .catch(() => {});
+    }
+
+    poll();
+    pollRef.current = setInterval(poll, 3000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [joined, session, code]);
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
@@ -61,8 +94,21 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     }
   }
 
+  const gs = gameState;
+  const teamStyle = TEAM_STYLES[gs?.team ?? "village"] ?? TEAM_STYLES.village;
+  const shortRole = gs?.role?.split(" (")[0] ?? "";
+
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center p-6">
+
+      {/* Fixed role chip — always visible when playing */}
+      {joined && gs?.role && (
+        <div className={`fixed top-3 right-3 z-50 border text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 max-w-[160px] truncate shadow-lg ${teamStyle.chip}`}>
+          <span>{teamStyle.emoji}</span>
+          <span className="truncate">{shortRole}</span>
+        </div>
+      )}
+
       <div className="mb-6 text-center">
         <Image src="/DS-new-logo.png" alt="Dice Shop" width={60} height={33} className="object-contain brightness-0 invert mx-auto mb-3" />
         <p className="text-gray-400 text-xs">Dice Shop Werewolf</p>
@@ -82,14 +128,81 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
           <p className="text-gray-400 text-sm mt-2">ติดต่อ GM เพื่อเปิดห้อง</p>
         </div>
       ) : joined ? (
-        <div className="text-center">
-          <p className="text-5xl mb-4">✅</p>
-          <h2 className="text-white text-xl font-bold mb-2">คุณ Join แล้ว!</h2>
-          <p className="text-gray-300 mb-1">ห้อง <span className="text-yellow-400 font-bold tracking-widest">{code}</span></p>
-          <p className="text-gray-400 text-sm mb-6">GM: {room.gmName} · {room.playerCount} ผู้เล่น</p>
-          <p className="text-gray-400 text-sm">รอ GM เริ่มเกม 🐺</p>
+        /* ── Game View ── */
+        <div className="w-full max-w-xs text-center">
+          {!gs || (!gs.role && gs.phase === "SETUP") ? (
+            /* Waiting for GM to assign roles */
+            <div>
+              <p className="text-5xl mb-4 animate-pulse">🐺</p>
+              <h2 className="text-white text-xl font-bold mb-2">Join แล้ว!</h2>
+              <p className="text-gray-300 mb-1">ห้อง <span className="text-yellow-400 font-bold tracking-widest">{code}</span></p>
+              <p className="text-gray-400 text-sm mb-6">GM: {room.gmName}</p>
+              <p className="text-gray-500 text-sm">รอ GM แจกไพ่...</p>
+            </div>
+          ) : gs.role && gs.phase === "SETUP" ? (
+            /* Role assigned, waiting for GM to open canvas */
+            <div>
+              <p className="text-5xl mb-4">🃏</p>
+              <h2 className="text-white text-xl font-bold mb-2">ได้รับไพ่แล้ว!</h2>
+              <p className="text-gray-400 text-sm mb-3">ดูบทบาทที่มุมขวาบน และรอ GM เริ่มเกม</p>
+              <p className="text-gray-600 text-xs">อย่าเปิดเผยบทบาทของคุณ 🤫</p>
+            </div>
+          ) : gs.phase === "ENDED" ? (
+            /* Game over screen */
+            <div>
+              {gs.isWin ? (
+                <>
+                  <p className="text-6xl mb-4">🏆</p>
+                  <h2 className="text-yellow-400 text-2xl font-bold mb-2">คุณชนะ!</h2>
+                </>
+              ) : (
+                <>
+                  <p className="text-6xl mb-4">💀</p>
+                  <h2 className="text-gray-400 text-2xl font-bold mb-2">คุณแพ้...</h2>
+                </>
+              )}
+              {gs.role && (
+                <div className={`inline-flex items-center gap-2 border px-4 py-2 rounded-full text-sm font-bold mt-2 mb-4 ${teamStyle.chip}`}>
+                  {teamStyle.emoji} {shortRole}
+                </div>
+              )}
+              <p className="text-gray-500 text-sm">เกมจบแล้ว ขอบคุณที่เล่น!</p>
+            </div>
+          ) : gs.currentStep?.startsWith("หลับตา") || gs.currentStep?.startsWith("☀️") ? (
+            /* Day or start-of-night */
+            <div>
+              {gs.currentStep?.startsWith("☀️") ? (
+                <>
+                  <p className="text-5xl mb-4">☀️</p>
+                  <h2 className="text-white text-xl font-bold">กลางวัน</h2>
+                  <p className="text-gray-400 text-sm mt-2">อภิปรายและโหวตได้เลย!</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-5xl mb-4">🌙</p>
+                  <h2 className="text-white text-xl font-bold">กลางคืน</h2>
+                  <p className="text-gray-400 text-sm mt-2">หลับตา รอ GM เรียก</p>
+                </>
+              )}
+            </div>
+          ) : gs.isMyTurn ? (
+            /* It's your turn! */
+            <div>
+              <p className="text-5xl mb-4 animate-bounce">⚡</p>
+              <h2 className="text-yellow-400 text-xl font-bold mb-2 animate-pulse">ถึงคิวคุณแล้ว!</h2>
+              <p className="text-gray-300 text-sm">ลืมตาและดำเนินการ</p>
+            </div>
+          ) : (
+            /* Night — not your turn */
+            <div>
+              <p className="text-5xl mb-4">🌙</p>
+              <h2 className="text-white text-xl font-bold">หลับตา...</h2>
+              <p className="text-gray-500 text-sm mt-2">รอให้ GM เรียกบทบาทของคุณ</p>
+            </div>
+          )}
         </div>
       ) : (
+        /* ── Pre-join form ── */
         <div className="w-full max-w-xs">
           <div className="bg-gray-800 rounded-2xl p-4 mb-5 text-center">
             <p className="text-yellow-400 font-bold tracking-[0.3em] text-2xl">{code}</p>
