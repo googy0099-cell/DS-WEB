@@ -25,11 +25,15 @@ model User {
   points        Int        @default(0)
   totalSpentTHB Int        @default(0)
   role          String     @default("USER")
-  orders        Order[]    @relation("CustomerOrders")
-  handledOrders Order[]    @relation("StaffOrders")
-  auditLogs     AuditLog[]
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  orders              Order[]              @relation("CustomerOrders")
+  handledOrders       Order[]              @relation("StaffOrders")
+  auditLogs           AuditLog[]
+  werewolfRoomsGM     WerewolfRoom[]       @relation("WerewolfRoomsGM")
+  werewolfRoomPlayers WerewolfRoomPlayer[] @relation("WerewolfRoomPlayers")
+  werewolfGamesGM     WerewolfGame[]       @relation("WerewolfGamesGM")
+  werewolfGameResults WerewolfGameResult[] @relation("WerewolfGameResults")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 }
 
 model Table {
@@ -235,4 +239,52 @@ model ExpoPushToken {
   id        Int      @id @default(autoincrement())
   token     String   @unique
   createdAt DateTime @default(now())
+}
+
+model WerewolfRoom {
+  id        Int                  @id @default(autoincrement())
+  code      String               @unique
+  gmId      Int
+  gm        User                 @relation("WerewolfRoomsGM", fields: [gmId], references: [id])
+  isOpen    Boolean              @default(true)
+  createdAt DateTime             @default(now())
+  players   WerewolfRoomPlayer[]
+  games     WerewolfGame[]
+}
+
+model WerewolfRoomPlayer {
+  id       Int          @id @default(autoincrement())
+  roomId   Int
+  room     WerewolfRoom @relation(fields: [roomId], references: [id])
+  userId   Int
+  user     User         @relation("WerewolfRoomPlayers", fields: [userId], references: [id])
+  seatName String
+  joinedAt DateTime     @default(now())
+
+  @@unique([roomId, userId])
+}
+
+model WerewolfGame {
+  id       Int                  @id @default(autoincrement())
+  roomId   Int
+  room     WerewolfRoom         @relation(fields: [roomId], references: [id])
+  gmId     Int
+  gm       User                 @relation("WerewolfGamesGM", fields: [gmId], references: [id])
+  winTeam  String
+  notes    String?
+  playedAt DateTime             @default(now())
+  results  WerewolfGameResult[]
+}
+
+model WerewolfGameResult {
+  id     Int          @id @default(autoincrement())
+  gameId Int
+  game   WerewolfGame @relation(fields: [gameId], references: [id])
+  userId Int
+  user   User         @relation("WerewolfGameResults", fields: [userId], references: [id])
+  team   String
+  role   String
+  isWin  Boolean
+
+  @@unique([gameId, userId])
 }

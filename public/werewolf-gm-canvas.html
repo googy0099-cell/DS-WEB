@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Werewolf GM Canvas (Shapes, Sounds & Fixes)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;500;700&family=Silkscreen&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #0d0d0d; color: #f3f4f6; margin: 0; overflow: hidden; touch-action: none; }
+        .pixel-font { font-family: 'Silkscreen', sans-serif; }
+        
+        #board-container { 
+            position: relative; width: 100vw; 
+            overflow: hidden; background-color: #0d0d0d; transition: background-color 0.3s;
+        }
+
+        #workspace {
+            position: absolute; width: 3000px; height: 3000px; 
+            transform-origin: 0 0; pointer-events: auto; touch-action: none;
+            background-image: radial-gradient(rgba(255,255,255,0.15) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        #table-element { position: absolute; background-color: #2d1a11; border: 4px solid #4a3020; z-index: 1; display: flex; justify-content: center; align-items: center; user-select: none; touch-action: none; pointer-events: auto; transition: background-color 0.3s, border-color 0.3s; }
+        .shape-round { border-radius: 50%; }
+        .shape-rect { border-radius: 20px; }
+        .shape-pentagon { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); border: none !important; }
+        .shape-hexagon { clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%); border: none !important; }
+        
+        #table-drag-area { width: 60%; height: 60%; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: rgba(255,255,255,0.2); font-size: 2rem; cursor: grab; pointer-events: auto; }
+        #table-drag-area:active { cursor: grabbing; }
+        
+        #table-resize-handle { position: absolute; bottom: -5px; right: -5px; width: 34px; height: 34px; background-color: #fbbf24; border-radius: 50%; border: 2px solid #000; cursor: se-resize; display: flex; justify-content: center; align-items: center; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.5); pointer-events: auto; }
+        
+        #drawing-canvas { position: absolute; top: 0; left: 0; z-index: 2; pointer-events: none; width: 3000px; height: 3000px; }
+        #tokens-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; }
+        
+        .player-token { position: absolute; width: 75px; height: 75px; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 3px solid #555; cursor: grab; user-select: none; touch-action: none; transition: transform 0.1s; pointer-events: auto; background-color: #1f2937; }
+        .player-token:active { cursor: grabbing; transform: scale(0.95); }
+        
+        #trash-bin { position: absolute; bottom: 120px; right: 20px; width: 65px; height: 65px; background-color: rgba(220, 38, 38, 0.8); border: 2px dashed #fff; border-radius: 15px; display: flex; justify-content: center; align-items: center; font-size: 26px; z-index: 10; transition: all 0.2s; pointer-events: auto; }
+        .trash-active { background-color: rgba(255, 0, 0, 1) !important; transform: scale(1.1); }
+        
+        #zoom-controls { position: absolute; bottom: 120px; left: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+        .zoom-btn { width: 45px; height: 45px; border-radius: 50%; background-color: #1f2937; border: 2px solid #4b5563; color: white; font-size: 24px; font-weight: bold; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+        .zoom-btn:active { background-color: #374151; transform: scale(0.95); }
+
+        .modal-bg { backdrop-filter: blur(5px); }
+        .tool-active { background-color: #fbbf24; color: #000; border-color: #fbbf24; }
+        
+        optgroup { font-weight: bold; color: #fbbf24; background-color: #1f2937; }
+        option { color: #ffffff; font-weight: normal; }
+
+        input[type="color"] { -webkit-appearance: none; border: none; padding: 0; outline: none; background: transparent; pointer-events: auto; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 2px solid #555; border-radius: 6px; }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <header class="w-full shrink-0 px-2 py-2 flex flex-col justify-center bg-gray-900 border-b border-gray-700 z-20 gap-2 shadow-md">
+        <div class="grid grid-cols-4 gap-1.5 w-full max-w-lg mx-auto">
+            <button onclick="toggleTimerWidget()" class="bg-blue-700 border border-blue-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-blue-800">⏱️ จับเวลา</button>
+            <button onclick="startNight()" class="bg-indigo-700 border border-indigo-400 text-white py-1.5 rounded text-sm font-bold shadow-[0_0_8px_rgba(99,102,241,0.8)] active:bg-indigo-800">🌙 กลางคืน</button>
+            <button onclick="startNewDay()" class="bg-yellow-600 border border-yellow-400 text-white py-1.5 rounded text-sm font-bold active:bg-yellow-700 shadow-md">🌞 ช่วงเช้า</button>
+            <button onclick="openSettingsMenu()" class="bg-gray-700 border border-gray-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-gray-600 flex items-center justify-center gap-1">⚙️ ตั้งค่า</button>
+        </div>
+        
+        <div class="flex space-x-1 sm:space-x-2 w-full justify-center items-center bg-gray-800 p-1.5 rounded-lg border border-gray-600 max-w-lg mx-auto shadow-inner mt-2">
+            <button id="tool-move" onclick="setTool('move')" class="tool-active px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors font-bold flex-1">✋ เลื่อน</button>
+            <button id="tool-pen" onclick="setTool('pen')" class="text-white px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors font-bold flex-1 flex items-center justify-center gap-1">
+                ✏️ ปากกา
+            </button>
+            <input type="color" id="penColorPicker" value="#fbbf24" class="w-8 h-8 cursor-pointer shrink-0" onchange="setTool('pen'); saveGameState();">
+            <button id="tool-eraser" onclick="setTool('eraser')" class="text-white px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors font-bold flex-1">🧽 ลบ</button>
+            <button onclick="clearCanvas()" class="bg-gray-700 active:bg-gray-600 text-white px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors font-bold flex-1 truncate">🗑️ ล้างหมึก</button>
+        </div>
+    </header>
+
+    <div id="board-container" class="flex-1">
+        
+        <div id="workspace">
+            <div id="watermark" class="absolute inset-0 flex justify-center items-center pointer-events-none z-0">
+                <span class="pixel-font text-white select-none" style="font-size: 350px; opacity: 0.02; transform: rotate(-15deg); letter-spacing: -20px;">DS</span>
+            </div>
+
+            <div id="table-element" class="shape-rect">
+                <div id="table-drag-area">
+                    <span class="pixel-font" style="font-size: 1.2rem; letter-spacing: 2px;">DICE SHOP</span>
+                    <span class="pixel-font" style="font-size: 0.8rem; letter-spacing: 4px; margin-bottom: 5px;">PATTANI</span>
+                    <span>✥</span>
+                </div>
+                <div id="table-resize-handle">⤡</div>
+            </div>
+            <canvas id="drawing-canvas" width="3000" height="3000"></canvas>
+            <div id="tokens-layer"></div>
+        </div>
+
+        <div id="trash-bin">🗑️</div>
+        
+        <div id="zoom-controls">
+            <button onclick="changeZoom(0.1)" class="zoom-btn">+</button>
+            <button onclick="changeZoom(-0.1)" class="zoom-btn">-</button>
+        </div>
+
+        <div id="timer-widget" class="absolute top-4 left-4 bg-gray-900 border-2 border-blue-500 rounded-xl shadow-2xl z-40 hidden flex-col w-[220px] pointer-events-auto">
+            <div id="timer-drag-handle" class="flex justify-between items-center w-full bg-blue-900 p-2 rounded-t-lg cursor-move border-b border-blue-500">
+                <span class="text-xs text-white font-bold tracking-wider">✥ จับเวลา (กลางวัน)</span>
+                <button onclick="toggleTimerWidget()" class="text-gray-300 hover:text-white font-bold px-1">&times;</button>
+            </div>
+            <div class="p-3 flex flex-col items-center">
+                <div id="timer-display" class="text-5xl font-bold text-white pixel-font mb-3 tracking-widest text-center w-full drop-shadow-md">05:00</div>
+                <div class="grid grid-cols-3 gap-1 w-full mb-3">
+                    <button onclick="adjustTimer(60)" class="bg-gray-700 active:bg-gray-600 text-white py-1 rounded text-xs font-bold border border-gray-500">+1 นาที</button>
+                    <button onclick="adjustTimer(-60)" class="bg-gray-700 active:bg-gray-600 text-white py-1 rounded text-xs font-bold border border-gray-500">-1 นาที</button>
+                    <button onclick="adjustTimer(30)" class="bg-gray-700 active:bg-gray-600 text-white py-1 rounded text-xs font-bold border border-gray-500">+30 วิ</button>
+                </div>
+                <div class="flex space-x-2 w-full">
+                    <button id="btn-timer-toggle" onclick="toggleTimerAction()" class="bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-green-400">▶ เริ่ม</button>
+                    <button onclick="resetTimer()" class="bg-red-700 active:bg-red-800 text-white py-2 rounded font-bold w-1/3 shadow-md border border-red-500">🔄</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="night-guide" class="absolute bottom-[120px] left-1/2 transform -translate-x-1/2 bg-indigo-900 border-2 border-indigo-400 rounded-xl shadow-2xl z-40 hidden flex-col items-center w-11/12 max-w-md p-3 pointer-events-auto">
+            <div class="text-sm text-indigo-300 mb-1 font-bold">🌙 ระบบผู้คุมเกม (ลำดับกลางคืน)</div>
+            <div id="night-text" class="text-base sm:text-lg font-bold text-center mb-3 text-yellow-300 w-full min-h-[50px] flex items-center justify-center leading-tight px-2">ทุกคนหลับตา</div>
+            <div class="flex space-x-2 w-full justify-between">
+                <button onclick="prevNightStep()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold text-sm shadow-md">&lt; ย้อน</button>
+                <button onclick="endNight()" class="bg-red-800 text-white px-4 py-2 rounded font-bold text-sm shadow-md">✖ ปิดระบบ</button>
+                <button onclick="nextNightStep()" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold text-sm shadow-md border border-indigo-400">ถัดไป &gt;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-gray-700 p-6 rounded-3xl w-full max-w-sm">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-white">⚙️ เครื่องมือและตั้งค่า</h2>
+                <button onclick="closeSettingsMenu()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
+            </div>
+            
+            <h3 class="text-sm text-gray-400 mb-2 font-bold">จัดการกระดาน (Board)</h3>
+            <div class="grid grid-cols-2 gap-3 mb-5">
+                <button id="btn-lock-table" onclick="toggleTableLock()" class="bg-red-800 border border-red-500 text-white py-3 rounded-xl text-sm active:bg-red-700 font-bold shadow-md w-full">🔓 ล็อคโต๊ะ</button>
+                <button id="btn-shape" onclick="openShapeModal()" class="bg-gray-800 border border-gray-500 text-white py-3 rounded-xl text-sm active:bg-gray-700 shadow-md font-bold w-full">🪑 ทรงโต๊ะ</button>
+                
+                <div class="col-span-2 flex gap-2 w-full">
+                    <button onclick="addMultiplePlayers()" class="flex-1 bg-gray-800 border border-white text-white py-3 rounded-xl text-sm sm:text-base font-bold active:bg-gray-700 shadow-md flex items-center justify-center gap-2">➕ เพิ่มผู้เล่น</button>
+                    <select id="addPlayerCount" class="w-24 bg-gray-700 border border-gray-500 text-white rounded-xl text-center font-bold outline-none cursor-pointer">
+                        <option value="1">1 คน</option>
+                        <option value="2">2 คน</option>
+                        <option value="4">4 คน</option>
+                        <option value="5">5 คน</option>
+                        <option value="8">8 คน</option>
+                        <option value="10">10 คน</option>
+                        <option value="15">15 คน</option>
+                    </select>
+                </div>
+            </div>
+
+            <hr class="border-gray-700 mb-5">
+
+            <h3 class="text-sm text-gray-400 mb-2 font-bold">ระบบเกม (Game Control)</h3>
+            <div class="grid grid-cols-1 gap-3">
+                <button onclick="openColorSettings(); closeSettingsMenu();" class="bg-gray-800 border border-gray-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md active:bg-gray-700 w-full text-left flex justify-between">🎨 ตั้งค่าสีสันหน้าจอ / สีโต๊ะ <span class="text-gray-500">&gt;</span></button>
+                <button onclick="resetGame(); closeSettingsMenu();" class="bg-yellow-700 border border-yellow-500 text-white px-4 py-3 rounded-xl text-sm font-bold active:bg-yellow-800 shadow-md w-full text-left flex justify-between">🔄 เริ่มเกมใหม่ (ล้างบทบาท/สถานะ) <span class="text-gray-400">&gt;</span></button>
+                <button onclick="hardReset()" class="bg-red-900 border border-red-500 active:bg-red-700 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md w-full mt-2 flex items-center justify-center gap-2">⚠️ ล้างข้อมูลกระดานทั้งหมด (Hard Reset)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Shape Modal -->
+    <div id="shapeModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-gray-700 p-6 rounded-3xl w-full max-w-xs text-center shadow-2xl">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-lg font-bold text-white flex-1 text-center">🪑 เลือกรูปทรงโต๊ะ</h2>
+                <button onclick="closeShapeModal()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+                <button onclick="setTableShape('square')" class="bg-gray-800 text-white py-3 rounded-lg font-bold border border-gray-600 active:bg-gray-700">สี่เหลี่ยมจัตุรัส</button>
+                <button onclick="setTableShape('rect')" class="bg-gray-800 text-white py-3 rounded-lg font-bold border border-gray-600 active:bg-gray-700">สี่เหลี่ยมผืนผ้า</button>
+                <button onclick="setTableShape('round')" class="bg-gray-800 text-white py-3 rounded-lg font-bold border border-gray-600 active:bg-gray-700">วงกลม</button>
+                <button onclick="setTableShape('pentagon')" class="bg-gray-800 text-white py-3 rounded-lg font-bold border border-gray-600 active:bg-gray-700">ห้าเหลี่ยม</button>
+                <button onclick="setTableShape('hexagon')" class="bg-gray-800 text-white py-3 rounded-lg font-bold border border-gray-600 active:bg-gray-700">หกเหลี่ยม</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Color Modal -->
+    <div id="colorModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-gray-700 p-6 rounded-3xl w-full max-w-xs">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="openSettingsMenu(); closeColorSettings();" class="text-gray-400 text-2xl font-bold leading-none mr-2">&lt;</button>
+                <h2 class="text-lg font-bold text-white flex-1 text-center">🎨 ตั้งค่าสีสัน</h2>
+                <button onclick="closeColorSettings()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="mb-5 flex justify-between items-center bg-gray-800 p-3 rounded-xl border border-gray-600">
+                <label class="text-sm text-white font-bold flex-1 cursor-pointer" for="bgColorPicker">สีพื้นหลัง</label>
+                <input type="color" id="bgColorPicker" value="#0d0d0d" class="w-12 h-10 cursor-pointer" onchange="applyColors()">
+            </div>
+            <div class="mb-6 flex justify-between items-center bg-gray-800 p-3 rounded-xl border border-gray-600">
+                <label class="text-sm text-white font-bold flex-1 cursor-pointer" for="tableColorPicker">สีโต๊ะกลาง</label>
+                <input type="color" id="tableColorPicker" value="#2d1a11" class="w-12 h-10 cursor-pointer" onchange="applyColors()">
+            </div>
+            <button onclick="closeColorSettings()" class="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold text-lg shadow-lg">บันทึก</button>
+        </div>
+    </div>
+
+    <!-- Timeout Modal -->
+    <div id="timeoutModal" class="fixed inset-0 bg-red-900 bg-opacity-95 modal-bg hidden flex justify-center items-center p-4 z-[60]">
+        <div class="bg-gray-900 border-4 border-red-500 p-8 rounded-3xl w-full max-w-sm text-center shadow-2xl relative">
+            <div class="text-7xl mb-4 animate-bounce drop-shadow-lg">⏰</div>
+            <h2 class="text-3xl font-bold text-white mb-2">หมดเวลา!</h2>
+            <p class="text-gray-300 mb-8 font-bold">หมดเวลาพูดคุยสำหรับรอบนี้แล้วครับ</p>
+            <button onclick="closeTimeoutAlert()" class="w-full bg-red-600 text-white py-4 rounded-xl font-bold text-xl shadow-lg active:bg-red-700 border-2 border-red-400">หยุดเสียง / ปิดหน้าต่าง</button>
+        </div>
+    </div>
+
+    <!-- Edit Player Modal -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-gray-700 p-5 rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold text-yellow-400 pixel-font">PLAYER STATUS</h2>
+                <button onclick="closeModal()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">หมายเลข/ชื่อ</label>
+                    <input type="text" id="playerName" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white font-bold focus:outline-none focus:border-yellow-400" autocomplete="off">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">เพศ/อัตลักษณ์</label>
+                    <select id="playerGender" class="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white font-bold focus:outline-none focus:border-yellow-400">
+                        <option value="">ไม่ระบุ</option>
+                        <option value="👨">👨 ชาย</option>
+                        <option value="👩">👩 หญิง</option>
+                        <option value="🏳️‍🌈">🏳️‍🌈 LGBTQ+</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="mb-5 w-full">
+                <label class="block text-xs text-gray-400 mb-1">บทบาท (Mega Roles)</label>
+                <div class="flex items-center gap-2 w-full">
+                    <select id="playerRole" onchange="updateStarUI()" class="flex-1 min-w-0 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white font-bold focus:outline-none focus:border-yellow-400 text-sm">
+                    </select>
+                    <button id="starRoleBtn" onclick="toggleFavoriteRole()" class="w-12 h-[38px] shrink-0 bg-gray-800 border border-gray-600 rounded-lg flex justify-center items-center text-xl shadow-md active:bg-gray-700 transition-colors" title="เพิ่ม/ลบ จากรายการโปรด">
+                        ☆
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <button onclick="setStatus('alive')" class="bg-gray-800 border border-green-500 text-green-400 py-3 rounded-lg font-bold active:bg-green-900 shadow-md">🟢 มีชีวิต</button>
+                <button onclick="setStatus('protected')" class="bg-gray-800 border border-cyan-400 text-cyan-400 py-3 rounded-lg font-bold active:bg-cyan-900 shadow-md">🛡️ ถูกปกป้อง</button>
+                <button onclick="setStatus('dead')" class="bg-gray-800 border border-gray-500 text-gray-400 py-3 rounded-lg font-bold active:bg-gray-700 shadow-md">💀 ถูกฆ่า (หมาป่า)</button>
+                <button onclick="setStatus('burned')" class="bg-gray-800 border border-orange-500 text-orange-400 py-3 rounded-lg font-bold active:bg-orange-900 shadow-md">🔥 ถูกเผา (โหวต)</button>
+                <button onclick="setStatus('vampire')" class="col-span-2 bg-gray-800 border border-purple-500 text-purple-400 py-3 rounded-lg font-bold active:bg-purple-900 shadow-md">🦇 ถูกฆ่า (แวมไพร์)</button>
+            </div>
+            <button onclick="savePlayer()" class="w-full bg-yellow-500 text-black py-3 rounded-lg font-bold text-lg shadow-lg">บันทึกข้อมูล (DONE)</button>
+        </div>
+    </div>
+
+    <!-- Role Alert Modal (NEW) -->
+    <div id="roleAlertModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-[55]">
+        <div class="bg-gray-900 border-2 border-yellow-500 p-6 rounded-3xl w-full max-w-sm text-center shadow-2xl">
+            <div id="roleAlertIcon" class="text-6xl mb-3">⚠️</div>
+            <h2 id="roleAlertTitle" class="text-xl font-bold text-yellow-400 mb-2"></h2>
+            <p id="roleAlertBody" class="text-gray-300 text-sm mb-5 leading-relaxed whitespace-pre-line text-left"></p>
+            <div class="flex gap-3">
+                <button id="roleAlertConfirmBtn" class="flex-1 bg-yellow-500 text-black py-3 rounded-xl font-bold text-sm active:bg-yellow-400">✅ รับทราบ / บันทึก</button>
+                <button onclick="closeRoleAlert();" class="flex-1 bg-gray-700 text-white py-3 rounded-xl font-bold text-sm border border-gray-500 active:bg-gray-600">↩ ยกเลิก</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // === ตัวแปร Global & Workspace ===
+        let currentTool = 'move';
+        let isDrawing = false;
+        let isTableLocked = false;
+        let players = [];
+        let currentIndex = null;
+        
+        let zoomLevel = 1;
+        let panX = 0;
+        let panY = 0;
+        
+        const workspace = document.getElementById('workspace');
+        const boardContainer = document.getElementById('board-container');
+        
+        const tableShapes = ['square', 'round', 'rect', 'pentagon', 'hexagon'];
+        let currentShapeIndex = 0;
+        let tableState = { x: 1500 - 130, y: 1500 - 130, w: 260, h: 260, shape: 'square' }; 
+        
+        let favoriteRoles = [
+            'หมาป่า (Werewolf)',
+            'ชาวบ้าน (Villager)',
+            'เทพพยากรณ์ (Seer)',
+            'บอดี้การ์ด (Bodyguard)',
+            'ยาจก (Tanner / Jester)',
+            'นายพราน (Hunter)',
+            'ผู้ต้องคำสาป (Cursed)'
+        ];
+
+        const wolfRoles = ['เขี้ยวยาว (Dire Wolf)', 'นางปีศาจ (Sorcerer)', 'มนุษย์หมาป่ากินเจ (Vegetarian Werewolf)', 'มนุษย์หมาป่าจ่าฝูง (Alpha Wolf)', 'มนุษย์หมาป่าเดียวดาย (Lone Wolf)', 'มนุษย์หมาป่าวัยรุ่น (Teenage Werewolf)', 'ลูกหมาป่า (Wolf Cub)', 'วูฟเวอรีน (Wolverine)', 'สมุนหมาป่า (Minion)', 'หมาป่า (Werewolf)', 'หมาป่ากระหายเลือด (Bloodthirsty Wolf)', 'หมาป่าขี้เซา (Dream Wolf)', 'หมาป่ามนุษย์ (Human Wolf)', 'หมาป่าสีขาว (White Wolf)', 'หมาป่าโลกันตร์ (Hellhound)'];
+        const villagerRoles = ['กามเทพ (Cupid)', 'คนอดนอน (Insomniac)', 'จอมอึด (Tough Guy)', 'จอมเวทย์ (Magician)', 'เจ้าชาย (Prince)', 'ชาวบ้าน (Villager)', 'ญาณทิพย์ (Aura Seer)', 'ตาทิพย์ (Clairvoyant)', 'ตัวป่วน (Troublemaker)', 'ท่านเคาต์ (Count)', 'เทพพยากรณ์ (Seer)', 'เทพผู้รู้แจ้ง (Oracle)', 'นักบวช (Priest)', 'นักสะกดจิต (Hypnotist)', 'นักสืบเรื่องลี้ลับ (Paranormal Investigator)', 'นายกเทศมนตรี (Mayor)', 'นายพราน (Hunter)', 'บอดี้การ์ด (Bodyguard)', 'ผู้ใช้คาถา (Spellcaster)', 'ผู้ป่วยติดเชื้อ (Diseased)', 'ผู้เผยตัวตน (Martyr)', 'ผู้รักสันติ (Pacifist)', 'พรานหญิง (Huntress)', 'พรายกระซิบ (Whispering Spirit)', 'ภราดรแห่งเมสัน (Mason)', 'ภูตเลปริคอน (Leprechaun)', 'มือระเบิดพลีชีพ (Bomber)', 'แม่มด (Witch)', 'แม่หมอ (Old Hag)', 'ลูกครึ่งมนุษย์หมาป่าหมา (Lycan)', 'เวอร์จิเนีย วูล์ฟ (Virginia Woolf)', 'ศิษย์เทพพยากรณ์ (Apprentice Seer)', 'สัปเหร่อ (Gravedigger)', 'สัมภเวสี (Poltergeist)', 'ไอทึ่ม (Idiot / Fool)'];
+        const indyRoles = ['คนขี้เมา (Drunk)', 'เจ้าลัทธิ (Cult Leader)', 'ซอมบี้ (Zombie)', 'ท่านเคาต์แดรกคูล่า (Count Dracula)', 'นอสตราดามุส (Nostradamus)', 'นักเป่าขลุ่ย (Piper)', 'บล็อบจอมเขมือบ (Serial Killer)', 'บิ๊กฟุต (Bigfoot)', 'ผู้ต้องคำสาป (Cursed)', 'ผีดิบแฟรงค์เกนส์สไตน์ (Frankenstein\'s Monster)', 'ภูดจำแลง (Changeling)', 'แมรี่กระหายเลือด (Bloody Mary)', 'ยาจก (Tanner / Jester)', 'ร่างโคลน (Doppelganger)', 'อันธพาล (Hoodlum)'];
+        const vampireRoles = ['แวมไพร์ (Vampire)'];
+
+        const orderOfNight = [
+            'ร่างโคลน (Doppelganger)', 'กามเทพ (Cupid)', 'ภราดรแห่งเมสัน (Mason)', 'ตาทิพย์ (Clairvoyant)', 'ท่านเคาต์ (Count)', 'อันธพาล (Hoodlum)', 'นอสตราดามุส (Nostradamus)', 
+            'สมุนหมาป่า (Minion)', 'บอดี้การ์ด_นักบวช', 'แวมไพร์ (Vampire)', 'เจ้าลัทธิ (Cult Leader)', 'นักเป่าขลุ่ย (Piper)', 'ซอมบี้ (Zombie)', 
+            'นางปีศาจ (Sorcerer)', 'WolfPack', 'บล็อบจอมเขมือบ_แมรี่', 'แม่มด (Witch)', 'พรานหญิง (Huntress)', 'หมอดู_นักสืบ', 
+            'นักสะกดจิต (Hypnotist)', 'จอมเวทย์ (Magician)', 'ผู้ใช้คาถา (Spellcaster)', 'แม่หมอ (Old Hag)', 'ภูตเลปริคอน (Leprechaun)', 'คนอดนอน (Insomniac)'
+        ];
+        
+        const roleInstructions = {
+            'ร่างโคลน (Doppelganger)': 'ร่างโคลน ลืมตา เลือกชี้เป้าหมายเพื่อรอสวมรอย (คืนแรก)',
+            'กามเทพ (Cupid)': 'กามเทพ ลืมตา เลือกจับคู่รัก 2 คน (คืนแรก)',
+            'ภราดรแห่งเมสัน (Mason)': 'ภราดรแห่งเมสัน ลืมตามองหน้ายืนยันตัวกัน (คืนแรก)',
+            'ตาทิพย์ (Clairvoyant)': 'ตาทิพย์ ลืมตา [GM ชี้ตัวเทพพยากรณ์ให้ดู] (คืนแรก)',
+            'ท่านเคาต์ (Count)': 'ท่านเคาต์ ลืมตา [GM บอกจำนวนหมาป่าแต่ละซีกโต๊ะ] (คืนแรก)',
+            'อันธพาล (Hoodlum)': 'อันธพาล ลืมตา ชี้เป้าหมาย 2 คน (คืนแรก)',
+            'นอสตราดามุส (Nostradamus)': 'นอสตราดามุส ลืมตา ชูนิ้วทำนายฝ่ายที่จะชนะ (คืนแรก)',
+            'สมุนหมาป่า (Minion)': 'ฝูงหมาป่าชูนิ้วโป้ง สมุนหมาป่าลืมตาดูตัวหมาป่า (คืนแรก)',
+            'บอดี้การ์ด_นักบวช': 'บอดี้การ์ด / นักบวช ลืมตา เลือกปกป้องผู้เล่น',
+            'แวมไพร์ (Vampire)': 'แวมไพร์ ลืมตา เลือกกัดเป้าหมาย 1 คน',
+            'เจ้าลัทธิ (Cult Leader)': 'เจ้าลัทธิ ลืมตา เลือกชวนคนเข้าลัทธิ 1 คน',
+            'นักเป่าขลุ่ย (Piper)': 'นักเป่าขลุ่ย ลืมตา เลือกสะกดจิต 2 คน',
+            'ซอมบี้ (Zombie)': 'ซอมบี้ ลืมตา เลือกกินสมองเป้าหมาย 1 คน (พรุ่งนี้ห้ามโหวต)',
+            'นางปีศาจ (Sorcerer)': 'นางปีศาจ ลืมตา ส่องหาเทพพยากรณ์',
+            'WolfPack': 'ฝูงหมาป่า ลืมตา ปรึกษาและเลือกฆ่าเหยื่อ',
+            'บล็อบจอมเขมือบ_แมรี่': 'ฆาตกร / แมรี่กระหายเลือด ลืมตา เลือกฆ่าเหยื่อ',
+            'แม่มด (Witch)': 'แม่มด ลืมตา [GM แจ้งเป้าที่ถูกกัด] ใช้ยาชุบ หรือ ยาพิษ หรือไม่?',
+            'พรานหญิง (Huntress)': 'พรานหญิง ลืมตา ต้องการยิงใครหรือไม่? (ใช้ได้ครั้งเดียว)',
+            'หมอดู_นักสืบ': 'เทพพยากรณ์ / ญาณทิพย์ / เทพผู้รู้แจ้ง / นักสืบ ลืมตา ส่องบทบาทเป้าหมาย',
+            'นักสะกดจิต (Hypnotist)': 'นักสะกดจิต ลืมตา ชี้ 2 คน (GM พยักหน้าถ้าอยู่ทีมเดียวกัน)',
+            'จอมเวทย์ (Magician)': 'จอมเวทย์ ลืมตา ชี้ 1 คน (พรุ่งนี้ห้ามพูด)',
+            'ผู้ใช้คาถา (Spellcaster)': 'ผู้ใช้คาถา ลืมตา ชี้ 1 คน (พรุ่งนี้ห้ามส่งเสียง)',
+            'แม่หมอ (Old Hag)': 'แม่หมอ ลืมตา ชี้ 1 คนให้ออกจากหมู่บ้าน (พรุ่งนี้ห้ามพูด/ห้ามโหวต)',
+            'ภูตเลปริคอน (Leprechaun)': 'ภูตเลปริคอน ลืมตา เบี่ยงเบนเป้าหมายหมาป่าหรือไม่?',
+            'คนอดนอน (Insomniac)': 'คนอดนอน ลืมตาดูว่ามีคนข้างๆ ตื่นหรือไม่'
+        };
+        let nightSteps = []; 
+        let currentNightStepIndex = 0;
+
+        // === DOM Elements ===
+        const tableEl = document.getElementById('table-element');
+        const tableDragArea = document.getElementById('table-drag-area');
+        const tableResizeBtn = document.getElementById('table-resize-handle');
+        const btnLock = document.getElementById('btn-lock-table');
+        const tokensLayer = document.getElementById('tokens-layer');
+        const trashBin = document.getElementById('trash-bin');
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d');
+        const penColorPicker = document.getElementById('penColorPicker');
+
+        // === SYSTEM: AUTO SAVE ===
+        function saveGameState() {
+            const state = {
+                players: players,
+                tableState: tableState,
+                zoomLevel: zoomLevel,
+                panX: panX,
+                panY: panY,
+                canvasData: canvas.toDataURL(), 
+                bgColor: document.getElementById('bgColorPicker').value,
+                tableColor: document.getElementById('tableColorPicker').value,
+                penColor: penColorPicker.value,
+                timerSeconds: timerSeconds,
+                favoriteRoles: favoriteRoles 
+            };
+            localStorage.setItem('werewolfGMState', JSON.stringify(state));
+        }
+
+        function loadGameState() {
+            const savedState = localStorage.getItem('werewolfGMState');
+            if (savedState) {
+                const state = JSON.parse(savedState);
+                players = state.players || [];
+                tableState = state.tableState || { x: 1500 - 130, y: 1500 - 130, w: 260, h: 260, shape: 'square' };
+                zoomLevel = state.zoomLevel || 1;
+                panX = state.panX || -(3000 - window.innerWidth) / 2;
+                panY = state.panY || -(3000 - boardContainer.clientHeight) / 2;
+                
+                if (state.bgColor) {
+                    document.getElementById('bgColorPicker').value = state.bgColor;
+                    document.getElementById('tableColorPicker').value = state.tableColor;
+                    document.getElementById('board-container').style.backgroundColor = state.bgColor;
+                    document.getElementById('table-element').style.backgroundColor = state.tableColor;
+                }
+                if (state.penColor) {
+                    penColorPicker.value = state.penColor;
+                }
+                if (state.canvasData) {
+                    const img = new Image();
+                    img.onload = function() { ctx.drawImage(img, 0, 0); };
+                    img.src = state.canvasData;
+                }
+                if (state.timerSeconds !== undefined) {
+                    timerSeconds = state.timerSeconds;
+                    updateTimerDisplay();
+                }
+                if (state.favoriteRoles) {
+                    favoriteRoles = state.favoriteRoles;
+                }
+
+                currentShapeIndex = tableShapes.indexOf(tableState.shape);
+                if(currentShapeIndex === -1) currentShapeIndex = 0;
+            } else {
+                panX = -(3000 - window.innerWidth) / 2;
+                panY = -(3000 - boardContainer.clientHeight) / 2;
+                
+                const startPos = [
+                    { x: 1500 - 37.5, y: 1500 - 180 - 37.5 },
+                    { x: 1500 + 180 - 37.5, y: 1500 - 37.5 },
+                    { x: 1500 - 37.5, y: 1500 + 180 - 37.5 },
+                    { x: 1500 - 180 - 37.5, y: 1500 - 37.5 }
+                ];
+                for(let i=0; i<4; i++) {
+                    players.push({ 
+                        id: Date.now() + i, 
+                        name: `${i + 1}`, 
+                        role: 'ไม่ระบุ', 
+                        gender: '', 
+                        status: 'alive', 
+                        x: startPos[i].x, 
+                        y: startPos[i].y 
+                    });
+                }
+            }
+            
+            applyWorkspaceTransform();
+            updateTableStyle();
+            renderTokens();
+            updateLockButtonUI();
+            renderRoleDropdown();
+        }
+
+        window.onload = () => { loadGameState(); };
+
+        // === SYSTEM: FAVORITE ROLES ===
+        function renderRoleDropdown() {
+            const select = document.getElementById('playerRole');
+            const currentValue = select.value; 
+            
+            let html = `<option value="ไม่ระบุ">ไม่ระบุ</option>`;
+            
+            if (favoriteRoles.length > 0) {
+                html += `<optgroup label="⭐ บทบาทที่ใช้บ่อย (Favorites)" class="text-yellow-300 bg-gray-900">`;
+                favoriteRoles.forEach(r => html += `<option value="${r}">${r}</option>`);
+                html += `</optgroup>`;
+            }
+
+            html += `<optgroup label="🔴 ฝ่ายหมาป่า (Wolf Team)" class="text-red-300 bg-gray-900">`;
+            wolfRoles.forEach(r => html += `<option value="${r}">${r}</option>`);
+            html += `</optgroup>`;
+
+            html += `<optgroup label="🔵 ฝ่ายชาวบ้าน (Villager Team)" class="text-blue-300 bg-gray-900">`;
+            villagerRoles.forEach(r => html += `<option value="${r}">${r}</option>`);
+            html += `</optgroup>`;
+
+            html += `<optgroup label="🟢 ฝ่ายอิสระและป่วนเกม (Independent)" class="text-green-300 bg-gray-900">`;
+            indyRoles.forEach(r => html += `<option value="${r}">${r}</option>`);
+            html += `</optgroup>`;
+
+            html += `<optgroup label="🟣 ฝ่ายแวมไพร์ (Vampire Team)" class="text-purple-300 bg-gray-900">`;
+            vampireRoles.forEach(r => html += `<option value="${r}">${r}</option>`);
+            html += `</optgroup>`;
+
+            select.innerHTML = html;
+            
+            if (currentValue && currentValue !== "ไม่ระบุ") {
+                select.value = currentValue;
+            }
+            updateStarUI();
+        }
+
+        function updateStarUI() {
+            const select = document.getElementById('playerRole');
+            const btn = document.getElementById('starRoleBtn');
+            const role = select.value;
+            
+            if (role === 'ไม่ระบุ' || !role) {
+                btn.innerHTML = '☆';
+                btn.classList.add('opacity-50', 'text-gray-400');
+                btn.classList.remove('text-yellow-400');
+            } else {
+                btn.classList.remove('opacity-50');
+                if (favoriteRoles.includes(role)) {
+                    btn.innerHTML = '⭐';
+                    btn.classList.add('text-yellow-400');
+                    btn.classList.remove('text-gray-400');
+                } else {
+                    btn.innerHTML = '☆';
+                    btn.classList.add('text-gray-400');
+                    btn.classList.remove('text-yellow-400');
+                }
+            }
+        }
+
+        function toggleFavoriteRole() {
+            const select = document.getElementById('playerRole');
+            const role = select.value;
+            if (role === 'ไม่ระบุ' || !role) return;
+
+            if (favoriteRoles.includes(role)) {
+                favoriteRoles = favoriteRoles.filter(r => r !== role);
+            } else {
+                favoriteRoles.push(role);
+            }
+            
+            saveGameState();
+            renderRoleDropdown();
+        }
+
+        // === MENU SYSTEM ===
+        function openSettingsMenu() { document.getElementById('settingsModal').classList.remove('hidden'); }
+        function closeSettingsMenu() { document.getElementById('settingsModal').classList.add('hidden'); }
+        function openColorSettings() { 
+            document.getElementById('settingsModal').classList.add('hidden');
+            document.getElementById('colorModal').classList.remove('hidden'); 
+        }
+        function closeColorSettings() { document.getElementById('colorModal').classList.add('hidden'); }
+        
+        function applyColors() {
+            const bgHex = document.getElementById('bgColorPicker').value;
+            const tableHex = document.getElementById('tableColorPicker').value;
+            document.getElementById('board-container').style.backgroundColor = bgHex;
+            document.getElementById('table-element').style.backgroundColor = tableHex;
+            saveGameState();
+        }
+
+        // === AUDIO SYSTEM (Web Audio API) ===
+        let audioCtx = null;
+        let sirenOsc = null;
+        let sirenGain = null;
+        let sirenIntervalId = null;
+
+        function initAudio() {
+            if (!audioCtx) { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+            if (audioCtx.state === 'suspended') { audioCtx.resume(); }
+            return audioCtx;
+        }
+
+        function playTick() {
+            const ctx = initAudio(); if (!ctx) return;
+            const osc = ctx.createOscillator(); const gain = ctx.createGain();
+            osc.type = 'sine'; osc.frequency.setValueAtTime(450, ctx.currentTime);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.1);
+        }
+
+        function playWarning() {
+            const ctx = initAudio(); if (!ctx) return;
+            const osc = ctx.createOscillator(); const gain = ctx.createGain();
+            osc.type = 'square'; osc.frequency.setValueAtTime(800, ctx.currentTime);
+            gain.gain.setValueAtTime(0.08, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.start(); osc.stop(ctx.currentTime + 0.15);
+        }
+
+        function startSiren() {
+            const ctx = initAudio(); if (!ctx || sirenOsc) return;
+            sirenOsc = ctx.createOscillator(); sirenGain = ctx.createGain();
+            sirenOsc.type = 'square';
+            
+            let isHigh = false;
+            sirenIntervalId = setInterval(() => {
+                if(ctx.state === 'suspended') ctx.resume();
+                sirenOsc.frequency.setValueAtTime(isHigh ? 650 : 1000, ctx.currentTime);
+                isHigh = !isHigh;
+            }, 400);
+
+            sirenGain.gain.value = 0.1;
+            sirenOsc.connect(sirenGain); sirenGain.connect(ctx.destination);
+            sirenOsc.start();
+        }
+
+        function stopSiren() {
+            if (sirenIntervalId) { clearInterval(sirenIntervalId); sirenIntervalId = null; }
+            if (sirenOsc) { sirenOsc.stop(); sirenOsc.disconnect(); sirenOsc = null; }
+            if (sirenGain) { sirenGain.disconnect(); sirenGain = null; }
+        }
+
+        // === TIMER SYSTEM ===
+        let timerSeconds = 300; 
+        let timerInterval = null;
+        let isTimerRunning = false;
+        let isTimerVisible = false;
+
+        function toggleTimerWidget() {
+            isTimerVisible = !isTimerVisible;
+            document.getElementById('timer-widget').style.display = isTimerVisible ? 'flex' : 'none';
+        }
+
+        function updateTimerDisplay() {
+            let m = Math.floor(timerSeconds / 60);
+            let s = timerSeconds % 60;
+            let displayEl = document.getElementById('timer-display');
+            displayEl.innerText = (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+
+            if (timerSeconds <= 10 && timerSeconds > 0) {
+                displayEl.classList.add('text-red-500'); displayEl.classList.remove('text-white');
+            } else {
+                displayEl.classList.remove('text-red-500'); displayEl.classList.add('text-white');
+            }
+        }
+
+        function adjustTimer(secs) {
+            if (!isTimerRunning) {
+                timerSeconds += secs;
+                if (timerSeconds < 0) timerSeconds = 0;
+                updateTimerDisplay();
+                saveGameState();
+            }
+        }
+
+        function toggleTimerAction() {
+            initAudio();
+            let btnToggle = document.getElementById('btn-timer-toggle');
+            if (isTimerRunning) {
+                clearInterval(timerInterval);
+                isTimerRunning = false;
+                btnToggle.innerText = '▶ เริ่ม';
+                btnToggle.className = 'bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-green-400';
+            } else {
+                if (timerSeconds <= 0) return;
+                isTimerRunning = true;
+                btnToggle.innerText = '⏸ พัก';
+                btnToggle.className = 'bg-yellow-600 active:bg-yellow-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-yellow-500';
+                
+                timerInterval = setInterval(() => {
+                    timerSeconds--;
+                    updateTimerDisplay();
+                    
+                    if (timerSeconds > 10) {
+                        playTick();
+                    } else if (timerSeconds <= 10 && timerSeconds > 0) {
+                        playWarning();
+                    } else if (timerSeconds <= 0) {
+                        clearInterval(timerInterval);
+                        isTimerRunning = false;
+                        btnToggle.innerText = '▶ เริ่ม';
+                        btnToggle.className = 'bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-green-400';
+                        startSiren();
+                        showTimeoutAlert();
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerSeconds = 300; 
+            let btnToggle = document.getElementById('btn-timer-toggle');
+            btnToggle.innerText = '▶ เริ่ม';
+            btnToggle.className = 'bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-green-400';
+            updateTimerDisplay();
+            stopSiren();
+            saveGameState();
+        }
+
+        function showTimeoutAlert() { document.getElementById('timeoutModal').classList.remove('hidden'); }
+        function closeTimeoutAlert() { document.getElementById('timeoutModal').classList.add('hidden'); stopSiren(); }
+
+        const timerDragHandle = document.getElementById('timer-drag-handle');
+        const timerWidget = document.getElementById('timer-widget');
+        timerDragHandle.addEventListener('pointerdown', (e) => {
+            let startX = e.clientX;
+            let startY = e.clientY;
+            let startLeft = timerWidget.offsetLeft;
+            let startTop = timerWidget.offsetTop;
+            
+            function move(ev) {
+                let dx = ev.clientX - startX;
+                let dy = ev.clientY - startY;
+                let newLeft = startLeft + dx;
+                let newTop = startTop + dy;
+                const container = document.getElementById('board-container');
+                const maxX = container.clientWidth - timerWidget.offsetWidth;
+                const maxY = container.clientHeight - timerWidget.offsetHeight;
+                if(newLeft < 0) newLeft = 0;
+                if(newLeft > maxX) newLeft = maxX;
+                if(newTop < 0) newTop = 0;
+                if(newTop > maxY) newTop = maxY;
+                timerWidget.style.left = `${newLeft}px`;
+                timerWidget.style.top = `${newTop}px`;
+                timerWidget.style.right = 'auto'; 
+            }
+            function up() {
+                window.removeEventListener('pointermove', move);
+                window.removeEventListener('pointerup', up);
+            }
+            window.addEventListener('pointermove', move);
+            window.addEventListener('pointerup', up);
+        });
+
+        // === 0. Workspace Transform ===
+        function applyWorkspaceTransform() {
+            workspace.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+        }
+
+        function changeZoom(delta) {
+            let oldZoom = zoomLevel;
+            zoomLevel += delta;
+            if(zoomLevel < 0.2) zoomLevel = 0.2;
+            if(zoomLevel > 4) zoomLevel = 4;
+            let screenCenterX = window.innerWidth / 2;
+            let screenCenterY = boardContainer.clientHeight / 2;
+            let focalX = (screenCenterX - panX) / oldZoom;
+            let focalY = (screenCenterY - panY) / oldZoom;
+            panX = screenCenterX - focalX * zoomLevel;
+            panY = screenCenterY - focalY * zoomLevel;
+            applyWorkspaceTransform();
+            saveGameState();
+        }
+
+        let isPanningBg = false;
+        let startPanX = 0, startPanY = 0;
+        let initialPinchDist = 0;
+        let initialZoomPinch = 1;
+        let pinchFocalWorkspaceX = 0;
+        let pinchFocalWorkspaceY = 0;
+
+        boardContainer.addEventListener('touchstart', (e) => {
+            if (currentTool !== 'move') return; 
+            if (e.target.closest('.player-token') || e.target.closest('#table-element') || e.target.closest('.zoom-btn') || e.target.closest('#timer-widget')) {
+                if (e.touches.length < 2) return;
+            }
+            if (e.touches.length === 1) {
+                isPanningBg = true;
+                startPanX = e.touches[0].clientX;
+                startPanY = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+                isPanningBg = false;
+                let dx = e.touches[0].clientX - e.touches[1].clientX;
+                let dy = e.touches[0].clientY - e.touches[1].clientY;
+                initialPinchDist = Math.hypot(dx, dy);
+                initialZoomPinch = zoomLevel;
+                let screenFocalX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                let screenFocalY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                pinchFocalWorkspaceX = (screenFocalX - panX) / zoomLevel;
+                pinchFocalWorkspaceY = (screenFocalY - panY) / zoomLevel;
+            }
+        }, { passive: false });
+
+        boardContainer.addEventListener('touchmove', (e) => {
+            if (currentTool !== 'move') return;
+            if (e.touches.length === 1 && isPanningBg) {
+                panX += (e.touches[0].clientX - startPanX);
+                panY += (e.touches[0].clientY - startPanY);
+                applyWorkspaceTransform();
+                startPanX = e.touches[0].clientX;
+                startPanY = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+                e.preventDefault(); 
+                let dx = e.touches[0].clientX - e.touches[1].clientX;
+                let dy = e.touches[0].clientY - e.touches[1].clientY;
+                let currentDist = Math.hypot(dx, dy);
+                let newZoom = initialZoomPinch * (currentDist / initialPinchDist);
+                if (newZoom < 0.2) newZoom = 0.2;
+                if (newZoom > 4) newZoom = 4;
+                zoomLevel = newZoom;
+                let screenFocalX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                let screenFocalY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                panX = screenFocalX - pinchFocalWorkspaceX * zoomLevel;
+                panY = screenFocalY - pinchFocalWorkspaceY * zoomLevel;
+                applyWorkspaceTransform();
+            }
+        }, { passive: false });
+
+        boardContainer.addEventListener('touchend', (e) => {
+            if (currentTool !== 'move') return;
+            if (e.touches.length < 2) initialPinchDist = 0;
+            if (e.touches.length === 0) {
+                if(isPanningBg) saveGameState(); 
+                isPanningBg = false;
+            } else if (e.touches.length === 1) {
+                startPanX = e.touches[0].clientX;
+                startPanY = e.touches[0].clientY;
+                isPanningBg = true;
+                saveGameState(); 
+            }
+        });
+
+        boardContainer.addEventListener('mousedown', (e) => {
+            if (currentTool !== 'move') return;
+            if (e.target.closest('.player-token') || e.target.closest('#table-element') || e.target.closest('.zoom-btn') || e.target.closest('#timer-widget')) return;
+            isPanningBg = true;
+            startPanX = e.clientX;
+            startPanY = e.clientY;
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!isPanningBg || e.touches) return; 
+            panX += (e.clientX - startPanX);
+            panY += (e.clientY - startPanY);
+            applyWorkspaceTransform();
+            startPanX = e.clientX;
+            startPanY = e.clientY;
+        });
+        window.addEventListener('mouseup', () => { 
+            if(isPanningBg) { isPanningBg = false; saveGameState(); }
+        });
+
+        // === 1. ระบบโต๊ะ ===
+        function updateTableStyle() {
+            tableEl.style.left = `${tableState.x}px`; tableEl.style.top = `${tableState.y}px`;
+            tableEl.style.width = `${tableState.w}px`; tableEl.style.height = `${tableState.h}px`;
+            tableEl.className = ''; 
+            if(tableState.shape === 'round') tableEl.classList.add('shape-round');
+            else if(tableState.shape === 'rect') tableEl.classList.add('shape-rect');
+            else if(tableState.shape === 'pentagon') tableEl.classList.add('shape-pentagon');
+            else if(tableState.shape === 'hexagon') tableEl.classList.add('shape-hexagon');
+            else tableEl.classList.add('shape-square');
+        }
+
+        function openShapeModal() {
+            if(isTableLocked) return;
+            document.getElementById('settingsModal').classList.add('hidden');
+            document.getElementById('shapeModal').classList.remove('hidden');
+        }
+
+        function closeShapeModal() {
+            document.getElementById('shapeModal').classList.add('hidden');
+        }
+
+        function setTableShape(shape) {
+            tableState.shape = shape;
+            if (shape === 'round') { tableState.w = 280; tableState.h = 280; }
+            else if (shape === 'rect') { tableState.w = 340; tableState.h = 160; }
+            else if (shape === 'square') { tableState.w = 260; tableState.h = 260; }
+            else if (shape === 'pentagon') { tableState.w = 280; tableState.h = 280; }
+            else if (shape === 'hexagon') { tableState.w = 300; tableState.h = 260; }
+            updateTableStyle();
+            saveGameState();
+            closeShapeModal();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function toggleTableLock() {
+            isTableLocked = !isTableLocked;
+            updateLockButtonUI();
+        }
+
+        function updateLockButtonUI() {
+            const btnShape = document.getElementById('btn-shape');
+            if(isTableLocked) {
+                btnLock.innerHTML = '🔒 ล็อคแล้ว';
+                btnLock.classList.replace('bg-red-800', 'bg-green-700'); btnLock.classList.replace('border-red-500', 'border-green-400');
+                tableDragArea.style.display = 'none'; tableResizeBtn.style.display = 'none'; btnShape.style.opacity = '0.5'; btnShape.style.pointerEvents = 'none';
+            } else {
+                btnLock.innerHTML = '🔓 ล็อคโต๊ะ';
+                btnLock.classList.replace('bg-green-700', 'bg-red-800'); btnLock.classList.replace('border-green-400', 'border-red-500');
+                tableDragArea.style.display = 'flex'; tableResizeBtn.style.display = 'flex'; btnShape.style.opacity = '1'; btnShape.style.pointerEvents = 'auto';
+            }
+        }
+
+        tableDragArea.addEventListener('pointerdown', (e) => {
+            if(currentTool !== 'move' || isTableLocked) return;
+            let startX = e.clientX; let startY = e.clientY;
+            function move(ev) {
+                tableState.x += (ev.clientX - startX) / zoomLevel; 
+                tableState.y += (ev.clientY - startY) / zoomLevel;
+                updateTableStyle(); startX = ev.clientX; startY = ev.clientY;
+            }
+            function up() { 
+                window.removeEventListener('pointermove', move); 
+                window.removeEventListener('pointerup', up); 
+                saveGameState();
+            }
+            window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+        });
+
+        tableResizeBtn.addEventListener('pointerdown', (e) => {
+            if(currentTool !== 'move' || isTableLocked) return;
+            e.stopPropagation(); 
+            let startX = e.clientX; let startY = e.clientY;
+            let startW = tableState.w; let startH = tableState.h;
+            function move(ev) {
+                let dx = (ev.clientX - startX) / zoomLevel; 
+                let dy = (ev.clientY - startY) / zoomLevel;
+                tableState.w = Math.max(100, startW + dx); tableState.h = Math.max(100, startH + dy); updateTableStyle();
+            }
+            function up() { 
+                window.removeEventListener('pointermove', move); 
+                window.removeEventListener('pointerup', up); 
+                saveGameState();
+            }
+            window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+        });
+
+        // === 2. ระบบผู้เล่น ===
+        function addPlayer(shouldSave = true) {
+            let x = 1500 - 37.5 + (Math.random() * 40 - 20);
+            let y = 1500 - 37.5 + (Math.random() * 40 - 20);
+            players.push({ id: Date.now(), name: `${players.length + 1}`, role: 'ไม่ระบุ', gender: '', status: 'alive', x: x, y: y });
+            renderTokens();
+            if(shouldSave) saveGameState();
+        }
+
+        function addMultiplePlayers() {
+            let count = parseInt(document.getElementById('addPlayerCount').value) || 1;
+            for(let i = 0; i < count; i++) {
+                let x = 1500 - 37.5 + (Math.random() * 80 - 40);
+                let y = 1500 - 37.5 + (Math.random() * 80 - 40);
+                players.push({ id: Date.now() + i, name: `${players.length + 1}`, role: 'ไม่ระบุ', gender: '', status: 'alive', x: x, y: y });
+            }
+            renderTokens();
+            saveGameState();
+            closeSettingsMenu();
+        }
+
+        function renderTokens() {
+            tokensLayer.innerHTML = '';
+            players.forEach((p, index) => {
+                let teamColor = 'border-gray-600'; let teamShadow = '';
+                
+                if (wolfRoles.includes(p.role)) { teamColor = 'border-red-600'; teamShadow = 'shadow-[0_0_12px_rgba(220,38,38,0.8)]'; }
+                else if (villagerRoles.includes(p.role)) { teamColor = 'border-blue-500'; teamShadow = 'shadow-[0_0_12px_rgba(59,130,246,0.8)]'; }
+                else if (indyRoles.includes(p.role)) { teamColor = 'border-green-500'; teamShadow = 'shadow-[0_0_12px_rgba(34,197,94,0.8)]'; }
+                else if (vampireRoles.includes(p.role)) { teamColor = 'border-purple-500'; teamShadow = 'shadow-[0_0_12px_rgba(168,85,247,0.8)]'; }
+
+                let bgColor = 'bg-gray-800', borderColor = teamColor, opacity = 'opacity-100', statusIcon = '';
+                
+                if (p.status === 'dead') {
+                    bgColor = 'bg-gray-800'; borderColor = 'border-gray-700'; opacity = 'opacity-50'; teamShadow = '';
+                    statusIcon = '<div class="absolute inset-0 flex items-center justify-center text-5xl drop-shadow-md">💀</div>';
+                } else if (p.status === 'burned') {
+                    bgColor = 'bg-orange-900'; borderColor = 'border-orange-500'; opacity = 'opacity-60'; teamShadow = '';
+                    statusIcon = '<div class="absolute inset-0 flex items-center justify-center text-5xl drop-shadow-md">🔥</div>';
+                } else if (p.status === 'vampire') {
+                    bgColor = 'bg-gray-800'; borderColor = 'border-purple-600'; opacity = 'opacity-60'; teamShadow = '';
+                    statusIcon = '<div class="absolute inset-0 flex items-center justify-center text-5xl drop-shadow-md">🦇</div>';
+                } else if (p.status === 'protected') {
+                    borderColor = 'border-cyan-400'; teamShadow = 'shadow-[0_0_15px_rgba(34,211,238,0.9)]';
+                    statusIcon = '<div class="absolute -top-2 -right-2 text-xl drop-shadow-md bg-gray-900 rounded-full">🛡️</div>';
+                }
+
+                let genderIcon = p.gender ? `<div class="absolute -top-2 -left-2 text-xs bg-gray-900 border border-gray-500 rounded-full w-6 h-6 flex justify-center items-center shadow-md z-20">${p.gender}</div>` : '';
+                let displayName = p.role.split(' (')[0];
+
+                const token = document.createElement('div');
+                token.className = `player-token ${bgColor} ${borderColor} ${opacity} ${teamShadow}`;
+                token.style.left = `${p.x}px`; token.style.top = `${p.y}px`;
+                token.innerHTML = `
+                    ${genderIcon}
+                    <div class="font-bold text-lg text-white truncate px-1 z-10 w-full text-center mt-1">${p.name}</div>
+                    <div class="text-[10px] text-gray-300 z-10 leading-tight text-center px-1 pb-1 w-full max-h-[28px] overflow-hidden">${displayName}</div>
+                    ${statusIcon}
+                `;
+                setupTokenDragEvents(token, index);
+                tokensLayer.appendChild(token);
+            });
+        }
+
+        function setupTokenDragEvents(element, index) {
+            element.addEventListener('pointerdown', function(e) {
+                if(currentTool !== 'move') return;
+                let startX = e.clientX; let startY = e.clientY;
+                let isDragging = false; element.style.zIndex = 100;
+                function move(ev) {
+                    let dx = (ev.clientX - startX) / zoomLevel; 
+                    let dy = (ev.clientY - startY) / zoomLevel;
+                    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
+                    if (isDragging) {
+                        players[index].x += dx; players[index].y += dy;
+                        element.style.left = `${players[index].x}px`; element.style.top = `${players[index].y}px`;
+                        startX = ev.clientX; startY = ev.clientY;
+                        let trashRect = trashBin.getBoundingClientRect();
+                        let tokenRect = element.getBoundingClientRect();
+                        if (!(tokenRect.right < trashRect.left || tokenRect.left > trashRect.right || tokenRect.bottom < trashRect.top || tokenRect.top > trashRect.bottom)) {
+                            trashBin.classList.add('trash-active');
+                        } else { trashBin.classList.remove('trash-active'); }
+                    }
+                }
+                function up() {
+                    element.style.zIndex = '';
+                    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+                    if(trashBin.classList.contains('trash-active')) {
+                        trashBin.classList.remove('trash-active'); players.splice(index, 1); renderTokens(); saveGameState(); return;
+                    }
+                    if (!isDragging) openModal(index);
+                    else saveGameState();
+                }
+                window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+            });
+        }
+
+        function openModal(index) {
+            currentIndex = index;
+            document.getElementById('playerName').value = players[index].name;
+            const selectRole = document.getElementById('playerRole');
+            selectRole.value = players[index].role;
+            updateStarUI(); 
+            document.getElementById('playerGender').value = players[index].gender || "";
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+        function closeModal() { document.getElementById('editModal').classList.add('hidden'); currentIndex = null; }
+
+        // === ROLE ALERT SYSTEM (NEW) ===
+        function showRoleAlert(icon, title, body, onConfirm) {
+            document.getElementById('roleAlertIcon').innerText = icon;
+            document.getElementById('roleAlertTitle').innerText = title;
+            document.getElementById('roleAlertBody').innerText = body;
+            document.getElementById('roleAlertModal').classList.remove('hidden');
+
+            const confirmBtn = document.getElementById('roleAlertConfirmBtn');
+            confirmBtn.onclick = function() {
+                closeRoleAlert();
+                if (onConfirm) onConfirm();
+            };
+        }
+
+        function closeRoleAlert() {
+            document.getElementById('roleAlertModal').classList.add('hidden');
+        }
+
+        // === SET STATUS (พร้อมระบบแจ้งเตือนบทบาทพิเศษ) ===
+        function setStatus(status) {
+            if (currentIndex === null) return;
+
+            const p = players[currentIndex];
+
+            // ตรวจสอบ "ถูกปกป้อง" ก่อนทุกกรณี
+            if ((status === 'dead' || status === 'vampire') && p.status === 'protected') {
+                alert(`🛡️ รอดตาย! ผู้เล่น "${p.name}" ได้รับการปกป้อง ไม่สามารถฆ่าได้ในคืนนี้!`);
+                closeModal();
+                return;
+            }
+
+            const role = p.role;
+
+            // --- กรณีถูกหมาป่าฆ่า (dead) ---
+            if (status === 'dead') {
+
+                if (role === 'ผู้ต้องคำสาป (Cursed)') {
+                    showRoleAlert('🔴', 'ผู้ต้องคำสาป — ไม่ตาย!',
+                        '"' + p.name + '" ถูกหมาป่ากัด แต่ด้วยคำสาปที่ติดตัว เขา/เธอจะกลายร่างเป็นหมาป่าแทน ไม่ถูกฆ่า!\n\n→ ให้เปลี่ยนบทบาทเป็น "หมาป่า (Werewolf)" และตั้งสถานะกลับเป็น มีชีวิต',
+                        null
+                    );
+                    return;
+                }
+
+                if (role === 'บิ๊กฟุต (Bigfoot)') {
+                    showRoleAlert('🦶', 'บิ๊กฟุต — ไม่ตาย!',
+                        '"' + p.name + '" ถูกหมาป่ากัด แต่บิ๊กฟุตกลับกลายเป็นหมาป่าตัวใหม่แทน!\n\n→ ให้เปลี่ยนบทบาทเป็น "หมาป่า (Werewolf)" และตั้งสถานะกลับเป็น มีชีวิต',
+                        null
+                    );
+                    return;
+                }
+
+                if (role === 'จอมอึด (Tough Guy)') {
+                    showRoleAlert('💪', 'จอมอึด — ยังไม่ตายคืนนี้!',
+                        '"' + p.name + '" ถูกโจมตี แต่จอมอึดจะตายในคืนถัดไปเท่านั้น ไม่ใช่คืนนี้!\n\n→ ให้ GM จดไว้ว่าผู้เล่นนี้จะตายในรอบกลางคืนถัดไป สถานะยังคง "มีชีวิต" ไว้ก่อน',
+                        null
+                    );
+                    return;
+                }
+
+                if (role === 'นายพราน (Hunter)' || role === 'พรานหญิง (Huntress)') {
+                    const shortRole = role.split(' (')[0];
+                    showRoleAlert('🏹', shortRole + ' — ยิงได้ก่อนตาย!',
+                        '"' + p.name + '" กำลังจะตาย แต่ก่อนตายสามารถยิงผู้เล่นคนอื่น 1 คนตายตามได้ทันที!\n\n→ ถามผู้เล่นว่าต้องการยิงใคร แล้วค่อยบันทึกสถานะ "ถูกฆ่า"',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+
+                if (role === 'ลูกหมาป่า (Wolf Cub)') {
+                    showRoleAlert('🐺', 'ลูกหมาป่า — หมาป่าโกรธ!',
+                        '"' + p.name + '" (ลูกหมาป่า) ถูกฆ่า ฝูงหมาป่าจะโกรธและฆ่าเหยื่อ 2 คนในคืนถัดไปแทนที่จะเป็น 1 คนตามปกติ!\n\n→ GM จดไว้เพื่อแจ้งฝูงหมาป่าในคืนถัดไป',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+
+                if (role === 'ผู้เผยตัวตน (Martyr)') {
+                    showRoleAlert('✝️', 'ผู้เผยตัวตน — รับตายแทน!',
+                        '"' + p.name + '" สามารถเลือกรับตายแทนผู้เล่นที่โดนโหวตเผาได้ทันที ทำให้เป้าหมายนั้นรอด!\n\n→ ยืนยันว่าผู้เล่นนี้สละชีพแทนคนอื่นจริงหรือไม่?',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+            }
+
+            // --- กรณีถูกโหวตเผา (burned) ---
+            if (status === 'burned') {
+
+                if (role === 'เจ้าชาย (Prince)') {
+                    showRoleAlert('👑', 'เจ้าชาย — รอดจากการโหวต!',
+                        '"' + p.name + '" ถูกโหวตให้เผา แต่เจ้าชายรอดได้ 1 ครั้งจากการโหวตประชาชน! หมู่บ้านจะถูกเปิดเผยว่าเขาคือเจ้าชาย\n\n→ สถานะยังคง "มีชีวิต" เจ้าชายใช้ความสามารถนี้ได้ครั้งเดียวตลอดเกม',
+                        null
+                    );
+                    return;
+                }
+
+                if (role === 'ยาจก (Tanner / Jester)') {
+                    showRoleAlert('🤡', 'ยาจก — ชนะแล้ว!',
+                        '"' + p.name + '" โดนโหวตเผา นั่นหมายความว่า ยาจกบรรลุเป้าหมายและชนะเกมทันที!\n\n→ ประกาศให้ทุกคนทราบว่ายาจกชนะ และเกมจบลง (หรือดำเนินต่อโดยไม่มีผู้เล่นนี้)',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+
+                if (role === 'นายพราน (Hunter)' || role === 'พรานหญิง (Huntress)') {
+                    const shortRole = role.split(' (')[0];
+                    showRoleAlert('🏹', shortRole + ' — ยิงได้ก่อนตาย!',
+                        '"' + p.name + '" ถูกโหวตเผา แต่ก่อนตายสามารถยิงผู้เล่นคนอื่น 1 คนตายตามได้ทันที!\n\n→ ถามผู้เล่นว่าต้องการยิงใคร แล้วค่อยบันทึกสถานะ',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+
+                if (role === 'ลูกหมาป่า (Wolf Cub)') {
+                    showRoleAlert('🐺', 'ลูกหมาป่า — หมาป่าโกรธ!',
+                        '"' + p.name + '" (ลูกหมาป่า) ถูกเผา ฝูงหมาป่าจะโกรธและฆ่าเหยื่อ 2 คนในคืนถัดไป!\n\n→ GM จดไว้เพื่อแจ้งฝูงหมาป่าในคืนถัดไป',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+
+                if (role === 'ผู้เผยตัวตน (Martyr)') {
+                    showRoleAlert('✝️', 'ผู้เผยตัวตน — รับตายแทน!',
+                        '"' + p.name + '" สามารถเลือกรับตายแทนผู้เล่นที่โดนโหวตเผาได้ทันที ทำให้เป้าหมายนั้นรอด!\n\n→ ยืนยันว่าผู้เล่นนี้สละชีพแทนคนอื่นจริงหรือไม่?',
+                        () => { players[currentIndex].status = status; savePlayer(); }
+                    );
+                    return;
+                }
+            }
+
+            // ไม่มีบทบาทพิเศษ → บันทึกสถานะปกติ
+            players[currentIndex].status = status;
+            savePlayer();
+        }
+
+        function savePlayer() {
+            if (currentIndex !== null) {
+                players[currentIndex].name = document.getElementById('playerName').value;
+                players[currentIndex].role = document.getElementById('playerRole').value;
+                players[currentIndex].gender = document.getElementById('playerGender').value;
+                renderTokens(); closeModal();
+                saveGameState();
+            }
+        }
+
+        // === 4. ปุ่มควบคุมเกมหลัก ===
+        function startNewDay() {
+            players.forEach(p => { if (p.status === 'protected') p.status = 'alive'; });
+            renderTokens(); 
+            endNight(); 
+            saveGameState();
+        }
+
+        function resetGame() {
+            if (confirm('⚠️ ต้องการรีเซ็ต "บทบาทและสถานะ" ผู้เล่นทุกคนใช่ไหม?\n(ชื่อผู้เล่น, จำนวนคน, ตำแหน่งการนั่ง และรอยปากกาจะยังอยู่เหมือนเดิม)')) {
+                players.forEach(p => {
+                    p.role = 'ไม่ระบุ';
+                    p.status = 'alive';
+                    p.gender = '';
+                });
+                renderTokens(); 
+                endNight();
+                saveGameState();
+            }
+        }
+
+        function hardReset() {
+            if(confirm('🚨 คำเตือน: คุณต้องการล้างแอปทั้งหมดกลับไปจุดเริ่มต้นเลยใช่หรือไม่?\n(ลบคน, ลบหมึก, รีเซ็ตหน้าจอ)')) {
+                localStorage.removeItem('werewolfGMState');
+                location.reload(); 
+            }
+        }
+
+        // === 5. ระบบผู้ช่วย GM กลางคืน ===
+        function startNight() {
+            let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
+            let hasWolfPack = wolfRoles.some(r => aliveRolesSet.has(r));
+            let hasBodyguardPriest = aliveRolesSet.has('บอดี้การ์ด (Bodyguard)') || aliveRolesSet.has('นักบวช (Priest)');
+            let hasKiller = aliveRolesSet.has('บล็อบจอมเขมือบ (Serial Killer)') || aliveRolesSet.has('แมรี่กระหายเลือด (Bloody Mary)');
+            let hasSeer = aliveRolesSet.has('เทพพยากรณ์ (Seer)') || aliveRolesSet.has('ญาณทิพย์ (Aura Seer)') || aliveRolesSet.has('เทพผู้รู้แจ้ง (Oracle)') || aliveRolesSet.has('นักสืบเรื่องลี้ลับ (Paranormal Investigator)');
+
+            nightSteps = ['หลับตาทุกคน (เริ่มกลางคืน 🌙)'];
+            orderOfNight.forEach(roleKey => {
+                if (roleKey === 'WolfPack' && hasWolfPack) { nightSteps.push(roleInstructions['WolfPack']); }
+                else if (roleKey === 'บอดี้การ์ด_นักบวช' && hasBodyguardPriest) { nightSteps.push(roleInstructions['บอดี้การ์ด_นักบวช']); }
+                else if (roleKey === 'บล็อบจอมเขมือบ_แมรี่' && hasKiller) { nightSteps.push(roleInstructions['บล็อบจอมเขมือบ_แมรี่']); }
+                else if (roleKey === 'หมอดู_นักสืบ' && hasSeer) { nightSteps.push(roleInstructions['หมอดู_นักสืบ']); }
+                else if (aliveRolesSet.has(roleKey)) { nightSteps.push(roleInstructions[roleKey]); }
+            });
+            nightSteps.push('☀️ เช้าแล้ว! ลืมตาทุกคน\n(กดปุ่ม "🌞 เช้า" ด้านบนเพื่อปลดโล่)');
+            
+            currentNightStepIndex = 0;
+            document.getElementById('night-guide').classList.remove('hidden');
+            updateNightUI();
+        }
+
+        function updateNightUI() { document.getElementById('night-text').innerText = nightSteps[currentNightStepIndex]; }
+        function nextNightStep() { if (currentNightStepIndex < nightSteps.length - 1) { currentNightStepIndex++; updateNightUI(); } else { endNight(); } }
+        function prevNightStep() { if (currentNightStepIndex > 0) { currentNightStepIndex--; updateNightUI(); } }
+        function endNight() { document.getElementById('night-guide').classList.add('hidden'); }
+
+        // === 6. ระบบกระดานวาดรูป ===
+        function setTool(tool) {
+            currentTool = tool;
+            document.getElementById('tool-move').className = 'px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors text-white font-bold flex-1';
+            document.getElementById('tool-pen').className = 'px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors text-white font-bold flex-1 flex items-center justify-center gap-1';
+            document.getElementById('tool-eraser').className = 'px-2 sm:px-3 py-1.5 rounded text-sm sm:text-base transition-colors text-white font-bold flex-1';
+            
+            if(tool !== 'pen') {
+                document.getElementById(`tool-${tool}`).classList.add('tool-active');
+                document.getElementById(`tool-${tool}`).classList.remove('text-white');
+            } else {
+                document.getElementById('tool-pen').classList.add('tool-active');
+                document.getElementById('tool-pen').classList.remove('text-white');
+            }
+
+            if (tool === 'move') {
+                canvas.style.pointerEvents = 'none'; 
+            } else {
+                canvas.style.pointerEvents = 'auto'; 
+            }
+        }
+
+        function getTouchPos(e) {
+            const rect = canvas.getBoundingClientRect(); 
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: (clientX - rect.left) / zoomLevel, y: (clientY - rect.top) / zoomLevel };
+        }
+
+        function startDrawing(e) {
+            if (currentTool === 'move') return;
+            isDrawing = true; const pos = getTouchPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y);
+            if(currentTool === 'pen') { 
+                ctx.globalCompositeOperation = 'source-over'; 
+                ctx.strokeStyle = penColorPicker.value; 
+                ctx.lineWidth = 4; 
+            } 
+            else if (currentTool === 'eraser') { 
+                ctx.globalCompositeOperation = 'destination-out'; 
+                ctx.lineWidth = 40; 
+            }
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        }
+        function draw(e) { if (!isDrawing) return; e.preventDefault(); const pos = getTouchPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); }
+        function stopDrawing() { 
+            if(isDrawing) {
+                isDrawing = false; 
+                saveGameState(); 
+            }
+        }
+        function clearCanvas() { 
+            ctx.clearRect(0, 0, canvas.width, canvas.height); 
+            saveGameState(); 
+        }
+
+        canvas.addEventListener('mousedown', startDrawing); canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing); canvas.addEventListener('mouseout', stopDrawing);
+        canvas.addEventListener('touchstart', startDrawing, {passive: false}); canvas.addEventListener('touchmove', draw, {passive: false});
+        canvas.addEventListener('touchend', stopDrawing);
+
+    </script>
+</body>
+</html>

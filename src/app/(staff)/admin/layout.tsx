@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
   { href: "/admin/payment", label: "ยืนยันชำระ", icon: "💳" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
+  { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
 ];
 
 const OWNER_NAV = [
