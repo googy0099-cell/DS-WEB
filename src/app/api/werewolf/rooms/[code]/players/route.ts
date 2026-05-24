@@ -10,7 +10,7 @@ async function requireGM(code: string) {
   return { session, room };
 }
 
-// GET — list players in room
+// GET — list players in room, ordered by seatOrder then joinedAt
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -21,7 +21,7 @@ export async function GET(
 
   const players = await db.werewolfRoomPlayer.findMany({
     where: { roomId: gm.room.id },
-    orderBy: { joinedAt: "asc" },
+    orderBy: [{ seatOrder: "asc" }, { joinedAt: "asc" }],
     include: { user: { select: { id: true, firstName: true, nickname: true, username: true } } },
   });
 
@@ -48,15 +48,24 @@ export async function POST(
   });
   if (existing) return NextResponse.json({ error: "สมาชิกนี้อยู่ในห้องแล้ว" }, { status: 409 });
 
+  const lastPlayer = await db.werewolfRoomPlayer.findFirst({
+    where: { roomId: gm.room.id },
+    orderBy: { seatOrder: "desc" },
+  });
   const player = await db.werewolfRoomPlayer.create({
-    data: { roomId: gm.room.id, userId: Number(userId), seatName: seatName.trim() },
+    data: {
+      roomId: gm.room.id,
+      userId: Number(userId),
+      seatName: seatName.trim(),
+      seatOrder: (lastPlayer?.seatOrder ?? -1) + 1,
+    },
     include: { user: { select: { id: true, firstName: true, nickname: true, username: true } } },
   });
 
   return NextResponse.json(player);
 }
 
-// PATCH — GM updates seat names (batch: [{userId, seatName}])
+// PATCH — GM updates seat names + order (batch: [{userId, seatName, seatOrder}])
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -65,14 +74,14 @@ export async function PATCH(
   const gm = await requireGM(code);
   if (!gm) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { updates } = await req.json() as { updates: { userId: number; seatName: string }[] };
+  const { updates } = await req.json() as { updates: { userId: number; seatName: string; seatOrder: number }[] };
   if (!Array.isArray(updates)) return NextResponse.json({ error: "Invalid" }, { status: 400 });
 
   await Promise.all(
-    updates.map((u) =>
+    updates.map((u, i) =>
       db.werewolfRoomPlayer.update({
         where: { roomId_userId: { roomId: gm.room.id, userId: u.userId } },
-        data: { seatName: u.seatName.trim() },
+        data: { seatName: u.seatName.trim(), seatOrder: u.seatOrder ?? i },
       })
     )
   );

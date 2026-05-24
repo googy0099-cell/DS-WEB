@@ -16,7 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
-      players: { select: { userId: true, seatName: true } },
+      players: {
+        select: { userId: true, seatName: true, seatOrder: true },
+        orderBy: [{ seatOrder: "asc" }, { joinedAt: "asc" }],
+      },
       session: {
         include: {
           playerRoles: {
@@ -29,14 +32,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
 
   if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
 
-  const seatMap = new Map(room.players.map((p) => [p.userId, p.seatName]));
-  const sessionData = {
-    ...room.session,
-    playerRoles: room.session.playerRoles.map((sp) => ({
+  const seatMap = new Map(room.players.map((p) => [p.userId, { seatName: p.seatName, seatOrder: p.seatOrder }]));
+
+  // Sort playerRoles by seatOrder so canvas places tokens in seat order
+  const playerRoles = room.session.playerRoles
+    .map((sp) => ({
       ...sp,
-      seatName: seatMap.get(sp.userId) ?? null,
-    })),
-  };
+      seatName: seatMap.get(sp.userId)?.seatName ?? null,
+      seatOrder: seatMap.get(sp.userId)?.seatOrder ?? 999,
+    }))
+    .sort((a, b) => a.seatOrder - b.seatOrder);
+
+  const sessionData = { ...room.session, playerRoles };
   return NextResponse.json(sessionData);
 }
 

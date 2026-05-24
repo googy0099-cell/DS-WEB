@@ -255,13 +255,14 @@ model WerewolfRoom {
 }
 
 model WerewolfRoomPlayer {
-  id       Int          @id @default(autoincrement())
-  roomId   Int
-  room     WerewolfRoom @relation(fields: [roomId], references: [id])
-  userId   Int
-  user     User         @relation("WerewolfRoomPlayers", fields: [userId], references: [id])
-  seatName String
-  joinedAt DateTime     @default(now())
+  id        Int          @id @default(autoincrement())
+  roomId    Int
+  room      WerewolfRoom @relation(fields: [roomId], references: [id])
+  userId    Int
+  user      User         @relation("WerewolfRoomPlayers", fields: [userId], references: [id])
+  seatName  String
+  seatOrder Int          @default(0)
+  joinedAt  DateTime     @default(now())
 
   @@unique([roomId, userId])
 }

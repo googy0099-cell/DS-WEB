@@ -4,16 +4,16 @@ import { useEffect, useState, use, useCallback } from "react";
 import useSWR from "swr";
 import QRCode from "qrcode";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
 import { wolfRoles, villagerRoles, indyRoles, vampireRoles } from "@/lib/werewolf-roles";
-import { useRouter } from "next/navigation";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 interface Player {
   id: number;
   seatName: string;
+  seatOrder: number;
   joinedAt: string;
   user: { id: number; firstName: string; nickname: string | null; username: string };
 }
@@ -29,15 +29,15 @@ interface MemberResult {
 interface Assignment {
   userId: number;
   seatName: string;
+  seatOrder: number;
   role: string;
   team: string;
-  usePhone: boolean;
 }
 
 interface SessionData {
   id: number;
   phase: string;
-  playerRoles: { userId: number; role: string; team: string; seatName: string | null }[];
+  playerRoles: { userId: number; role: string; team: string; seatName: string | null; seatOrder?: number }[];
 }
 
 // ── Role data ──────────────────────────────────────────────────────────
@@ -63,11 +63,16 @@ const TEAM_CHIP: Record<string, string> = {
   indy:    "bg-green-100 text-green-700 border-green-200",
   vampire: "bg-purple-100 text-purple-700 border-purple-200",
 };
+const TEAM_BG: Record<string, string> = {
+  wolf: "bg-red-50", village: "bg-blue-50", indy: "bg-green-50", vampire: "bg-purple-50",
+};
 const TEAM_LABEL: Record<string, string> = {
   wolf: "หมาป่า", village: "ชาวบ้าน", indy: "อิสระ", vampire: "แวมไพร์",
 };
 
-// ── Main inner component ───────────────────────────────────────────────
+// ── Seat row item (in seat manager) ───────────────────────────────────
+interface SeatRow { userId: number; seatName: string; displayName: string; username: string }
+
 function GMRoomInner({ code }: { code: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -75,9 +80,9 @@ function GMRoomInner({ code }: { code: string }) {
   const [isOpen, setIsOpen] = useState(true);
 
   // Modals
-  const [showSeatModal, setShowSeatModal]   = useState(false);
-  const [showRoleModal, setShowRoleModal]   = useState(false);
-  const [showCheckModal, setShowCheckModal] = useState(false);
+  const [showSeatModal, setShowSeatModal]     = useState(false);
+  const [showRoleModal, setShowRoleModal]     = useState(false);
+  const [showCheckModal, setShowCheckModal]   = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Role selection
@@ -86,20 +91,20 @@ function GMRoomInner({ code }: { code: string }) {
   const [roleStep, setRoleStep]             = useState<"roles" | "decoys">("roles");
   const [favRoles, setFavRoles]             = useState<string[]>([]);
 
-  // Seat manager state
-  const [seatEdits, setSeatEdits]       = useState<Record<number, string>>({});
-  const [memberSearch, setMemberSearch] = useState("");
+  // Seat manager — ordered list of seats
+  const [seatRows, setSeatRows]           = useState<SeatRow[]>([]);
+  const [seatNames, setSeatNames]         = useState<Record<number, string>>({});
+  const [memberSearch, setMemberSearch]   = useState("");
   const [memberResults, setMemberResults] = useState<MemberResult[]>([]);
-  const [addingSeat, setAddingSeat]     = useState("");
-  const [addingUserId, setAddingUserId] = useState<number | null>(null);
-  const [savingSeats, setSavingSeats]   = useState(false);
+  const [addingSeat, setAddingSeat]       = useState("");
+  const [addingUserId, setAddingUserId]   = useState<number | null>(null);
+  const [savingSeats, setSavingSeats]     = useState(false);
 
-  // Session state
-  const [assignments, setAssignments]   = useState<Assignment[] | null>(null);
-  const [phoneFlags, setPhoneFlags]     = useState<Record<number, boolean>>({});
+  // Session
+  const [assignments, setAssignments]         = useState<Assignment[] | null>(null);
   const [startingSession, setStartingSession] = useState(false);
-  const [sessionError, setSessionError] = useState("");
-  const [deletingRoom, setDeletingRoom] = useState(false);
+  const [sessionError, setSessionError]       = useState("");
+  const [deletingRoom, setDeletingRoom]       = useState(false);
 
   const { data: players, mutate: mutatePlayers } = useSWR<Player[]>(
     `/api/werewolf/rooms/${code}/players`,
@@ -107,7 +112,7 @@ function GMRoomInner({ code }: { code: string }) {
     { refreshInterval: 5000 }
   );
 
-  // Load favorites from localStorage
+  // Load favorites
   useEffect(() => {
     try {
       const saved = localStorage.getItem(FAV_KEY);
@@ -127,30 +132,33 @@ function GMRoomInner({ code }: { code: string }) {
       .then((r) => r.json())
       .then((s: SessionData) => {
         if (s?.playerRoles?.length) {
-          const loaded: Assignment[] = s.playerRoles.map((sp) => ({
+          const loaded: Assignment[] = s.playerRoles.map((sp, i) => ({
             userId: sp.userId,
             seatName: sp.seatName ?? `User ${sp.userId}`,
+            seatOrder: sp.seatOrder ?? i,
             role: sp.role,
             team: sp.team,
-            usePhone: true,
           }));
           setAssignments(loaded);
-          const flags: Record<number, boolean> = {};
-          loaded.forEach((a) => { flags[a.userId] = true; });
-          setPhoneFlags(flags);
           if (searchParams.get("check") === "1") setShowCheckModal(true);
         }
       })
       .catch(() => {});
   }, [code, searchParams]);
 
-  // Sync seat edits when players load
+  // Sync seat rows when players change
   useEffect(() => {
-    if (players) {
-      const edits: Record<number, string> = {};
-      players.forEach((p) => { edits[p.user.id] = p.seatName; });
-      setSeatEdits(edits);
-    }
+    if (!players) return;
+    const rows: SeatRow[] = players.map((p) => ({
+      userId: p.user.id,
+      seatName: p.seatName,
+      displayName: p.user.nickname || p.user.firstName,
+      username: p.user.username,
+    }));
+    setSeatRows(rows);
+    const names: Record<number, string> = {};
+    players.forEach((p) => { names[p.user.id] = p.seatName; });
+    setSeatNames(names);
   }, [players]);
 
   // Member search
@@ -166,8 +174,16 @@ function GMRoomInner({ code }: { code: string }) {
     return () => clearTimeout(t);
   }, [memberSearch, searchMembers]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────
+  // ── Seat reorder helpers ──────────────────────────────────────────────
+  function moveSeat(index: number, dir: -1 | 1) {
+    const next = [...seatRows];
+    const swap = index + dir;
+    if (swap < 0 || swap >= next.length) return;
+    [next[index], next[swap]] = [next[swap], next[index]];
+    setSeatRows(next);
+  }
 
+  // ── Handlers ──────────────────────────────────────────────────────────
   async function toggleRoom() {
     const newOpen = !isOpen;
     await fetch(`/api/werewolf/rooms/${code}`, {
@@ -180,9 +196,10 @@ function GMRoomInner({ code }: { code: string }) {
 
   async function saveSeats() {
     setSavingSeats(true);
-    const updates = Object.entries(seatEdits).map(([uid, seatName]) => ({
-      userId: Number(uid),
-      seatName,
+    const updates = seatRows.map((row, i) => ({
+      userId: row.userId,
+      seatName: (seatNames[row.userId] ?? row.seatName).trim() || row.displayName,
+      seatOrder: i,
     }));
     await fetch(`/api/werewolf/rooms/${code}/players`, {
       method: "PATCH",
@@ -203,10 +220,7 @@ function GMRoomInner({ code }: { code: string }) {
     });
     if (res.ok) {
       await mutatePlayers();
-      setAddingUserId(null);
-      setAddingSeat("");
-      setMemberSearch("");
-      setMemberResults([]);
+      setAddingUserId(null); setAddingSeat(""); setMemberSearch(""); setMemberResults([]);
     }
   }
 
@@ -217,7 +231,6 @@ function GMRoomInner({ code }: { code: string }) {
       body: JSON.stringify({ userId }),
     });
     await mutatePlayers();
-    setSeatEdits((prev) => { const n = { ...prev }; delete n[userId]; return n; });
   }
 
   function toggleFav(role: string) {
@@ -228,38 +241,18 @@ function GMRoomInner({ code }: { code: string }) {
     });
   }
 
-  function toggleRole(role: string) {
-    setSelectedRoles((prev) =>
-      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
-    );
-  }
-
   async function startSession() {
     setStartingSession(true);
     setSessionError("");
     try {
-      const allPlayers = players ?? [];
-      const phoneOnlyPlayers = allPlayers.filter((p) => phoneFlags[p.user.id] !== false);
-      const cardOnlyPlayers  = allPlayers.filter((p) => phoneFlags[p.user.id] === false);
-
       const res = await fetch("/api/werewolf/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomCode: code,
-          selectedRoles,
-          decoyRoles: selectedDecoys,
-          cardOnlyUserIds: cardOnlyPlayers.map((p) => p.user.id),
-        }),
+        body: JSON.stringify({ roomCode: code, selectedRoles, decoyRoles: selectedDecoys }),
       });
       const data = await res.json();
       if (!res.ok) { setSessionError(data.error || "เกิดข้อผิดพลาด"); return; }
-
-      const loaded: Assignment[] = data.assignments.map((a: { userId: number; seatName: string; role: string; team: string }) => ({
-        ...a,
-        usePhone: phoneFlags[a.userId] !== false,
-      }));
-      setAssignments(loaded);
+      setAssignments(data.assignments.map((a: Assignment) => ({ ...a, seatOrder: a.seatOrder ?? 0 })));
       setShowRoleModal(false);
       setShowCheckModal(true);
     } catch {
@@ -278,11 +271,12 @@ function GMRoomInner({ code }: { code: string }) {
 
   // ── Computed ──────────────────────────────────────────────────────────
   const playerCount  = players?.length ?? 0;
-  const roleCount    = selectedRoles.length;
   const hasSession   = !!assignments?.length;
   const favFiltered  = favRoles.filter((r) =>
     [...wolfRoles, ...villagerRoles, ...indyRoles, ...vampireRoles].includes(r)
   );
+  // Sorted assignments for check modal (by seatOrder)
+  const sortedAssignments = assignments ? [...assignments].sort((a, b) => a.seatOrder - b.seatOrder) : [];
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -307,7 +301,7 @@ function GMRoomInner({ code }: { code: string }) {
         <p className="text-xs text-gray-400">ผู้เล่น scan QR หรือพิมพ์ /join/{code}</p>
       </div>
 
-      {/* Player list + Seat Manager */}
+      {/* Player list + seat manager button */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-navy text-sm">ผู้เล่นในห้อง</h2>
@@ -323,23 +317,23 @@ function GMRoomInner({ code }: { code: string }) {
             </button>
           </div>
         </div>
+
         {!players?.length ? (
           <p className="text-gray-400 text-sm text-center py-4">รอผู้เล่น scan QR...</p>
         ) : (
           <div className="space-y-2">
             {players.map((p, i) => {
               const assign = assignments?.find((a) => a.userId === p.user.id);
-              const isCard = phoneFlags[p.user.id] === false;
               return (
                 <div key={p.id} className="flex items-center gap-3 py-1.5 border-b border-gray-50 last:border-0">
-                  <div className="w-7 h-7 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold text-xs shrink-0">
+                  {/* Seat number badge */}
+                  <div className="w-7 h-7 rounded-full bg-navy text-cream flex items-center justify-center text-xs font-bold shrink-0">
                     {i + 1}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-navy">{p.seatName}</p>
                     <p className="text-xs text-gray-400">{p.user.nickname || p.user.firstName}</p>
                   </div>
-                  {isCard && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full shrink-0">🃏 การ์ด</span>}
                   {assign && (
                     <div className={`text-right shrink-0 border px-2 py-0.5 rounded-lg ${TEAM_CHIP[assign.team]}`}>
                       <p className="text-xs font-bold leading-tight">{assign.role.split(" (")[0]}</p>
@@ -362,7 +356,7 @@ function GMRoomInner({ code }: { code: string }) {
             <span className="text-2xl">✅</span>
             <div>
               <p className="font-bold text-green-800 text-sm">แจกไพ่แล้ว — {assignments!.length} คน</p>
-              <p className="text-xs text-green-600">ผู้เล่นที่ใช้โทรศัพท์สามารถดูบทบาทได้แล้ว</p>
+              <p className="text-xs text-green-600">ผู้เล่นที่ใช้มือถือดูบทบาทได้ทันที · ส่วนอื่นดูจาก GM View</p>
             </div>
           </div>
 
@@ -378,7 +372,7 @@ function GMRoomInner({ code }: { code: string }) {
             className="block w-full bg-navy text-cream font-bold py-5 rounded-2xl text-base text-center shadow-lg"
           >
             🖥️ เปิด GM Canvas
-            <p className="text-cream/60 text-xs font-normal mt-0.5">ดำเนินเกม · Night Phase · Mark ผู้เล่น</p>
+            <p className="text-cream/60 text-xs font-normal mt-0.5">token วางตามลำดับที่นั่ง · Night Phase · Mark ผู้เล่น</p>
           </Link>
 
           <button
@@ -389,7 +383,6 @@ function GMRoomInner({ code }: { code: string }) {
           </button>
         </div>
       ) : (
-        /* === NO SESSION === */
         <div className="space-y-3 mb-4">
           <button
             onClick={() => { setRoleStep("roles"); setShowRoleModal(true); }}
@@ -424,7 +417,7 @@ function GMRoomInner({ code }: { code: string }) {
       </div>
 
       {/* ══════════════════════════════════════════════
-          MODAL: SEAT MANAGER
+          MODAL: SEAT MANAGER (ORDERED SEATING)
       ══════════════════════════════════════════════ */}
       {showSeatModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center p-4">
@@ -432,66 +425,77 @@ function GMRoomInner({ code }: { code: string }) {
             <div className="p-5 border-b border-gray-100 shrink-0">
               <div className="flex justify-between items-center">
                 <div>
-                  <h2 className="font-bold text-navy text-lg">🪑 จัดที่นั่งผู้เล่น</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">แก้ไขชื่อที่นั่ง · เพิ่มผู้เล่นด้วยบัตรสมาชิก</p>
+                  <h2 className="font-bold text-navy text-lg">🪑 จัดตำแหน่งที่นั่ง</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">ลำดับในรายการ = ตำแหน่งบนโต๊ะในแคนวาส (เริ่มจากบนตามเข็มนาฬิกา)</p>
                 </div>
                 <button onClick={() => setShowSeatModal(false)} className="text-gray-400 text-2xl leading-none">×</button>
               </div>
             </div>
 
             <div className="overflow-y-auto flex-1 p-4 space-y-4">
-              {/* Existing players — edit seat names */}
-              {players?.length ? (
+              {/* Ordered seat list with ↑↓ */}
+              {seatRows.length > 0 ? (
                 <div>
-                  <p className="text-xs font-bold text-gray-400 mb-2">ผู้เล่นในห้อง — แก้ไขชื่อที่นั่ง</p>
+                  <p className="text-xs font-bold text-gray-400 mb-2">ลำดับที่นั่ง — ลากหรือกด ↑↓ เพื่อเรียงใหม่</p>
                   <div className="space-y-2">
-                    {players.map((p) => (
-                      <div key={p.id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                    {seatRows.map((row, i) => (
+                      <div key={row.userId} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2">
+                        {/* Seat number */}
+                        <div className="w-7 h-7 rounded-full bg-navy text-cream flex items-center justify-center text-xs font-bold shrink-0">
+                          {i + 1}
+                        </div>
+                        {/* Name input */}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-400">{p.user.nickname || p.user.firstName} (@{p.user.username})</p>
+                          <p className="text-[10px] text-gray-400 mb-0.5">{row.displayName} (@{row.username})</p>
                           <input
                             type="text"
-                            value={seatEdits[p.user.id] ?? p.seatName}
-                            onChange={(e) => setSeatEdits((prev) => ({ ...prev, [p.user.id]: e.target.value }))}
-                            className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold text-navy mt-1 outline-none focus:border-navy"
-                            placeholder="ชื่อที่นั่ง / เลขที่นั่ง"
+                            value={seatNames[row.userId] ?? row.seatName}
+                            onChange={(e) => setSeatNames((prev) => ({ ...prev, [row.userId]: e.target.value }))}
+                            className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1 text-sm font-bold text-navy outline-none focus:border-navy"
+                            placeholder="ชื่อ / เลขที่นั่ง"
                           />
                         </div>
-                        {/* Phone / Card toggle */}
+                        {/* Up/Down */}
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button
+                            onClick={() => moveSeat(i, -1)}
+                            disabled={i === 0}
+                            className="w-7 h-7 flex items-center justify-center bg-gray-200 rounded text-xs disabled:opacity-30 hover:bg-gray-300"
+                          >↑</button>
+                          <button
+                            onClick={() => moveSeat(i, 1)}
+                            disabled={i === seatRows.length - 1}
+                            className="w-7 h-7 flex items-center justify-center bg-gray-200 rounded text-xs disabled:opacity-30 hover:bg-gray-300"
+                          >↓</button>
+                        </div>
+                        {/* Remove */}
                         <button
-                          onClick={() => setPhoneFlags((prev) => ({ ...prev, [p.user.id]: prev[p.user.id] === false ? true : false }))}
-                          className={`shrink-0 text-xs font-bold px-2 py-1.5 rounded-lg border transition-colors ${
-                            phoneFlags[p.user.id] === false
-                              ? "bg-amber-100 text-amber-700 border-amber-200"
-                              : "bg-blue-50 text-blue-600 border-blue-200"
-                          }`}
-                          title="สลับระหว่างใช้โทรศัพท์ / การ์ดจริง"
-                        >
-                          {phoneFlags[p.user.id] === false ? "🃏" : "📱"}
-                        </button>
-                        <button
-                          onClick={() => removePlayer(p.user.id)}
-                          className="shrink-0 text-red-400 hover:text-red-600 text-lg leading-none px-1"
-                        >
-                          ×
-                        </button>
+                          onClick={() => removePlayer(row.userId)}
+                          className="shrink-0 text-red-400 hover:text-red-600 text-lg leading-none w-6"
+                        >×</button>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-400 mt-2">📱 = ใช้โทรศัพท์รับบทบาท &nbsp;|&nbsp; 🃏 = ใช้การ์ดจริง (ยังเก็บคะแนนได้)</p>
+
+                  {/* Canvas position hint */}
+                  <div className="mt-3 bg-navy/5 rounded-xl p-3 text-xs text-gray-500 flex items-start gap-2">
+                    <span className="text-base">🖥️</span>
+                    <span>เมื่อเปิด GM Canvas ผู้เล่นที่นั่ง 1 จะอยู่บนสุด และเรียงตามเข็มนาฬิกาต่อไป</span>
+                  </div>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400 text-center py-2">ยังไม่มีผู้เล่น</p>
+                <p className="text-sm text-gray-400 text-center py-2">ยังไม่มีผู้เล่น — รอ scan QR หรือเพิ่มด้านล่าง</p>
               )}
 
               {/* Add card player by member search */}
               <div className="border-t border-gray-100 pt-4">
-                <p className="text-xs font-bold text-gray-400 mb-2">เพิ่มผู้เล่นด้วยบัตรสมาชิก (ไม่ได้ใช้โทรศัพท์)</p>
+                <p className="text-xs font-bold text-gray-400 mb-2">เพิ่มผู้เล่นด้วยบัตรสมาชิก</p>
+                <p className="text-[10px] text-gray-400 mb-2">สำหรับผู้เล่นที่ไม่ได้ scan QR — ยังเก็บคะแนนได้ โดย GM แจกการ์ดให้เอง</p>
                 <input
                   type="text"
                   value={memberSearch}
                   onChange={(e) => setMemberSearch(e.target.value)}
-                  placeholder="ค้นหาจาก username, รหัส, หรืออีเมล"
+                  placeholder="ค้นหา username, รหัสสมาชิก, หรืออีเมล"
                   className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-navy mb-2"
                 />
                 {memberResults.map((m) => (
@@ -501,7 +505,7 @@ function GMRoomInner({ code }: { code: string }) {
                     className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-navy/5 rounded-xl mb-1 text-sm"
                   >
                     <span className="font-bold text-navy">{m.firstName}</span>
-                    <span className="text-gray-400 ml-2">@{m.username} · {m.memberCode}</span>
+                    <span className="text-gray-400 ml-2 text-xs">@{m.username} · {m.memberCode}</span>
                   </button>
                 ))}
                 {addingUserId && (
@@ -510,7 +514,7 @@ function GMRoomInner({ code }: { code: string }) {
                       type="text"
                       value={addingSeat}
                       onChange={(e) => setAddingSeat(e.target.value)}
-                      placeholder="ชื่อที่นั่ง (เช่น ที่นั่ง 3)"
+                      placeholder="ชื่อที่นั่ง เช่น ที่นั่ง 3"
                       className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-navy"
                     />
                     <button
@@ -530,7 +534,7 @@ function GMRoomInner({ code }: { code: string }) {
                 disabled={savingSeats}
                 className="w-full bg-navy text-cream py-3.5 rounded-2xl font-bold text-sm disabled:opacity-50"
               >
-                {savingSeats ? "กำลังบันทึก..." : "✅ บันทึกที่นั่ง"}
+                {savingSeats ? "กำลังบันทึก..." : "✅ บันทึกตำแหน่งที่นั่ง"}
               </button>
             </div>
           </div>
@@ -538,7 +542,7 @@ function GMRoomInner({ code }: { code: string }) {
       )}
 
       {/* ══════════════════════════════════════════════
-          MODAL: ROLE CHECK (GM VIEW)
+          MODAL: ROLE CHECK — GM REFERENCE TABLE
       ══════════════════════════════════════════════ */}
       {showCheckModal && assignments && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end justify-center p-4">
@@ -547,30 +551,32 @@ function GMRoomInner({ code }: { code: string }) {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="font-bold text-navy text-lg">🔍 ตรวจสอบบทบาท</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">GM View — ผู้เล่นไม่เห็นหน้าจอนี้</p>
+                  <p className="text-xs text-gray-400 mt-0.5">GM View · ใช้แจกการ์ดให้ผู้เล่นที่ไม่มีมือถือ</p>
                 </div>
                 <button onClick={() => setShowCheckModal(false)} className="text-gray-400 text-2xl leading-none">×</button>
               </div>
             </div>
 
             <div className="overflow-y-auto flex-1 p-4 space-y-2">
-              {assignments.map((a) => (
-                <div key={a.userId} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
-                  <div className="w-9 h-9 rounded-full bg-navy/10 flex items-center justify-center text-navy font-bold shrink-0">
-                    {a.seatName.charAt(0).toUpperCase()}
+              {sortedAssignments.map((a, i) => (
+                <div key={a.userId} className={`flex items-center gap-3 rounded-xl px-4 py-3 border ${TEAM_BG[a.team]} ${TEAM_CHIP[a.team].replace(/text-\S+/, "").replace(/bg-\S+/, "")}`}>
+                  {/* Seat number */}
+                  <div className="w-9 h-9 rounded-full bg-navy text-cream flex items-center justify-center font-bold text-sm shrink-0">
+                    {i + 1}
                   </div>
+                  {/* Seat name */}
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm text-navy">{a.seatName}</p>
-                    {!a.usePhone && <span className="text-xs text-amber-600">🃏 ใช้การ์ดจริง</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full border font-bold ${TEAM_CHIP[a.team]}`}>
+                      {TEAM_LABEL[a.team]}
+                    </span>
                   </div>
+                  {/* Role */}
                   <div className="text-right shrink-0">
                     <p className="font-bold text-sm text-navy">{a.role.split(" (")[0]}</p>
                     {a.role.includes("(") && (
-                      <p className="text-[10px] text-gray-400">{a.role.match(/\(([^)]+)\)/)?.[1]}</p>
+                      <p className="text-[10px] text-gray-500">{a.role.match(/\(([^)]+)\)/)?.[1]}</p>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full border ${TEAM_CHIP[a.team]}`}>
-                      {TEAM_LABEL[a.team]}
-                    </span>
                   </div>
                 </div>
               ))}
@@ -594,7 +600,9 @@ function GMRoomInner({ code }: { code: string }) {
             </div>
 
             <div className="p-4 border-t border-gray-100 shrink-0 space-y-2">
-              <p className="text-xs text-center text-gray-400">💡 แจ้งผู้เล่น (📱) ให้ดูบทบาทที่มุมขวาบนของมือถือ</p>
+              <p className="text-xs text-center text-gray-400">
+                📱 ผู้เล่นที่ join ผ่านมือถือจะเห็นบทบาทอัตโนมัติ · ที่เหลือ GM แจกการ์ดตามตาราง
+              </p>
               <Link
                 href={`/admin/werewolf/canvas?room=${code}`}
                 className="flex items-center justify-center gap-2 w-full bg-navy text-cream font-bold py-4 rounded-2xl text-sm"
@@ -621,14 +629,14 @@ function GMRoomInner({ code }: { code: string }) {
                   </h2>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {roleStep === "roles"
-                      ? `เลือกแล้ว ${roleCount} / ต้องการ ${playerCount} คน`
+                      ? `เลือกแล้ว ${selectedRoles.length} / ต้องการ ${playerCount} คน`
                       : "บทบาทที่จะเรียกหลอกระหว่างกลางคืน"
                     }
                   </p>
                 </div>
                 <button onClick={() => setShowRoleModal(false)} className="text-gray-400 text-2xl leading-none">×</button>
               </div>
-              {roleStep === "roles" && roleCount < playerCount && (
+              {roleStep === "roles" && selectedRoles.length < playerCount && (
                 <p className="text-xs text-red-400 mt-1">⚠ ต้องเลือกอย่างน้อย {playerCount} บทบาท</p>
               )}
             </div>
@@ -636,57 +644,47 @@ function GMRoomInner({ code }: { code: string }) {
             <div className="overflow-y-auto flex-1">
               {roleStep === "roles" ? (
                 <div>
-                  {/* Favorites section */}
                   {favFiltered.length > 0 && (
                     <div className="px-4 pt-4 pb-2">
                       <p className="text-xs font-bold text-amber-600 mb-2">⭐ บทบาทที่ใช้บ่อย</p>
-                      {favFiltered.map((role) => {
-                        const isSelected = selectedRoles.includes(role);
-                        return (
-                          <RoleListItem
-                            key={role}
-                            role={role}
-                            isSelected={isSelected}
-                            isFav
-                            onToggle={() => toggleRole(role)}
-                            onToggleFav={() => toggleFav(role)}
-                          />
-                        );
-                      })}
+                      {favFiltered.map((role) => (
+                        <RoleListItem
+                          key={role}
+                          role={role}
+                          isSelected={selectedRoles.includes(role)}
+                          isFav
+                          onToggle={() => setSelectedRoles((p) => p.includes(role) ? p.filter((r) => r !== role) : [...p, role])}
+                          onToggleFav={() => toggleFav(role)}
+                        />
+                      ))}
                     </div>
                   )}
-
-                  {/* All roles by group */}
                   {ALL_ROLES.map(({ group, roles }) => (
                     <div key={group} className="px-4 pt-3 pb-1">
                       <p className="text-xs font-bold text-gray-400 mb-2">{group}</p>
-                      {roles.map((role) => {
-                        const isSelected = selectedRoles.includes(role);
-                        const isFav = favRoles.includes(role);
-                        return (
-                          <RoleListItem
-                            key={role}
-                            role={role}
-                            isSelected={isSelected}
-                            isFav={isFav}
-                            onToggle={() => toggleRole(role)}
-                            onToggleFav={() => toggleFav(role)}
-                          />
-                        );
-                      })}
+                      {roles.map((role) => (
+                        <RoleListItem
+                          key={role}
+                          role={role}
+                          isSelected={selectedRoles.includes(role)}
+                          isFav={favRoles.includes(role)}
+                          onToggle={() => setSelectedRoles((p) => p.includes(role) ? p.filter((r) => r !== role) : [...p, role])}
+                          onToggleFav={() => toggleFav(role)}
+                        />
+                      ))}
                     </div>
                   ))}
                   <div className="h-4" />
                 </div>
               ) : (
                 <div className="p-4">
-                  <p className="text-xs text-gray-500 mb-3">เลือกบทบาทที่จะเรียกระหว่างกลางคืนเพื่อไม่ให้ผู้เล่นรู้ว่าบทบาทจริงมีอะไร</p>
+                  <p className="text-xs text-gray-500 mb-3">บทบาทที่จะเรียกระหว่างกลางคืนเพื่อไม่ให้ผู้เล่นรู้ว่าบทบาทจริงมีอะไรบ้าง</p>
                   <div className="space-y-1">
                     {DECOY_ROLE_KEYS.map((key) => (
                       <button
                         key={key}
-                        onClick={() => setSelectedDecoys((prev) =>
-                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                        onClick={() => setSelectedDecoys((p) =>
+                          p.includes(key) ? p.filter((k) => k !== key) : [...p, key]
                         )}
                         className={`w-full text-left px-4 py-3 rounded-xl text-sm font-bold border transition-colors flex items-center gap-3 ${
                           selectedDecoys.includes(key)
@@ -710,7 +708,7 @@ function GMRoomInner({ code }: { code: string }) {
               {roleStep === "roles" ? (
                 <button
                   onClick={() => setRoleStep("decoys")}
-                  disabled={roleCount < playerCount}
+                  disabled={selectedRoles.length < playerCount}
                   className="w-full bg-navy text-cream py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40"
                 >
                   ถัดไป: เลือก Decoy Roles →
@@ -754,21 +752,16 @@ function GMRoomInner({ code }: { code: string }) {
   );
 }
 
-// ── Role list item component ───────────────────────────────────────────
-function RoleListItem({
-  role, isSelected, isFav, onToggle, onToggleFav,
-}: {
+// ── Role list item ─────────────────────────────────────────────────────
+function RoleListItem({ role, isSelected, isFav, onToggle, onToggleFav }: {
   role: string; isSelected: boolean; isFav: boolean;
   onToggle: () => void; onToggleFav: () => void;
 }) {
   const thaiName = role.split(" (")[0];
   const engName  = role.match(/\(([^)]+)\)/)?.[1] ?? "";
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 border cursor-pointer transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100 hover:bg-gray-100"}`}>
-      <button
-        onClick={onToggle}
-        className="flex-1 text-left flex items-center gap-2"
-      >
+    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 border transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100 hover:bg-gray-100"}`}>
+      <button onClick={onToggle} className="flex-1 text-left flex items-center gap-2">
         <span className={`w-5 h-5 rounded flex items-center justify-center text-xs shrink-0 ${isSelected ? "bg-white/20" : "bg-gray-200"}`}>
           {isSelected ? "✓" : ""}
         </span>
@@ -780,14 +773,12 @@ function RoleListItem({
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFav(); }}
         className={`text-base shrink-0 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
-      >
-        ★
-      </button>
+      >★</button>
     </div>
   );
 }
 
-// ── Page wrapper with Suspense ─────────────────────────────────────────
+// ── Page with Suspense ─────────────────────────────────────────────────
 export default function GMRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   return (
