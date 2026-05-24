@@ -341,9 +341,12 @@ function GMRoomInner({ code }: { code: string }) {
                   </div>
                   {isCard && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full shrink-0">🃏 การ์ด</span>}
                   {assign && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold border shrink-0 ${TEAM_CHIP[assign.team]}`}>
-                      {assign.role.split(" (")[0]}
-                    </span>
+                    <div className={`text-right shrink-0 border px-2 py-0.5 rounded-lg ${TEAM_CHIP[assign.team]}`}>
+                      <p className="text-xs font-bold leading-tight">{assign.role.split(" (")[0]}</p>
+                      {assign.role.includes("(") && (
+                        <p className="text-[10px] opacity-70 leading-tight">{assign.role.match(/\(([^)]+)\)/)?.[1]}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -562,6 +565,9 @@ function GMRoomInner({ code }: { code: string }) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="font-bold text-sm text-navy">{a.role.split(" (")[0]}</p>
+                    {a.role.includes("(") && (
+                      <p className="text-[10px] text-gray-400">{a.role.match(/\(([^)]+)\)/)?.[1]}</p>
+                    )}
                     <span className={`text-xs px-2 py-0.5 rounded-full border ${TEAM_CHIP[a.team]}`}>
                       {TEAM_LABEL[a.team]}
                     </span>
@@ -755,17 +761,21 @@ function RoleListItem({
   role: string; isSelected: boolean; isFav: boolean;
   onToggle: () => void; onToggleFav: () => void;
 }) {
-  const short = role.split(" (")[0];
+  const thaiName = role.split(" (")[0];
+  const engName  = role.match(/\(([^)]+)\)/)?.[1] ?? "";
   return (
     <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 border cursor-pointer transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100 hover:bg-gray-100"}`}>
       <button
         onClick={onToggle}
-        className="flex-1 text-left text-sm font-bold flex items-center gap-2"
+        className="flex-1 text-left flex items-center gap-2"
       >
         <span className={`w-5 h-5 rounded flex items-center justify-center text-xs shrink-0 ${isSelected ? "bg-white/20" : "bg-gray-200"}`}>
           {isSelected ? "✓" : ""}
         </span>
-        {short}
+        <span>
+          <span className="text-sm font-bold block leading-tight">{thaiName}</span>
+          {engName && <span className={`text-[10px] leading-tight ${isSelected ? "text-cream/60" : "text-gray-400"}`}>{engName}</span>}
+        </span>
       </button>
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFav(); }}

@@ -96,16 +96,20 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
 
   const gs = gameState;
   const teamStyle = TEAM_STYLES[gs?.team ?? "village"] ?? TEAM_STYLES.village;
-  const shortRole = gs?.role?.split(" (")[0] ?? "";
+  const thaiRole = gs?.role?.split(" (")[0] ?? "";
+  const engRole  = gs?.role?.match(/\(([^)]+)\)/)?.[1] ?? "";
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center p-6">
 
       {/* Fixed role chip — always visible when playing */}
       {joined && gs?.role && (
-        <div className={`fixed top-3 right-3 z-50 border text-xs px-3 py-1.5 rounded-full flex items-center gap-1.5 max-w-[160px] truncate shadow-lg ${teamStyle.chip}`}>
-          <span>{teamStyle.emoji}</span>
-          <span className="truncate">{shortRole}</span>
+        <div className={`fixed top-3 right-3 z-50 border px-3 py-1.5 rounded-2xl shadow-lg flex items-start gap-1.5 max-w-[180px] ${teamStyle.chip}`}>
+          <span className="text-base mt-0.5 shrink-0">{teamStyle.emoji}</span>
+          <span>
+            <span className="block text-xs font-bold leading-tight">{thaiRole}</span>
+            {engRole && <span className="block text-[10px] opacity-70 leading-tight">{engRole}</span>}
+          </span>
         </div>
       )}
 
@@ -162,8 +166,12 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
                 </>
               )}
               {gs.role && (
-                <div className={`inline-flex items-center gap-2 border px-4 py-2 rounded-full text-sm font-bold mt-2 mb-4 ${teamStyle.chip}`}>
-                  {teamStyle.emoji} {shortRole}
+                <div className={`inline-flex items-center gap-2 border px-4 py-2 rounded-2xl mt-2 mb-4 ${teamStyle.chip}`}>
+                  <span className="text-lg">{teamStyle.emoji}</span>
+                  <span>
+                    <span className="block text-sm font-bold leading-tight">{thaiRole}</span>
+                    {engRole && <span className="block text-xs opacity-70 leading-tight">{engRole}</span>}
+                  </span>
                 </div>
               )}
               <p className="text-gray-500 text-sm">เกมจบแล้ว ขอบคุณที่เล่น!</p>
