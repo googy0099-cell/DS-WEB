@@ -125,11 +125,20 @@
 
         <div id="night-guide" class="absolute bottom-[120px] left-1/2 transform -translate-x-1/2 bg-indigo-900 border-2 border-indigo-400 rounded-xl shadow-2xl z-40 hidden flex-col items-center w-11/12 max-w-md p-3 pointer-events-auto">
             <div class="text-sm text-indigo-300 mb-1 font-bold">🌙 ระบบผู้คุมเกม (ลำดับกลางคืน)</div>
-            <div id="night-text" class="text-base sm:text-lg font-bold text-center mb-3 text-yellow-300 w-full min-h-[50px] flex items-center justify-center leading-tight px-2">ทุกคนหลับตา</div>
-            <div class="flex space-x-2 w-full justify-between">
+            <div id="night-text" class="text-base sm:text-lg font-bold text-center mb-2 text-yellow-300 w-full min-h-[50px] flex items-center justify-center leading-tight px-2">ทุกคนหลับตา</div>
+            <!-- Night mark legend -->
+            <div id="night-mark-legend" class="hidden w-full bg-indigo-800/60 rounded-lg px-2 py-1.5 mb-2 text-xs text-indigo-200 flex-wrap gap-x-3 gap-y-1 justify-center">
+                <span>🎯 เป้าหมาย</span><span>🛡️ ป้องกัน</span><span>🔮 ตรวจสอบ</span><span>💊 รักษา</span><span>☠️ วางยา</span><span>🐾 หมาป่า</span><span>🎵 ขลุ่ย</span>
+                <span class="text-indigo-300 mt-1 w-full text-center">(แตะผู้เล่นซ้ำๆ เพื่อเปลี่ยน)</span>
+            </div>
+            <div class="flex space-x-2 w-full justify-between mb-2">
                 <button onclick="prevNightStep()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold text-sm shadow-md">&lt; ย้อน</button>
                 <button onclick="endNight()" class="bg-red-800 text-white px-4 py-2 rounded font-bold text-sm shadow-md">✖ ปิดระบบ</button>
                 <button onclick="nextNightStep()" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold text-sm shadow-md border border-indigo-400">ถัดไป &gt;</button>
+            </div>
+            <div class="flex gap-2 w-full">
+                <button id="btn-mark-mode" onclick="toggleNightMarkMode()" class="flex-1 bg-gray-700 text-white py-1.5 rounded text-xs font-bold border border-gray-500">✏️ Mark Mode: OFF</button>
+                <button onclick="clearAllNightMarks()" class="bg-gray-800 text-gray-300 py-1.5 px-3 rounded text-xs font-bold border border-gray-600">🗑️ ล้าง Mark</button>
             </div>
         </div>
     </div>
@@ -284,6 +293,7 @@
         let isTableLocked = false;
         let players = [];
         let currentIndex = null;
+        let nightMarkMode = false; // night marking mode on/off
         
         let zoomLevel = 1;
         let panX = 0;
@@ -1057,6 +1067,14 @@
                 let genderIcon = p.gender ? `<div class="absolute -top-2 -left-2 text-xs bg-gray-900 border border-gray-500 rounded-full w-6 h-6 flex justify-center items-center shadow-md z-20">${p.gender}</div>` : '';
                 let displayName = p.role.split(' (')[0];
 
+                // Night mark badge
+                const NIGHT_MARKS = { target:'🎯', guard:'🛡️', check:'🔮', save:'💊', poison:'☠️', wolf_pick:'🐾', piper:'🎵' };
+                let nightMarkBadge = '';
+                if (p.nightMark && NIGHT_MARKS[p.nightMark]) {
+                    const markColors = { target:'bg-red-600', guard:'bg-cyan-600', check:'bg-purple-600', save:'bg-green-600', poison:'bg-gray-800', wolf_pick:'bg-red-800', piper:'bg-yellow-600' };
+                    nightMarkBadge = `<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 ${markColors[p.nightMark] || 'bg-gray-700'} rounded-full px-1.5 py-0.5 text-sm z-30 shadow-lg border border-white/20">${NIGHT_MARKS[p.nightMark]}</div>`;
+                }
+
                 const token = document.createElement('div');
                 token.className = `player-token ${bgColor} ${borderColor} ${opacity} ${teamShadow}`;
                 token.style.left = `${p.x}px`; token.style.top = `${p.y}px`;
@@ -1065,6 +1083,7 @@
                     <div class="font-bold text-lg text-white truncate px-1 z-10 w-full text-center mt-1">${p.name}</div>
                     <div class="text-[10px] text-gray-300 z-10 leading-tight text-center px-1 pb-1 w-full max-h-[28px] overflow-hidden">${displayName}</div>
                     ${statusIcon}
+                    ${nightMarkBadge}
                 `;
                 setupTokenDragEvents(token, index);
                 tokensLayer.appendChild(token);
@@ -1097,8 +1116,18 @@
                     if(trashBin.classList.contains('trash-active')) {
                         trashBin.classList.remove('trash-active'); players.splice(index, 1); renderTokens(); saveGameState(); return;
                     }
-                    if (!isDragging) openModal(index);
-                    else saveGameState();
+                    if (!isDragging) {
+                        if (nightMarkMode) {
+                            // Cycle through night marks
+                            const markCycle = [null, 'target', 'guard', 'check', 'save', 'poison', 'wolf_pick', 'piper'];
+                            const cur = players[index].nightMark;
+                            const idx = markCycle.indexOf(cur);
+                            players[index].nightMark = markCycle[(idx + 1) % markCycle.length];
+                            renderTokens();
+                        } else {
+                            openModal(index);
+                        }
+                    } else saveGameState();
                 }
                 window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
             });
@@ -1292,6 +1321,9 @@
 
         // === 5. ระบบผู้ช่วย GM กลางคืน ===
         function startNight() {
+            // Clear night marks from previous night
+            players.forEach(function(p) { p.nightMark = null; });
+            renderTokens();
             let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
             let hasWolfPack = wolfRoles.some(r => aliveRolesSet.has(r));
             let hasBodyguardPriest = aliveRolesSet.has('บอดี้การ์ด (Bodyguard)') || aliveRolesSet.has('นักบวช (Priest)');
@@ -1348,7 +1380,29 @@
         }
         function nextNightStep() { if (currentNightStepIndex < nightSteps.length - 1) { currentNightStepIndex++; updateNightUI(); } else { endNight(); } }
         function prevNightStep() { if (currentNightStepIndex > 0) { currentNightStepIndex--; updateNightUI(); } }
-        function endNight() { document.getElementById('night-guide').classList.add('hidden'); }
+        function endNight() { document.getElementById('night-guide').classList.add('hidden'); if (nightMarkMode) toggleNightMarkMode(); }
+
+        function toggleNightMarkMode() {
+            nightMarkMode = !nightMarkMode;
+            var btn = document.getElementById('btn-mark-mode');
+            var legend = document.getElementById('night-mark-legend');
+            if (nightMarkMode) {
+                btn.textContent = '✏️ Mark Mode: ON';
+                btn.className = 'flex-1 bg-yellow-500 text-black py-1.5 rounded text-xs font-bold border border-yellow-300';
+                legend.classList.remove('hidden');
+                legend.classList.add('flex');
+            } else {
+                btn.textContent = '✏️ Mark Mode: OFF';
+                btn.className = 'flex-1 bg-gray-700 text-white py-1.5 rounded text-xs font-bold border border-gray-500';
+                legend.classList.add('hidden');
+                legend.classList.remove('flex');
+            }
+        }
+
+        function clearAllNightMarks() {
+            players.forEach(function(p) { p.nightMark = null; });
+            renderTokens();
+        }
 
         // === 6. ระบบกระดานวาดรูป ===
         function setTool(tool) {

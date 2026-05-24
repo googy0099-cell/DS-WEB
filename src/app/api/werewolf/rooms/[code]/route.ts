@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 
+async function requireGM(code: string) {
+  const session = await auth();
+  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  const room = await db.werewolfRoom.findUnique({ where: { code } });
+  if (!room || room.gmId !== Number(session.user.id)) return null;
+  return { session, room };
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
@@ -26,22 +34,31 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
-  const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER"))
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   const { code } = await params;
+  const gm = await requireGM(code);
+  if (!gm) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
   const { isOpen } = await req.json();
-
-  const room = await db.werewolfRoom.findUnique({ where: { code } });
-  if (!room) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (room.gmId !== Number(session.user.id))
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const updated = await db.werewolfRoom.update({
-    where: { code },
-    data: { isOpen },
-  });
-
+  const updated = await db.werewolfRoom.update({ where: { code }, data: { isOpen } });
   return NextResponse.json(updated);
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ code: string }> }
+) {
+  const { code } = await params;
+  const gm = await requireGM(code);
+  if (!gm) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Cascade: delete session players → session → room players → room
+  const session = await db.werewolfSession.findUnique({ where: { roomId: gm.room.id } });
+  if (session) {
+    await db.werewolfSessionPlayer.deleteMany({ where: { sessionId: session.id } });
+    await db.werewolfSession.delete({ where: { id: session.id } });
+  }
+  await db.werewolfRoomPlayer.deleteMany({ where: { roomId: gm.room.id } });
+  await db.werewolfRoom.delete({ where: { code } });
+
+  return NextResponse.json({ ok: true });
 }
