@@ -8,9 +8,14 @@ async function requireAdmin() {
   return session;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const showAll = new URL(req.url).searchParams.get("all") === "1";
+  if (showAll) {
+    const s = await requireAdmin();
+    if (!s) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
+  }
   const games = await db.miniGame.findMany({
-    where: { isActive: true },
+    where: showAll ? {} : { isActive: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
   });
   return NextResponse.json(games);

@@ -43,8 +43,12 @@ export async function POST(req: NextRequest) {
 
   const shuffledRoles = shuffle(selectedRoles).slice(0, players.length);
 
-  // Delete existing session for this room (start fresh)
-  await db.werewolfSession.deleteMany({ where: { roomId: room.id } });
+  // Delete existing session for this room (start fresh) — must delete children first
+  const existingSession = await db.werewolfSession.findUnique({ where: { roomId: room.id } });
+  if (existingSession) {
+    await db.werewolfSessionPlayer.deleteMany({ where: { sessionId: existingSession.id } });
+    await db.werewolfSession.delete({ where: { id: existingSession.id } });
+  }
 
   const newSession = await db.werewolfSession.create({
     data: {

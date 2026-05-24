@@ -376,7 +376,7 @@ function GMRoomInner({ code }: { code: string }) {
           </Link>
 
           <button
-            onClick={() => { setRoleStep("roles"); setShowRoleModal(true); }}
+            onClick={() => { setRoleStep("roles"); setSessionError(""); setShowRoleModal(true); }}
             className="w-full border border-gray-200 text-gray-500 font-bold py-3 rounded-xl text-sm"
           >
             🔄 เริ่มรอบใหม่ (สุ่มบทบาทใหม่)
@@ -385,7 +385,7 @@ function GMRoomInner({ code }: { code: string }) {
       ) : (
         <div className="space-y-3 mb-4">
           <button
-            onClick={() => { setRoleStep("roles"); setShowRoleModal(true); }}
+            onClick={() => { setRoleStep("roles"); setSessionError(""); setShowRoleModal(true); }}
             disabled={!playerCount}
             className="w-full bg-orange text-white font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-40 shadow-md"
           >

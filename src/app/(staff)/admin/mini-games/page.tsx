@@ -25,7 +25,7 @@ const EMPTY: EditingGame = {
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export default function AdminMiniGamesPage() {
-  const { data: games = [], mutate } = useSWR<MiniGame[]>("/api/mini-games", fetcher);
+  const { data: games = [], mutate } = useSWR<MiniGame[]>("/api/mini-games?all=1", fetcher);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<EditingGame | null>(null);
   const [saving, setSaving] = useState(false);
@@ -98,7 +98,7 @@ export default function AdminMiniGamesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {games.map((g) => (
-            <div key={g.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div key={g.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden ${!g.isActive ? "opacity-50" : ""}`}>
               <div className="relative aspect-video bg-sand flex items-center justify-center">
                 {g.coverUrl ? (
                   <Image src={g.coverUrl} alt={g.name} fill className="object-cover" />
