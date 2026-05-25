@@ -51,11 +51,23 @@ export async function DELETE(
   const gm = await requireGM(code);
   if (!gm) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Cascade: delete session players → session → room players → room
+  // Cascade: votes/actions → session players → session (break gameId FK) →
+  //          game results → games → room players → room
   const session = await db.werewolfSession.findUnique({ where: { roomId: gm.room.id } });
   if (session) {
+    await db.werewolfVote.deleteMany({ where: { sessionId: session.id } });
+    await db.werewolfNightAction.deleteMany({ where: { sessionId: session.id } });
     await db.werewolfSessionPlayer.deleteMany({ where: { sessionId: session.id } });
+    // Break the circular FK between session and game before deleting either
+    if (session.gameId) {
+      await db.werewolfSession.update({ where: { id: session.id }, data: { gameId: null } });
+    }
     await db.werewolfSession.delete({ where: { id: session.id } });
+  }
+  const games = await db.werewolfGame.findMany({ where: { roomId: gm.room.id }, select: { id: true } });
+  if (games.length) {
+    await db.werewolfGameResult.deleteMany({ where: { gameId: { in: games.map((g) => g.id) } } });
+    await db.werewolfGame.deleteMany({ where: { roomId: gm.room.id } });
   }
   await db.werewolfRoomPlayer.deleteMany({ where: { roomId: gm.room.id } });
   await db.werewolfRoom.delete({ where: { code } });

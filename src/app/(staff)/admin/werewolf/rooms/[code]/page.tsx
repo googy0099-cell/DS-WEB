@@ -146,6 +146,7 @@ function GMRoomInner({ code }: { code: string }) {
   const [startingSession, setStartingSession] = useState(false);
   const [sessionError, setSessionError]       = useState("");
   const [deletingRoom, setDeletingRoom]       = useState(false);
+  const [deleteError, setDeleteError]         = useState("");
 
   // Game control panel
   const [fbState, setFbState]                 = useState<FbState | null>(null);
@@ -385,9 +386,15 @@ function GMRoomInner({ code }: { code: string }) {
 
   async function deleteRoom() {
     setDeletingRoom(true);
+    setDeleteError("");
     const res = await fetch(`/api/werewolf/rooms/${code}`, { method: "DELETE" });
-    if (res.ok) router.push("/admin/werewolf");
-    else setDeletingRoom(false);
+    if (res.ok) {
+      router.push("/admin/werewolf");
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setDeleteError(data.error || `เกิดข้อผิดพลาด (${res.status})`);
+      setDeletingRoom(false);
+    }
   }
 
   // ── Computed ──────────────────────────────────────────────────────────
@@ -1039,6 +1046,9 @@ function GMRoomInner({ code }: { code: string }) {
             <p className="text-4xl mb-3">🗑️</p>
             <h3 className="font-bold text-navy text-lg mb-2">ลบห้อง {code}?</h3>
             <p className="text-sm text-gray-500 mb-6">จะลบผู้เล่น session และข้อมูลทั้งหมดในห้องนี้</p>
+            {deleteError && (
+              <p className="text-red-500 text-xs text-center mb-3">{deleteError}</p>
+            )}
             <div className="flex gap-3">
               <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold text-sm">ยกเลิก</button>
               <button onClick={deleteRoom} disabled={deletingRoom} className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold text-sm disabled:opacity-50">
