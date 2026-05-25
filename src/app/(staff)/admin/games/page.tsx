@@ -40,6 +40,185 @@ function parseTags(raw: string): string[] {
   try { return JSON.parse(raw); } catch { return []; }
 }
 
+// ─── Tag Manager Component ────────────────────────────────────────────────────
+function TagManager({
+  onClose,
+  onChanged,
+  extraTags,
+  setExtraTags,
+}: {
+  onClose: () => void;
+  onChanged: () => void;
+  extraTags: string[];
+  setExtraTags: (fn: (prev: string[]) => string[]) => void;
+}) {
+  const { data, mutate } = useSWR<{ tags: { name: string; count: number }[] }>(
+    "/api/game-tags",
+    fetcher
+  );
+  const [newTag, setNewTag] = useState("");
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  const allTags = data?.tags ?? [];
+
+  async function addTag() {
+    const t = newTag.trim();
+    if (!t) return;
+    setExtraTags((prev) => Array.from(new Set([...prev, t])));
+    setNewTag("");
+    await mutate();
+    onChanged();
+  }
+
+  async function deleteTag(tag: string) {
+    setBusy(true);
+    await fetch("/api/game-tags", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tag }),
+    });
+    setExtraTags((prev) => prev.filter((t) => t !== tag));
+    setConfirmDelete(null);
+    await mutate();
+    onChanged();
+    setBusy(false);
+  }
+
+  async function renameTag() {
+    if (!editingTag || !editValue.trim() || editValue.trim() === editingTag) {
+      setEditingTag(null);
+      return;
+    }
+    setBusy(true);
+    await fetch("/api/game-tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oldTag: editingTag, newTag: editValue.trim() }),
+    });
+    setExtraTags((prev) => prev.map((t) => (t === editingTag ? editValue.trim() : t)));
+    setEditingTag(null);
+    await mutate();
+    onChanged();
+    setBusy(false);
+  }
+
+  // Merge server tags + local extraTags not yet used in any game
+  const serverTagNames = new Set(allTags.map((t) => t.name));
+  const localOnlyTags = extraTags.filter((t) => !serverTagNames.has(t));
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-sm max-h-[80vh] flex flex-col shadow-xl">
+        <div className="p-5 border-b border-sand flex justify-between items-center shrink-0">
+          <div>
+            <h2 className="font-bold text-navy text-lg">🏷️ จัดการประเภทเกม</h2>
+            <p className="text-xs text-gray-400 mt-0.5">เพิ่ม / แก้ชื่อ / ลบประเภท</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 p-4 space-y-1.5">
+          {allTags.length === 0 && localOnlyTags.length === 0 && (
+            <p className="text-gray-400 text-sm text-center py-6">ยังไม่มีประเภทเกม</p>
+          )}
+
+          {allTags.map((t) => (
+            <div key={t.name} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
+              {editingTag === t.name ? (
+                <input
+                  autoFocus
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && renameTag()}
+                  onBlur={renameTag}
+                  className="flex-1 text-sm border border-orange rounded-lg px-2 py-1 outline-none"
+                />
+              ) : (
+                <span className="flex-1 text-sm font-medium text-navy">{t.name}</span>
+              )}
+              <span className="text-xs text-gray-400 shrink-0">{t.count} เกม</span>
+              <button
+                onClick={() => { setEditingTag(t.name); setEditValue(t.name); }}
+                className="text-xs text-orange hover:underline shrink-0"
+                disabled={busy}
+              >
+                แก้ไข
+              </button>
+              {confirmDelete === t.name ? (
+                <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => deleteTag(t.name)}
+                    disabled={busy}
+                    className="text-xs bg-red-500 text-white px-2 py-0.5 rounded-lg font-bold"
+                  >
+                    {busy ? "..." : "ลบ"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(null)}
+                    className="text-xs text-gray-400 px-1"
+                  >
+                    ยกเลิก
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(t.name)}
+                  disabled={busy}
+                  className="text-xs text-red-400 hover:text-red-600 shrink-0"
+                >
+                  ลบ
+                </button>
+              )}
+            </div>
+          ))}
+
+          {localOnlyTags.map((t) => (
+            <div key={t} className="flex items-center gap-2 bg-orange/5 border border-orange/20 rounded-xl px-3 py-2.5">
+              <span className="flex-1 text-sm font-medium text-navy">{t}</span>
+              <span className="text-xs text-orange shrink-0">ใหม่ (ยังไม่ใช้)</span>
+              <button
+                onClick={() => setExtraTags((prev) => prev.filter((x) => x !== t))}
+                className="text-xs text-red-400 hover:text-red-600 shrink-0"
+              >
+                ลบ
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="p-4 border-t border-sand shrink-0">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag())}
+              placeholder="ชื่อประเภทใหม่ เช่น วางแผน, ไพ่"
+              className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+            />
+            <button
+              onClick={addTag}
+              disabled={!newTag.trim()}
+              className="bg-orange text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40"
+            >
+              + เพิ่ม
+            </button>
+          </div>
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            ประเภทใหม่จะปรากฏในรายการเมื่อเลือกใส่เกม
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Tag Picker Component ─────────────────────────────────────────────────────
 function TagPicker({
   selected,
@@ -160,6 +339,7 @@ function TagPicker({
 export default function AdminGamesPage() {
   const { data: items = [], mutate } = useSWR<GameGuide[]>("/api/games?all=1", fetcher);
   const [showModal, setShowModal] = useState(false);
+  const [showTagManager, setShowTagManager] = useState(false);
   const [editing, setEditing] = useState<Partial<GameGuide> | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -229,12 +409,20 @@ export default function AdminGamesPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-bold text-navy">จัดการบอร์ดเกม</h1>
-        <button
-          onClick={openAdd}
-          className="bg-orange text-white font-semibold px-4 py-2 rounded-xl text-sm"
-        >
-          + เพิ่มเกม
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowTagManager(true)}
+            className="border border-navy text-navy font-semibold px-3 py-2 rounded-xl text-sm"
+          >
+            🏷️ ประเภท
+          </button>
+          <button
+            onClick={openAdd}
+            className="bg-orange text-white font-semibold px-4 py-2 rounded-xl text-sm"
+          >
+            + เพิ่มเกม
+          </button>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -285,6 +473,16 @@ export default function AdminGamesPage() {
         })}
         {items.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีเกม</p>}
       </div>
+
+      {/* Tag Manager */}
+      {showTagManager && (
+        <TagManager
+          onClose={() => setShowTagManager(false)}
+          onChanged={() => mutate()}
+          extraTags={extraTags}
+          setExtraTags={setExtraTags}
+        />
+      )}
 
       {/* Modal */}
       {showModal && editing && (
