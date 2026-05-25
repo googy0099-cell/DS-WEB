@@ -121,6 +121,27 @@ export default function WerewolfSection() {
         <p className="text-center text-xs text-gray-400 mt-3">
           ต้องเป็นสมาชิกร้านก่อนเข้าร่วมเกม เพื่อระบบจะได้ track คะแนนให้ได้
         </p>
+
+        {/* Free GM Canvas card */}
+        <div className="mt-10 bg-[#0d0d0d] rounded-2xl p-5 flex flex-col sm:flex-row items-center gap-4 shadow-lg">
+          <div className="text-5xl shrink-0">🖥️</div>
+          <div className="flex-1 text-center sm:text-left">
+            <p className="text-xs font-bold text-orange uppercase tracking-wider mb-0.5">Free Tool</p>
+            <h3 className="text-white font-bold text-lg leading-tight">
+              Werewolf Canvas GM for You
+            </h3>
+            <p className="text-gray-400 text-sm mt-1">
+              เครื่องมือ GM สำหรับทุกคน — จัดการผู้เล่น, ลำดับกลางคืน, วาดกระดาน
+              ใช้ได้ฟรีโดยไม่ต้องสมัครสมาชิก
+            </p>
+          </div>
+          <Link
+            href="/gm-canvas"
+            className="shrink-0 bg-yellow-400 text-black font-bold px-6 py-3 rounded-xl text-sm hover:bg-yellow-300 transition-colors whitespace-nowrap"
+          >
+            🎮 เปิดเครื่องมือ →
+          </Link>
+        </div>
       </div>
     </section>
   );
