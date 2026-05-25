@@ -56,6 +56,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const esRef = useRef<EventSource | null>(null);
   const prevNightRef = useRef<number>(0);
   const prevDayRef = useRef<number>(0);
+  const prevPhaseRef = useRef<string | null>(null);
 
   // ── Room info ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -125,8 +126,10 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
       prevNightRef.current = fb.nightNumber;
       prevDayRef.current = fb.dayNumber;
     }
-    // Fetch role if we have phase but no myInfo yet
-    if (fb.phase !== "SETUP" && !myInfo) fetchMyInfo();
+    // Fetch role whenever Firebase phase first appears or changes (catches GM dealing cards in SETUP)
+    const prevPhase = prevPhaseRef.current;
+    prevPhaseRef.current = fb.phase;
+    if (!myInfo && prevPhase !== fb.phase) fetchMyInfo();
   }, [fb, joined, myInfo, fetchMyInfo]);
 
   // ── Join ─────────────────────────────────────────────────────────────
