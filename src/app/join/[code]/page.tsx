@@ -4,15 +4,30 @@ import { use, useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
-import { stepToRoles } from "@/lib/werewolf-roles";
 
 const FB_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "";
 
 interface RoomInfo { code: string; isOpen: boolean; playerCount: number; gmName: string }
 interface AlivePlayer { userId: number; name: string }
 
-// Private per-player data (from /me — never stored in Firebase)
-interface MyInfo { role: string; team: string }
+// Full per-player state from /me (polled every 3s as Firebase fallback)
+interface MyInfo {
+  role: string;
+  team: string;
+  status: string;
+  phase: string;
+  currentStep: string | null;
+  isMyTurn: boolean;
+  canAct: boolean;
+  canVote: boolean;
+  hasActed: boolean;
+  hasVoted: boolean;
+  winTeam: string | null;
+  isWin: boolean | null;
+  alivePlayers: AlivePlayer[];
+  nightNumber: number;
+  dayNumber: number;
+}
 
 // Live game state from Firebase
 interface FbState {
@@ -70,21 +85,27 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     if (session?.user?.firstName) setSeatName(session.user.firstName);
   }, [session]);
 
-  // ── Fetch private role once (on join + when session PLAYING) ─────────
+  // ── Fetch full game state from /me ────────────────────────────────────
   const fetchMyInfo = useCallback(() => {
     fetch(`/api/werewolf/sessions/${code}/me`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.role) setMyInfo({ role: data.role, team: data.team });
+        if (data.role) setMyInfo(data as MyInfo);
       })
       .catch(() => {});
   }, [code]);
 
-  // ── Firebase EventSource subscription ───────────────────────────────
+  // ── Poll /me every 3s — primary source of truth (Firebase is enhancement only) ──
+  useEffect(() => {
+    if (!joined || !session?.user) return;
+    fetchMyInfo();
+    const id = setInterval(fetchMyInfo, 3000);
+    return () => clearInterval(id);
+  }, [joined, session, fetchMyInfo]);
+
+  // ── Firebase EventSource — speeds up updates when working ───────────
   useEffect(() => {
     if (!joined || !session?.user || !FB_URL) return;
-
-    fetchMyInfo();
 
     function connect() {
       if (esRef.current) esRef.current.close();
@@ -94,7 +115,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
       function applyPut(raw: string) {
         try {
           const { data } = JSON.parse(raw) as { path: string; data: FbState | null };
-          if (data) setFb(data);
+          if (data) { setFb(data); fetchMyInfo(); }
         } catch {}
       }
 
@@ -102,51 +123,29 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
         try {
           const { data } = JSON.parse(raw) as { path: string; data: Partial<FbState> };
           setFb((prev) => (prev ? { ...prev, ...data } : null));
+          fetchMyInfo();
         } catch {}
       }
 
       es.addEventListener("put", (e) => applyPut((e as MessageEvent).data));
       es.addEventListener("patch", (e) => applyPatch((e as MessageEvent).data));
-      es.onerror = () => {
-        es.close();
-        setTimeout(connect, 3000);
-      };
+      es.onerror = () => { es.close(); setTimeout(connect, 3000); };
     }
 
     connect();
     return () => { esRef.current?.close(); esRef.current = null; };
   }, [joined, session, code, fetchMyInfo]);
 
-  // Polling fallback — poll /me every 3s until we have a role (covers Firebase failures)
+  // Reset target/action message when night or day number changes
   useEffect(() => {
-    if (!joined || !session?.user || myInfo) return;
-    const id = setInterval(fetchMyInfo, 3000);
-    return () => clearInterval(id);
-  }, [joined, session, myInfo, fetchMyInfo]);
-
-  // Handle Firebase state changes — reset UI on new round, re-fetch role on phase change
-  useEffect(() => {
-    if (!fb || !joined) return;
-
-    if (fb.nightNumber !== prevNightRef.current || fb.dayNumber !== prevDayRef.current) {
+    if (!myInfo) return;
+    if (myInfo.nightNumber !== prevNightRef.current || myInfo.dayNumber !== prevDayRef.current) {
       setSelectedTarget(null);
       setActionMsg("");
-      prevNightRef.current = fb.nightNumber;
-      prevDayRef.current = fb.dayNumber;
+      prevNightRef.current = myInfo.nightNumber;
+      prevDayRef.current = myInfo.dayNumber;
     }
-
-    const prevPhase = prevPhaseRef.current;
-    prevPhaseRef.current = fb.phase;
-
-    if (prevPhase !== fb.phase) {
-      // New session started (phase reset to SETUP) — clear old role so polling restarts
-      if (fb.phase === "SETUP" && prevPhase !== null) {
-        setMyInfo(null);
-      }
-      // Always fetch role on phase transition
-      fetchMyInfo();
-    }
-  }, [fb, joined, fetchMyInfo]);
+  }, [myInfo]);
 
   // ── Join ─────────────────────────────────────────────────────────────
   async function handleJoin(e: React.FormEvent) {
@@ -197,40 +196,29 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     } finally { setSubmitting(false); }
   }
 
-  // ── Derived state ────────────────────────────────────────────────────
+  // ── Derived state — prefer myInfo (polled) over Firebase ─────────────
   const myUserId = session?.user?.id ? Number(session.user.id) : null;
   const myUidStr = myUserId ? String(myUserId) : null;
 
-  const phase       = fb?.phase ?? "SETUP";
-  const currentStep = fb?.currentStep ?? null;
-  const winTeam     = fb?.winTeam ?? null;
-  const myStatus    = myUidStr ? (fb?.players[myUidStr]?.status ?? "alive") : "alive";
-  const hasActed    = myUidStr ? (fb?.players[myUidStr]?.hasActed ?? false) : false;
-  const hasVoted    = myUidStr ? (fb?.players[myUidStr]?.hasVoted ?? false) : false;
+  // Use Firebase when available (faster), fall back to /me poll data
+  const phase       = fb?.phase       ?? myInfo?.phase       ?? "SETUP";
+  const currentStep = fb?.currentStep ?? myInfo?.currentStep ?? null;
+  const winTeam     = fb?.winTeam     ?? myInfo?.winTeam     ?? null;
+  const myStatus    = myUidStr ? (fb?.players[myUidStr]?.status ?? myInfo?.status ?? "alive") : "alive";
+  const hasActed    = myUidStr ? (fb?.players[myUidStr]?.hasActed ?? myInfo?.hasActed ?? false) : false;
+  const hasVoted    = myUidStr ? (fb?.players[myUidStr]?.hasVoted ?? myInfo?.hasVoted ?? false) : false;
   const isDead      = myStatus === "dead";
 
-  // Calculate isMyTurn client-side from role + currentStep
-  let isMyTurn = false;
-  if (phase === "PLAYING" && currentStep && myInfo?.role && !isDead) {
-    for (const [stepKey, roles] of Object.entries(stepToRoles)) {
-      if (currentStep.includes(stepKey) || roles.some((r) => currentStep.includes(r.split(" (")[0]))) {
-        if (roles.includes(myInfo.role)) { isMyTurn = true; break; }
-      }
-    }
-  }
+  const canAct = myInfo?.canAct ?? false;
+  const canVote = myInfo?.canVote ?? false;
+  const isWin  = myInfo?.isWin  ?? null;
 
-  const isVotingPhase = currentStep?.includes("🗳️") ?? false;
-  const canAct  = isMyTurn && !hasActed && !isDead;
-  const canVote = isVotingPhase && !hasVoted && !isDead;
-
-  const isWin = phase === "ENDED" && winTeam && myInfo?.team ? myInfo.team === winTeam : null;
-
-  // Build alive players from Firebase
+  // Alive players: Firebase preferred (has names), fall back to /me data
   const alivePlayers: AlivePlayer[] = fb
     ? Object.entries(fb.players)
         .filter(([uid, p]) => p.status !== "dead" && uid !== myUidStr)
-        .map(([uid, _]) => ({ userId: Number(uid), name: fb.playerNames[uid] ?? `User ${uid}` }))
-    : [];
+        .map(([uid]) => ({ userId: Number(uid), name: fb.playerNames[uid] ?? `User ${uid}` }))
+    : (myInfo?.alivePlayers ?? []);
 
   const role = myInfo?.role ?? null;
   const team = myInfo?.team ?? null;

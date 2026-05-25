@@ -13,6 +13,17 @@ function rtdb() {
   return getDatabase(getApp());
 }
 
+// Wrap any Firebase promise with a 5-second timeout so a broken/slow
+// Firebase connection never blocks the API response for minutes.
+function withTimeout<T>(p: Promise<T>, ms = 5000): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Firebase timeout")), ms)
+    ),
+  ]);
+}
+
 export type WerewolfPlayerFb = {
   status: string;
   hasActed: boolean;
@@ -30,32 +41,29 @@ export type WerewolfSessionFb = {
   players: Record<string, WerewolfPlayerFb>;
 };
 
-// Full write — used when session is created or fully replaced
 export async function setWerewolfFb(code: string, state: WerewolfSessionFb) {
   try {
-    await rtdb()
-      .ref(`werewolf/sessions/${code}`)
-      .set({ ...state, _ts: Date.now() });
+    await withTimeout(
+      rtdb().ref(`werewolf/sessions/${code}`).set({ ...state, _ts: Date.now() })
+    );
   } catch (e) {
     console.error("[Firebase] set error", e);
   }
 }
 
-// Partial update — used for phase/step transitions
 export async function patchWerewolfFb(
   code: string,
   update: Partial<WerewolfSessionFb>
 ) {
   try {
-    await rtdb()
-      .ref(`werewolf/sessions/${code}`)
-      .update({ ...update, _ts: Date.now() });
+    await withTimeout(
+      rtdb().ref(`werewolf/sessions/${code}`).update({ ...update, _ts: Date.now() })
+    );
   } catch (e) {
     console.error("[Firebase] patch error", e);
   }
 }
 
-// Update a single player's fields (action/vote submitted)
 export async function patchWerewolfPlayerFb(
   code: string,
   userId: number,
@@ -66,7 +74,7 @@ export async function patchWerewolfPlayerFb(
     for (const [k, v] of Object.entries(data)) {
       flat[`players/${userId}/${k}`] = v;
     }
-    await rtdb().ref(`werewolf/sessions/${code}`).update(flat);
+    await withTimeout(rtdb().ref(`werewolf/sessions/${code}`).update(flat));
   } catch (e) {
     console.error("[Firebase] player patch error", e);
   }
