@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
         include: { user: { select: { id: true, firstName: true, nickname: true } } },
         orderBy: { seatOrder: "asc" },
       },
-      session: { select: { id: true } },
+      session: { select: { id: true, gameId: true } },
     },
   });
   if (!room) return NextResponse.json({ error: "ไม่พบห้อง" }, { status: 404 });
@@ -50,15 +50,16 @@ export async function POST(req: NextRequest) {
 
   const shuffledRoles = shuffle(selectedRoles).slice(0, players.length);
 
-  // Delete existing session — clear ALL child tables first
+  // Delete existing session — clear child tables then break circular FK before deleting
   if (room.session) {
     const sid = room.session.id;
-    await db.$transaction([
-      db.werewolfNightAction.deleteMany({ where: { sessionId: sid } }),
-      db.werewolfVote.deleteMany({ where: { sessionId: sid } }),
-      db.werewolfSessionPlayer.deleteMany({ where: { sessionId: sid } }),
-      db.werewolfSession.delete({ where: { id: sid } }),
-    ]);
+    await db.werewolfVote.deleteMany({ where: { sessionId: sid } });
+    await db.werewolfNightAction.deleteMany({ where: { sessionId: sid } });
+    await db.werewolfSessionPlayer.deleteMany({ where: { sessionId: sid } });
+    if (room.session.gameId) {
+      await db.werewolfSession.update({ where: { id: sid }, data: { gameId: null } });
+    }
+    await db.werewolfSession.delete({ where: { id: sid } });
   }
 
   // Create session + all players in one batch
