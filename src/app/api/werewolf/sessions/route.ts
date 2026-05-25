@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 import { getTeam } from "@/lib/werewolf-roles";
+import { setWerewolfFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
   const shuffledRoles = shuffle(selectedRoles).slice(0, players.length);
 
-  // Delete existing session — must clear ALL child tables first (nightActions, votes, players)
+  // Delete existing session — clear ALL child tables first
   if (room.session) {
     const sid = room.session.id;
     await db.$transaction([
@@ -83,11 +84,29 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // Push full state to Firebase Realtime DB
+  const playerNames: Record<string, string> = {};
+  const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
+  players.forEach((p) => {
+    const uid = String(p.userId);
+    playerNames[uid] = p.user.nickname || p.user.firstName || `User ${p.userId}`;
+    fbPlayers[uid] = { status: "alive", hasActed: false, hasVoted: false, voteCount: 0 };
+  });
+  await setWerewolfFb(roomCode, {
+    phase: "SETUP",
+    currentStep: null,
+    nightNumber: 0,
+    dayNumber: 0,
+    winTeam: null,
+    playerNames,
+    players: fbPlayers,
+  });
+
   const assignments = players.map((p, i) => ({
     userId: p.userId,
     seatName: p.seatName,
     seatOrder: p.seatOrder,
-    name: p.user.nickname || p.user.firstName || `User ${p.userId}`,
+    name: playerNames[String(p.userId)],
     role: shuffledRoles[i],
     team: getTeam(shuffledRoles[i]),
   }));

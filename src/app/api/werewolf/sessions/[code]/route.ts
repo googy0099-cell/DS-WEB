@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
+import { patchWerewolfFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -65,6 +66,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
       ...(phase !== undefined ? { phase } : {}),
     },
   });
+
+  // Push to Firebase
+  const patch: Record<string, unknown> = {};
+  if (currentStep !== undefined) patch.currentStep = currentStep;
+  if (phase !== undefined) patch.phase = phase;
+  if (Object.keys(patch).length) await patchWerewolfFb(code, patch);
 
   return NextResponse.json(updated);
 }

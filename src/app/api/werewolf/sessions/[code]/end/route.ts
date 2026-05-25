@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 import { calcPoints } from "@/lib/werewolf-scoring";
+import { patchWerewolfFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -19,20 +20,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
 
   const room = await db.werewolfRoom.findUnique({
     where: { code },
-    include: {
-      session: { include: { playerRoles: true } },
-    },
+    include: { session: { include: { playerRoles: true } } },
   });
 
   if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
   const s = room.session;
 
   const playerCount = s.playerCount || s.playerRoles.length;
-
   const results = s.playerRoles.map((sp) => {
     const isWin = sp.team === winTeam;
-    const pointsEarned = calcPoints({ isWin, team: sp.team, playerCount });
-    return { userId: sp.userId, team: sp.team, role: sp.role, isWin, pointsEarned };
+    return { userId: sp.userId, team: sp.team, role: sp.role, isWin, pointsEarned: calcPoints({ isWin, team: sp.team, playerCount }) };
   });
 
   const game = await db.werewolfGame.create({
@@ -41,31 +38,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
       gmId: Number(gmSession.user.id),
       winTeam,
       results: {
-        create: results.map((r) => ({
-          userId: r.userId,
-          team: r.team,
-          role: r.role,
-          isWin: r.isWin,
-          pointsEarned: r.pointsEarned,
-        })),
+        create: results.map((r) => ({ userId: r.userId, team: r.team, role: r.role, isWin: r.isWin, pointsEarned: r.pointsEarned })),
       },
     },
   });
 
-  await db.werewolfSession.update({
-    where: { id: s.id },
-    data: { phase: "ENDED", winTeam, gameId: game.id },
-  });
+  await db.werewolfSession.update({ where: { id: s.id }, data: { phase: "ENDED", winTeam, gameId: game.id } });
 
-  // Update each player's points balance
   await Promise.all(
-    results.map((r) =>
-      db.user.update({
-        where: { id: r.userId },
-        data: { points: { increment: r.pointsEarned } },
-      })
-    )
+    results.map((r) => db.user.update({ where: { id: r.userId }, data: { points: { increment: r.pointsEarned } } }))
   );
+
+  // Push game over state to Firebase
+  await patchWerewolfFb(code, { phase: "ENDED", winTeam });
 
   return NextResponse.json({ gameId: game.id, results });
 }

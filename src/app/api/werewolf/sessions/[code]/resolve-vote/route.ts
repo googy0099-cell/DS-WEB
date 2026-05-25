@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
+import { patchWerewolfFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -29,73 +30,55 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
-      session: {
-        include: {
-          playerRoles: true,
-          votes: true,
-        },
-      },
+      session: { include: { playerRoles: true, votes: true } },
     },
   });
 
   if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
   const s = room.session;
-
   if (s.phase !== "PLAYING") return NextResponse.json({ error: "ไม่อยู่ในช่วงเกม" }, { status: 400 });
 
   const dayVotes = s.votes.filter((v) => v.day === s.dayNumber);
 
   if (dayVotes.length === 0) {
-    // No votes cast — skip elimination
-    await db.werewolfSession.update({
-      where: { id: s.id },
-      data: { currentStep: "🌙 กลางคืน" },
-    });
+    await db.werewolfSession.update({ where: { id: s.id }, data: { currentStep: "🌙 กลางคืน" } });
+    await patchWerewolfFb(code, { currentStep: "🌙 กลางคืน" });
     return NextResponse.json({ ok: true, eliminated: null, tie: false, reason: "no_votes" });
   }
 
-  // Tally votes
   const tally: Record<number, number> = {};
-  for (const vote of dayVotes) {
-    tally[vote.targetUserId] = (tally[vote.targetUserId] ?? 0) + 1;
-  }
+  for (const vote of dayVotes) tally[vote.targetUserId] = (tally[vote.targetUserId] ?? 0) + 1;
 
   const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
   const topCount = sorted[0][1];
   const topCandidates = sorted.filter(([, c]) => c === topCount);
-
-  let eliminatedUserId: number | null = null;
   const tie = topCandidates.length > 1;
+  let eliminatedUserId: number | null = null;
 
   if (!tie) {
     eliminatedUserId = Number(topCandidates[0][0]);
-  }
-
-  if (eliminatedUserId) {
     await db.werewolfSessionPlayer.updateMany({
       where: { sessionId: s.id, userId: eliminatedUserId },
       data: { status: "dead" },
     });
   }
 
-  // Move to night phase
-  await db.werewolfSession.update({
-    where: { id: s.id },
-    data: { currentStep: "🌙 กลางคืน" },
-  });
+  await db.werewolfSession.update({ where: { id: s.id }, data: { currentStep: "🌙 กลางคืน" } });
 
-  // Check win condition
   const updatedPlayers = await db.werewolfSessionPlayer.findMany({ where: { sessionId: s.id } });
   const winTeam = checkWinCondition(updatedPlayers);
-  if (winTeam) {
-    await db.werewolfSession.update({ where: { id: s.id }, data: { winTeam } });
-  }
+  if (winTeam) await db.werewolfSession.update({ where: { id: s.id }, data: { winTeam } });
 
-  return NextResponse.json({
-    ok: true,
-    eliminated: eliminatedUserId,
-    tie,
-    tally,
-    winTeam: winTeam ?? null,
+  // Push to Firebase — reset hasActed for the new night
+  const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
+  for (const sp of updatedPlayers) {
+    fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
+  }
+  await patchWerewolfFb(code, {
+    currentStep: "🌙 กลางคืน",
+    players: fbPlayers,
+    ...(winTeam ? { winTeam } : {}),
   });
+
+  return NextResponse.json({ ok: true, eliminated: eliminatedUserId, tie, tally, winTeam: winTeam ?? null });
 }

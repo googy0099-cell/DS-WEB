@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
+import { patchWerewolfPlayerFb, patchWerewolfFb } from "@/lib/firebase-rtdb";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -14,12 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
-      session: {
-        include: {
-          playerRoles: true,
-          votes: true,
-        },
-      },
+      session: { include: { playerRoles: true, votes: true } },
     },
   });
 
@@ -37,15 +33,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (alreadyVoted) return NextResponse.json({ error: "โหวตแล้วในรอบนี้" }, { status: 400 });
 
   const target = s.playerRoles.find((p) => p.userId === targetUserId);
-  if (!target || target.status === "dead") {
-    return NextResponse.json({ error: "เป้าหมายไม่ถูกต้อง" }, { status: 400 });
-  }
+  if (!target || target.status === "dead") return NextResponse.json({ error: "เป้าหมายไม่ถูกต้อง" }, { status: 400 });
 
   await db.werewolfVote.upsert({
     where: { sessionId_day_voterUserId: { sessionId: s.id, day: s.dayNumber, voterUserId: userId } },
     create: { sessionId: s.id, day: s.dayNumber, voterUserId: userId, targetUserId },
     update: { targetUserId },
   });
+
+  // Recalculate vote count for target
+  const targetVotes = s.votes.filter((v) => v.day === s.dayNumber && v.targetUserId === targetUserId).length + 1;
+
+  // Push hasVoted for voter + voteCount for target
+  await Promise.all([
+    patchWerewolfPlayerFb(code, userId, { hasVoted: true }),
+    patchWerewolfFb(code, { [`players/${targetUserId}/voteCount`]: targetVotes } as never),
+  ]);
 
   return NextResponse.json({ ok: true });
 }

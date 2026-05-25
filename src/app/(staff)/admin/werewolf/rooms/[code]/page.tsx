@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use, useCallback, useRef } from "react";
+import { useEffect, useState, use, useCallback, useRef, useMemo } from "react";
 import useSWR from "swr";
 import QRCode from "qrcode";
 import Link from "next/link";
@@ -9,6 +9,8 @@ import { Suspense } from "react";
 import { wolfRoles, villagerRoles, indyRoles, vampireRoles } from "@/lib/werewolf-roles";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const FB_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "";
 
 interface Player {
   id: number;
@@ -61,6 +63,22 @@ interface StatusData {
   nightActionCount: number;
   voteCount: number;
   totalAlive: number;
+}
+
+interface FbPlayerState {
+  status: string;
+  hasActed: boolean;
+  hasVoted: boolean;
+  voteCount: number;
+}
+interface FbState {
+  phase: string;
+  currentStep: string | null;
+  nightNumber: number;
+  dayNumber: number;
+  winTeam: string | null;
+  playerNames: Record<string, string>;
+  players: Record<string, FbPlayerState>;
 }
 
 // ── Role data ──────────────────────────────────────────────────────────
@@ -130,12 +148,12 @@ function GMRoomInner({ code }: { code: string }) {
   const [deletingRoom, setDeletingRoom]       = useState(false);
 
   // Game control panel
-  const [statusData, setStatusData]           = useState<StatusData | null>(null);
+  const [fbState, setFbState]                 = useState<FbState | null>(null);
+  const fbEsRef = useRef<EventSource | null>(null);
   const [showEndModal, setShowEndModal]       = useState(false);
   const [selectedWinTeam, setSelectedWinTeam] = useState("");
   const [endingGame, setEndingGame]           = useState(false);
   const [controlMsg, setControlMsg]           = useState("");
-  const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: players, mutate: mutatePlayers } = useSWR<Player[]>(
     `/api/werewolf/rooms/${code}/players`,
@@ -192,21 +210,25 @@ function GMRoomInner({ code }: { code: string }) {
     setSeatNames(names);
   }, [players]);
 
-  // Poll game status when session is active
+  // Firebase EventSource — live game state
   useEffect(() => {
-    if (!assignments?.length) {
-      if (statusPollRef.current) { clearInterval(statusPollRef.current); statusPollRef.current = null; }
-      return;
+    if (!assignments?.length || !FB_URL) return;
+    function connect() {
+      const es = new EventSource(`${FB_URL}/werewolf/sessions/${code}.json`);
+      fbEsRef.current = es;
+      es.addEventListener("put", (e: MessageEvent) => {
+        try { const d = JSON.parse(e.data); if (d.data) setFbState(d.data); } catch {}
+      });
+      es.addEventListener("patch", (e: MessageEvent) => {
+        try {
+          const d = JSON.parse(e.data);
+          if (d.data) setFbState((prev) => prev ? { ...prev, ...d.data } : d.data);
+        } catch {}
+      });
+      es.onerror = () => { es.close(); setTimeout(connect, 3000); };
     }
-    function pollStatus() {
-      fetch(`/api/werewolf/sessions/${code}/status`)
-        .then((r) => r.json())
-        .then((d: StatusData & { error?: string }) => { if (!d.error) setStatusData(d); })
-        .catch(() => {});
-    }
-    pollStatus();
-    statusPollRef.current = setInterval(pollStatus, 3000);
-    return () => { if (statusPollRef.current) clearInterval(statusPollRef.current); };
+    connect();
+    return () => { fbEsRef.current?.close(); fbEsRef.current = null; };
   }, [code, assignments?.length]);
 
   // Member search
@@ -368,6 +390,35 @@ function GMRoomInner({ code }: { code: string }) {
   }
 
   // ── Computed ──────────────────────────────────────────────────────────
+  const statusData = useMemo<StatusData | null>(() => {
+    if (!fbState || !assignments?.length) return null;
+    const ps: StatusPlayer[] = assignments.map((a) => {
+      const fp = fbState.players?.[String(a.userId)];
+      return {
+        userId: a.userId,
+        name: a.seatName,
+        role: a.role,
+        team: a.team,
+        status: fp?.status ?? "alive",
+        hasActed: fp?.hasActed ?? false,
+        hasVoted: fp?.hasVoted ?? false,
+        voteCount: fp?.voteCount ?? 0,
+      };
+    });
+    const alive = ps.filter((p) => p.status !== "dead");
+    return {
+      phase: fbState.phase,
+      nightNumber: fbState.nightNumber ?? 0,
+      dayNumber: fbState.dayNumber ?? 0,
+      currentStep: fbState.currentStep,
+      winTeam: fbState.winTeam,
+      players: ps,
+      nightActionCount: ps.filter((p) => p.hasActed).length,
+      voteCount: ps.filter((p) => p.hasVoted).length,
+      totalAlive: alive.length,
+    };
+  }, [fbState, assignments]);
+
   const playerCount  = players?.length ?? 0;
   const hasSession   = !!assignments?.length;
   const favFiltered  = favRoles.filter((r) =>
