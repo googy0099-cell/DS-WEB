@@ -117,20 +117,36 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     return () => { esRef.current?.close(); esRef.current = null; };
   }, [joined, session, code, fetchMyInfo]);
 
-  // Re-fetch role when night/day number changes (in case GM did new session)
+  // Polling fallback — poll /me every 3s until we have a role (covers Firebase failures)
+  useEffect(() => {
+    if (!joined || !session?.user || myInfo) return;
+    const id = setInterval(fetchMyInfo, 3000);
+    return () => clearInterval(id);
+  }, [joined, session, myInfo, fetchMyInfo]);
+
+  // Handle Firebase state changes — reset UI on new round, re-fetch role on phase change
   useEffect(() => {
     if (!fb || !joined) return;
+
     if (fb.nightNumber !== prevNightRef.current || fb.dayNumber !== prevDayRef.current) {
       setSelectedTarget(null);
       setActionMsg("");
       prevNightRef.current = fb.nightNumber;
       prevDayRef.current = fb.dayNumber;
     }
-    // Fetch role whenever Firebase phase first appears or changes (catches GM dealing cards in SETUP)
+
     const prevPhase = prevPhaseRef.current;
     prevPhaseRef.current = fb.phase;
-    if (!myInfo && prevPhase !== fb.phase) fetchMyInfo();
-  }, [fb, joined, myInfo, fetchMyInfo]);
+
+    if (prevPhase !== fb.phase) {
+      // New session started (phase reset to SETUP) — clear old role so polling restarts
+      if (fb.phase === "SETUP" && prevPhase !== null) {
+        setMyInfo(null);
+      }
+      // Always fetch role on phase transition
+      fetchMyInfo();
+    }
+  }, [fb, joined, fetchMyInfo]);
 
   // ── Join ─────────────────────────────────────────────────────────────
   async function handleJoin(e: React.FormEvent) {

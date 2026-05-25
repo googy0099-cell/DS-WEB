@@ -4,10 +4,9 @@ import { getDatabase } from "firebase-admin/database";
 function getApp() {
   if (getApps().length > 0) return getApps()[0];
   const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!);
-  return initializeApp({
-    credential: cert(sa),
-    databaseURL: `https://${sa.project_id}-default-rtdb.firebaseio.com`,
-  });
+  const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL
+    ?? `https://${sa.project_id}-default-rtdb.firebaseio.com`;
+  return initializeApp({ credential: cert(sa), databaseURL });
 }
 
 function rtdb() {

@@ -39,7 +39,11 @@ interface Assignment {
 interface SessionData {
   id: number;
   phase: string;
-  playerRoles: { userId: number; role: string; team: string; seatName: string | null; seatOrder?: number }[];
+  currentStep: string | null;
+  nightNumber: number;
+  dayNumber: number;
+  winTeam: string | null;
+  playerRoles: { userId: number; role: string; team: string; status: string; seatName: string | null; seatOrder?: number }[];
 }
 
 interface StatusPlayer {
@@ -162,6 +166,27 @@ function GMRoomInner({ code }: { code: string }) {
     { refreshInterval: 5000 }
   );
 
+  // Poll session every 3s — used as Firebase fallback for game control panel
+  const { data: dbSession } = useSWR<SessionData>(
+    `/api/werewolf/sessions/${code}`,
+    fetcher,
+    { refreshInterval: 3000, onErrorRetry: () => {} }
+  );
+
+  // Load assignments + check modal from DB session
+  useEffect(() => {
+    if (!dbSession?.playerRoles?.length) return;
+    const loaded: Assignment[] = dbSession.playerRoles.map((sp, i) => ({
+      userId: sp.userId,
+      seatName: sp.seatName ?? `User ${sp.userId}`,
+      seatOrder: sp.seatOrder ?? i,
+      role: sp.role,
+      team: sp.team,
+    }));
+    setAssignments(loaded);
+    if (searchParams.get("check") === "1") setShowCheckModal(true);
+  }, [dbSession, searchParams]);
+
   // Load favorites
   useEffect(() => {
     try {
@@ -175,26 +200,6 @@ function GMRoomInner({ code }: { code: string }) {
     const joinUrl = `${window.location.origin}/join/${code}`;
     QRCode.toDataURL(joinUrl, { width: 200, margin: 2 }).then(setQrUrl);
   }, [code]);
-
-  // Load existing session
-  useEffect(() => {
-    fetch(`/api/werewolf/sessions/${code}`)
-      .then((r) => r.json())
-      .then((s: SessionData) => {
-        if (s?.playerRoles?.length) {
-          const loaded: Assignment[] = s.playerRoles.map((sp, i) => ({
-            userId: sp.userId,
-            seatName: sp.seatName ?? `User ${sp.userId}`,
-            seatOrder: sp.seatOrder ?? i,
-            role: sp.role,
-            team: sp.team,
-          }));
-          setAssignments(loaded);
-          if (searchParams.get("check") === "1") setShowCheckModal(true);
-        }
-      })
-      .catch(() => {});
-  }, [code, searchParams]);
 
   // Sync seat rows when players change
   useEffect(() => {
@@ -399,33 +404,66 @@ function GMRoomInner({ code }: { code: string }) {
 
   // ── Computed ──────────────────────────────────────────────────────────
   const statusData = useMemo<StatusData | null>(() => {
-    if (!fbState || !assignments?.length) return null;
+    if (!assignments?.length) return null;
+
+    // Prefer Firebase (real-time) — fall back to DB session poll
+    if (fbState) {
+      const ps: StatusPlayer[] = assignments.map((a) => {
+        const fp = fbState.players?.[String(a.userId)];
+        return {
+          userId: a.userId,
+          name: a.seatName,
+          role: a.role,
+          team: a.team,
+          status: fp?.status ?? "alive",
+          hasActed: fp?.hasActed ?? false,
+          hasVoted: fp?.hasVoted ?? false,
+          voteCount: fp?.voteCount ?? 0,
+        };
+      });
+      const alive = ps.filter((p) => p.status !== "dead");
+      return {
+        phase: fbState.phase,
+        nightNumber: fbState.nightNumber ?? 0,
+        dayNumber: fbState.dayNumber ?? 0,
+        currentStep: fbState.currentStep,
+        winTeam: fbState.winTeam,
+        players: ps,
+        nightActionCount: ps.filter((p) => p.hasActed).length,
+        voteCount: ps.filter((p) => p.hasVoted).length,
+        totalAlive: alive.length,
+      };
+    }
+
+    // Firebase unavailable — build from DB session (polled every 3s)
+    if (!dbSession?.playerRoles?.length) return null;
+    const roleMap = new Map(dbSession.playerRoles.map((r) => [r.userId, r]));
     const ps: StatusPlayer[] = assignments.map((a) => {
-      const fp = fbState.players?.[String(a.userId)];
+      const sp = roleMap.get(a.userId);
       return {
         userId: a.userId,
         name: a.seatName,
         role: a.role,
         team: a.team,
-        status: fp?.status ?? "alive",
-        hasActed: fp?.hasActed ?? false,
-        hasVoted: fp?.hasVoted ?? false,
-        voteCount: fp?.voteCount ?? 0,
+        status: sp?.status ?? "alive",
+        hasActed: false,
+        hasVoted: false,
+        voteCount: 0,
       };
     });
     const alive = ps.filter((p) => p.status !== "dead");
     return {
-      phase: fbState.phase,
-      nightNumber: fbState.nightNumber ?? 0,
-      dayNumber: fbState.dayNumber ?? 0,
-      currentStep: fbState.currentStep,
-      winTeam: fbState.winTeam,
+      phase: dbSession.phase,
+      nightNumber: dbSession.nightNumber ?? 0,
+      dayNumber: dbSession.dayNumber ?? 0,
+      currentStep: dbSession.currentStep ?? null,
+      winTeam: dbSession.winTeam ?? null,
       players: ps,
-      nightActionCount: ps.filter((p) => p.hasActed).length,
-      voteCount: ps.filter((p) => p.hasVoted).length,
+      nightActionCount: 0,
+      voteCount: 0,
       totalAlive: alive.length,
     };
-  }, [fbState, assignments]);
+  }, [fbState, assignments, dbSession]);
 
   const playerCount    = players?.length ?? 0;
   const hasSession     = !!assignments?.length;
