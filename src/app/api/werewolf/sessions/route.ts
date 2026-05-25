@@ -32,7 +32,13 @@ export async function POST(req: NextRequest) {
 
   const room = await db.werewolfRoom.findUnique({
     where: { code: roomCode },
-    include: { players: { include: { user: { select: { id: true, firstName: true, nickname: true } } } } },
+    include: {
+      players: {
+        include: { user: { select: { id: true, firstName: true, nickname: true } } },
+        orderBy: { seatOrder: "asc" },
+      },
+      session: { select: { id: true } },
+    },
   });
   if (!room) return NextResponse.json({ error: "ไม่พบห้อง" }, { status: 404 });
 
@@ -43,13 +49,18 @@ export async function POST(req: NextRequest) {
 
   const shuffledRoles = shuffle(selectedRoles).slice(0, players.length);
 
-  // Delete existing session for this room (start fresh) — must delete children first
-  const existingSession = await db.werewolfSession.findUnique({ where: { roomId: room.id } });
-  if (existingSession) {
-    await db.werewolfSessionPlayer.deleteMany({ where: { sessionId: existingSession.id } });
-    await db.werewolfSession.delete({ where: { id: existingSession.id } });
+  // Delete existing session — must clear ALL child tables first (nightActions, votes, players)
+  if (room.session) {
+    const sid = room.session.id;
+    await db.$transaction([
+      db.werewolfNightAction.deleteMany({ where: { sessionId: sid } }),
+      db.werewolfVote.deleteMany({ where: { sessionId: sid } }),
+      db.werewolfSessionPlayer.deleteMany({ where: { sessionId: sid } }),
+      db.werewolfSession.delete({ where: { id: sid } }),
+    ]);
   }
 
+  // Create session + all players in one batch
   const newSession = await db.werewolfSession.create({
     data: {
       roomId: room.id,
@@ -59,22 +70,23 @@ export async function POST(req: NextRequest) {
       playerCount: players.length,
       nightNumber: 0,
       dayNumber: 0,
+      playerRoles: {
+        createMany: {
+          data: players.map((p, i) => ({
+            userId: p.userId,
+            role: shuffledRoles[i],
+            team: getTeam(shuffledRoles[i]),
+            status: "alive",
+          })),
+        },
+      },
     },
-  });
-
-  await db.werewolfSessionPlayer.createMany({
-    data: players.map((p, i) => ({
-      sessionId: newSession.id,
-      userId: p.userId,
-      role: shuffledRoles[i],
-      team: getTeam(shuffledRoles[i]),
-      status: "alive",
-    })),
   });
 
   const assignments = players.map((p, i) => ({
     userId: p.userId,
     seatName: p.seatName,
+    seatOrder: p.seatOrder,
     name: p.user.nickname || p.user.firstName || `User ${p.userId}`,
     role: shuffledRoles[i],
     team: getTeam(shuffledRoles[i]),

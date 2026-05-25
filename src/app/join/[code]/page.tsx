@@ -107,8 +107,9 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
 
   useEffect(() => {
     if (!joined || !session?.user) return;
+    // Poll immediately, then every 1s for fast role delivery
     poll();
-    pollRef.current = setInterval(poll, 2000);
+    pollRef.current = setInterval(poll, 1000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [joined, session, poll]);
 
