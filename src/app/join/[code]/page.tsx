@@ -4,6 +4,7 @@ import { use, useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
+import { roleDescriptions } from "@/lib/werewolf-roles";
 
 const FB_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "";
 
@@ -38,6 +39,8 @@ interface FbState {
   winTeam: string | null;
   playerNames: Record<string, string>;
   players: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }>;
+  announcement?: string | null;
+  voteDecision?: { yes: number; no: number; voters: Record<string, boolean> } | null;
 }
 
 const TEAM_STYLES: Record<string, { chip: string; emoji: string }> = {
@@ -67,6 +70,10 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
+
+  // Role card visibility + description modal
+  const [roleHidden, setRoleHidden] = useState(false);
+  const [showRoleDesc, setShowRoleDesc] = useState(false);
 
   const esRef = useRef<EventSource | null>(null);
   const prevNightRef = useRef<number>(0);
@@ -142,10 +149,17 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     if (myInfo.nightNumber !== prevNightRef.current || myInfo.dayNumber !== prevDayRef.current) {
       setSelectedTarget(null);
       setActionMsg("");
+      setVoteDecisionSent(false);
       prevNightRef.current = myInfo.nightNumber;
       prevDayRef.current = myInfo.dayNumber;
     }
   }, [myInfo]);
+
+  // Reset voteDecisionSent when step leaves vote-decision phase
+  useEffect(() => {
+    const step = fb?.currentStep ?? myInfo?.currentStep ?? null;
+    if (!step?.includes("❓")) setVoteDecisionSent(false);
+  }, [fb?.currentStep, myInfo?.currentStep]);
 
   // ── Join ─────────────────────────────────────────────────────────────
   async function handleJoin(e: React.FormEvent) {
@@ -196,6 +210,22 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     } finally { setSubmitting(false); }
   }
 
+  // ── Identify ──────────────────────────────────────────────────────────
+  async function sendIdentify() {
+    await fetch(`/api/werewolf/sessions/${code}/identify`, { method: "POST" });
+  }
+
+  // ── Vote decision (YES/NO on execution) ───────────────────────────────
+  const [voteDecisionSent, setVoteDecisionSent] = useState(false);
+  async function submitVoteDecision(vote: "yes" | "no") {
+    setVoteDecisionSent(true);
+    await fetch(`/api/werewolf/sessions/${code}/vote-decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vote }),
+    });
+  }
+
   // ── Derived state — prefer myInfo (polled) over Firebase ─────────────
   const myUserId = session?.user?.id ? Number(session.user.id) : null;
   const myUidStr = myUserId ? String(myUserId) : null;
@@ -212,13 +242,18 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const canAct = myInfo?.canAct ?? false;
   const canVote = myInfo?.canVote ?? false;
   const isWin  = myInfo?.isWin  ?? null;
+  const announcement = fb?.announcement ?? null;
+  const voteDecision = fb?.voteDecision ?? null;
+  const isVoteDecisionPhase = currentStep?.includes("❓") ?? false;
+  const myVoteDecisionCast = myUidStr ? (voteDecision?.voters?.[myUidStr] !== undefined) : false;
 
-  // Alive players: Firebase preferred (has names), fall back to /me data
+  // Alive players: Firebase preferred (has names), fall back to /me data.
+  // Always exclude self so the voting / action list never shows the player themselves.
   const alivePlayers: AlivePlayer[] = fb
     ? Object.entries(fb.players)
         .filter(([uid, p]) => p.status !== "dead" && uid !== myUidStr)
         .map(([uid]) => ({ userId: Number(uid), name: fb.playerNames[uid] ?? `User ${uid}` }))
-    : (myInfo?.alivePlayers ?? []);
+    : (myInfo?.alivePlayers ?? []).filter((p) => p.userId !== myUserId);
 
   const role = myInfo?.role ?? null;
   const team = myInfo?.team ?? null;
@@ -230,15 +265,62 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center p-6">
 
-      {/* Fixed role chip */}
+      {/* Role card — bottom center (tap to hide/show) */}
       {joined && role && (
-        <div className={`fixed top-3 right-3 z-50 border px-3 py-1.5 rounded-2xl shadow-lg flex items-start gap-1.5 max-w-[180px] ${teamStyle.chip} ${isDead ? "opacity-50" : ""}`}>
-          <span className="text-base mt-0.5 shrink-0">{teamStyle.emoji}</span>
-          <span>
-            <span className="block text-xs font-bold leading-tight">{thaiRole}</span>
-            {engRole && <span className="block text-[10px] opacity-70 leading-tight">{engRole}</span>}
-            {isDead && <span className="block text-[10px] text-red-400 leading-tight">💀 ตายแล้ว</span>}
-          </span>
+        roleHidden ? (
+          <button
+            onClick={() => setRoleHidden(false)}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-gray-800/90 border border-gray-600 text-white text-xs px-4 py-2 rounded-2xl shadow-lg"
+          >
+            🎴 ดูไพ่
+          </button>
+        ) : (
+          <div className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 border rounded-2xl shadow-lg min-w-[160px] ${teamStyle.chip} ${isDead ? "opacity-50" : ""}`}>
+            <div className="flex items-start gap-1.5 px-4 py-2">
+              <span className="text-base mt-0.5 shrink-0">{teamStyle.emoji}</span>
+              <span className="flex-1">
+                <span className="block text-sm font-bold leading-tight">{thaiRole}</span>
+                {engRole && <span className="block text-[10px] opacity-70 leading-tight">{engRole}</span>}
+                {isDead && <span className="block text-[10px] text-red-400 leading-tight">💀 ตายแล้ว</span>}
+              </span>
+            </div>
+            <div className="flex border-t border-white/10">
+              <button onClick={() => setShowRoleDesc(true)} className="flex-1 text-[11px] py-1.5 hover:bg-white/10 rounded-bl-2xl">
+                ความสามารถ
+              </button>
+              <button onClick={() => setRoleHidden(true)} className="flex-1 text-[11px] py-1.5 hover:bg-white/10 rounded-br-2xl border-l border-white/10">
+                ซ่อน
+              </button>
+            </div>
+          </div>
+        )
+      )}
+
+      {/* Role description modal */}
+      {showRoleDesc && role && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-end justify-center p-4" onClick={() => setShowRoleDesc(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-sm p-5" onClick={e => e.stopPropagation()}>
+            <div className={`inline-flex items-center gap-2 border px-3 py-1.5 rounded-xl mb-4 ${teamStyle.chip}`}>
+              <span>{teamStyle.emoji}</span>
+              <span>
+                <span className="block text-sm font-bold">{thaiRole}</span>
+                {engRole && <span className="block text-xs opacity-70">{engRole}</span>}
+              </span>
+            </div>
+            <p className="text-gray-200 text-sm leading-relaxed">
+              {roleDescriptions[role] ?? "ไม่มีข้อมูลความสามารถ"}
+            </p>
+            <button onClick={() => setShowRoleDesc(false)} className="mt-5 w-full bg-gray-700 text-white font-bold py-3 rounded-xl text-sm">
+              ปิด
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Announcement banner (top — bottom is used by the role card) */}
+      {joined && announcement && phase === "PLAYING" && (
+        <div className="fixed top-0 left-0 right-0 z-40 bg-gray-900/95 border-b border-gray-600 px-4 py-3">
+          <p className="text-white text-sm text-center">{announcement}</p>
         </div>
       )}
 
@@ -264,11 +346,31 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
         /* ── Game View ── */
         <div className="w-full max-w-xs text-center">
 
+          {/* Identify button — visible when alive and playing */}
+          {phase === "PLAYING" && !isDead && (
+            <button
+              onClick={sendIdentify}
+              className="fixed bottom-16 right-4 z-30 bg-yellow-500 text-black font-bold rounded-full w-14 h-14 text-2xl shadow-lg active:bg-yellow-400 flex items-center justify-center"
+              title="กดเพื่อให้ GM ระบุตัวคุณบน Canvas"
+            >
+              🎯
+            </button>
+          )}
+
           {isDead && phase === "PLAYING" && (
             <div className="mb-6">
               <p className="text-5xl mb-3">💀</p>
               <h2 className="text-red-400 text-xl font-bold mb-1">คุณตายแล้ว</h2>
               <p className="text-gray-500 text-sm">คุณต้องหลับตาและเงียบ<br />รอดูผลเกม</p>
+            </div>
+          )}
+
+          {/* Standby — role was cleared (GM reset), waiting for new deal */}
+          {phase === "PLAYING" && !role && (
+            <div className="text-center">
+              <p className="text-5xl mb-4 animate-pulse">⏳</p>
+              <h2 className="text-white text-xl font-bold mb-2">รอรอบใหม่</h2>
+              <p className="text-gray-400 text-sm">GM กำลังเตรียมการ์ดรอบถัดไป...</p>
             </div>
           )}
 
@@ -305,7 +407,41 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
               )}
               <p className="text-gray-500 text-sm">เกมจบแล้ว ขอบคุณที่เล่น!</p>
             </div>
-          ) : isDead ? null : canVote ? (
+          ) : isDead ? null : isVoteDecisionPhase && !isDead ? (
+            /* ── Vote Decision (YES/NO on execution) ── */
+            <div className="text-center">
+              <p className="text-5xl mb-3">🗳️</p>
+              <h2 className="text-yellow-400 text-xl font-bold mb-2">จะโหวตประหารไหม?</h2>
+              <p className="text-gray-400 text-sm mb-5">เสียงส่วนใหญ่ตัดสิน</p>
+              {(voteDecisionSent || myVoteDecisionCast) ? (
+                <div>
+                  <p className="text-4xl mb-2">✅</p>
+                  <p className="text-green-400 font-bold">โหวตแล้ว รอผล...</p>
+                  {voteDecision && (
+                    <div className="mt-3 flex gap-4 justify-center text-sm">
+                      <span className="text-green-400">✅ เอา: {voteDecision.yes ?? 0}</span>
+                      <span className="text-red-400">❌ ไม่เอา: {voteDecision.no ?? 0}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <button onClick={() => submitVoteDecision("yes")} className="w-full bg-green-600 text-white font-bold py-4 rounded-xl text-lg active:bg-green-500">
+                    ✅ โหวต — จะประหาร
+                  </button>
+                  <button onClick={() => submitVoteDecision("no")} className="w-full bg-red-700 text-white font-bold py-4 rounded-xl text-lg active:bg-red-600">
+                    ❌ ไม่โหวต — ข้ามไป
+                  </button>
+                  {voteDecision && (
+                    <div className="flex gap-4 justify-center text-sm text-gray-400 mt-2">
+                      <span className="text-green-400">✅ {voteDecision.yes ?? 0}</span>
+                      <span className="text-red-400">❌ {voteDecision.no ?? 0}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : canVote ? (
             /* ── Voting ── */
             <div className="text-left">
               <div className="text-center mb-5">

@@ -30,7 +30,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
-      session: { include: { playerRoles: true, votes: true } },
+      players: { select: { userId: true, seatName: true } },
+      session: {
+        include: {
+          playerRoles: { include: { user: { select: { id: true, firstName: true, nickname: true } } } },
+          votes: true,
+        },
+      },
     },
   });
 
@@ -69,6 +75,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const winTeam = checkWinCondition(updatedPlayers);
   if (winTeam) await db.werewolfSession.update({ where: { id: s.id }, data: { winTeam } });
 
+  // Build announcement
+  const seatMap = new Map((room.players ?? []).map((p) => [p.userId, p.seatName]));
+  const getPlayerName = (id: number) => {
+    const sp = s.playerRoles.find((p) => p.userId === id);
+    return seatMap.get(id) ?? sp?.user?.nickname ?? sp?.user?.firstName ?? `Player ${id}`;
+  };
+  let announcement: string;
+  if (tie) announcement = "☀️ ผลโหวต: คะแนนเท่ากัน — ไม่มีการประหาร";
+  else if (eliminatedUserId) announcement = `☀️ ผลโหวต: ${getPlayerName(eliminatedUserId)} ถูกประหาร`;
+  else announcement = "☀️ ผลโหวต: ไม่มีการประหาร";
+
   // Push to Firebase — reset hasActed for the new night
   const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
   for (const sp of updatedPlayers) {
@@ -77,8 +94,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   await patchWerewolfFb(code, {
     currentStep: "🌙 กลางคืน",
     players: fbPlayers,
+    announcement,
     ...(winTeam ? { winTeam } : {}),
   });
 
-  return NextResponse.json({ ok: true, eliminated: eliminatedUserId, tie, tally, winTeam: winTeam ?? null });
+  const eliminatedName = eliminatedUserId ? getPlayerName(eliminatedUserId) : null;
+  return NextResponse.json({ ok: true, eliminated: eliminatedUserId, eliminatedName, tie, tally, winTeam: winTeam ?? null });
 }

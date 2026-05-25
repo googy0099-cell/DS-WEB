@@ -31,8 +31,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
+      players: { select: { userId: true, seatName: true } },
       session: {
-        include: { playerRoles: true, nightActions: true },
+        include: {
+          playerRoles: {
+            include: { user: { select: { id: true, firstName: true, nickname: true } } },
+          },
+          nightActions: true,
+        },
       },
     },
   });
@@ -94,16 +100,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   for (const sp of updatedPlayers) {
     fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
   }
+
+  const seatMap = new Map((room.players ?? []).map((p) => [p.userId, p.seatName]));
+  const getPlayerName = (id: number) => {
+    const sp = s.playerRoles.find((p) => p.userId === id);
+    return seatMap.get(id) ?? sp?.user?.nickname ?? sp?.user?.firstName ?? `Player ${id}`;
+  };
+
+  const killedNames = finalKills.map(getPlayerName).join(", ");
+  const announcement = finalKills.length
+    ? `🌙 คืนที่ ${s.nightNumber}: ${killedNames} ถูกกำจัด`
+    : `🌙 คืนที่ ${s.nightNumber}: ไม่มีผู้เสียชีวิต`;
+
   await patchWerewolfFb(code, {
     currentStep: "☀️ กลางวัน",
     nightNumber: newNight,
     players: fbPlayers,
+    announcement,
     ...(winTeam ? { winTeam } : {}),
   });
-
-  const killedNames = finalKills
-    .map((id) => s.playerRoles.find((sp) => sp.userId === id)?.role ?? `User ${id}`)
-    .join(", ");
 
   return NextResponse.json({ ok: true, killed: finalKills, protected: [...protectedIds], killedNames, winTeam: winTeam ?? null });
 }

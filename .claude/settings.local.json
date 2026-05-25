@@ -99,7 +99,11 @@
       "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/vote)",
       "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/resolve-night)",
       "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/open-vote)",
-      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/resolve-vote)"
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/resolve-vote)",
+      "Bash(npx tsx -e ' *)",
+      "Bash(vercel --version)",
+      "Bash(grep -v \"^src/app$\")",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ]
   }
 }

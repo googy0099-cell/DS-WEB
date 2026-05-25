@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import Image from "next/image";
+import { useSession } from "next-auth/react";
 
 interface Member {
   id: number;
@@ -25,10 +26,19 @@ interface Member {
 }
 
 export default function AdminMembersPage() {
+  const { data: session } = useSession();
+  const isOwner = session?.user?.role === "OWNER";
+
   const [members, setMembers] = useState<Member[]>([]);
   const [selected, setSelected] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Edit state
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Member>>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     fetch("/api/members")
@@ -44,6 +54,38 @@ export default function AdminMembersPage() {
 
   const googleAvatarUrl = (googleId: string | null) =>
     googleId ? `https://lh3.googleusercontent.com/a/${googleId}=s96-c` : null;
+
+  function openEdit(m: Member) {
+    setEditForm({
+      firstName: m.firstName,
+      lastName: m.lastName,
+      nickname: m.nickname ?? "",
+      email: m.email,
+      phone: m.phone ?? "",
+      instagram: m.instagram ?? "",
+      facebook: m.facebook ?? "",
+      birthday: m.birthday ?? "",
+    });
+    setSaveError("");
+    setEditing(true);
+  }
+
+  async function saveEdit() {
+    if (!selected) return;
+    setSaving(true);
+    setSaveError("");
+    const res = await fetch(`/api/members/${selected.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm),
+    });
+    setSaving(false);
+    if (!res.ok) { setSaveError("บันทึกไม่สำเร็จ"); return; }
+    const updated = { ...selected, ...editForm };
+    setMembers(prev => prev.map(m => m.id === selected.id ? { ...m, ...editForm } as Member : m));
+    setSelected(updated as Member);
+    setEditing(false);
+  }
 
   return (
     <div>
@@ -84,7 +126,7 @@ export default function AdminMembersPage() {
                   <tr
                     key={m.id}
                     className="border-b border-sand/50 last:border-0 hover:bg-sand/20 cursor-pointer transition-colors"
-                    onClick={() => setSelected(m)}
+                    onClick={() => { setSelected(m); setEditing(false); }}
                   >
                     <td className="p-3">
                       <div className="flex items-center gap-2">
@@ -115,71 +157,110 @@ export default function AdminMembersPage() {
         </div>
       </div>
 
-      {/* Detail modal */}
+      {/* Detail / Edit modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => setSelected(null)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false); }}>
           <div className="bg-white rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-sand">
-              <h2 className="font-bold text-navy">ข้อมูลสมาชิก</h2>
-              <button onClick={() => setSelected(null)}><X size={20} className="text-gray-400" /></button>
+              <h2 className="font-bold text-navy">{editing ? "แก้ไขข้อมูล" : "ข้อมูลสมาชิก"}</h2>
+              <div className="flex items-center gap-2">
+                {isOwner && !editing && (
+                  <button onClick={() => openEdit(selected)} className="text-orange hover:text-orange/80">
+                    <Pencil size={16} />
+                  </button>
+                )}
+                <button onClick={() => { setSelected(null); setEditing(false); }}><X size={20} className="text-gray-400" /></button>
+              </div>
             </div>
 
-            <div className="p-5 space-y-4">
-              {/* Avatar + name */}
-              <div className="text-center">
-                {(() => {
-                  const av = selected.avatarUrl || googleAvatarUrl(selected.googleId);
-                  return av ? (
-                    <Image src={av} alt="" width={72} height={72} className="rounded-full object-cover mx-auto mb-2 w-18 h-18" />
-                  ) : (
-                    <div className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange text-2xl font-bold mx-auto mb-2">
-                      {selected.firstName[0]?.toUpperCase()}
+            {editing ? (
+              <div className="p-5 space-y-3">
+                {([
+                  { label: "ชื่อ", field: "firstName" },
+                  { label: "นามสกุล", field: "lastName" },
+                  { label: "ชื่อเล่น", field: "nickname" },
+                  { label: "อีเมล", field: "email", type: "email" },
+                  { label: "เบอร์โทร", field: "phone" },
+                  { label: "Instagram", field: "instagram" },
+                  { label: "Facebook", field: "facebook" },
+                  { label: "วันเกิด", field: "birthday", type: "date" },
+                ] as { label: string; field: keyof Member; type?: string }[]).map(({ label, field, type = "text" }) => (
+                  <div key={field}>
+                    <label className="text-xs font-medium text-navy block mb-1">{label}</label>
+                    <input
+                      type={type}
+                      value={(editForm[field] as string) ?? ""}
+                      onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))}
+                      className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                    />
+                  </div>
+                ))}
+                {saveError && <p className="text-sm text-red-500">{saveError}</p>}
+                <div className="flex gap-3 pt-2">
+                  <button onClick={() => setEditing(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+                  <button onClick={saveEdit} disabled={saving} className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
+                    {saving ? "กำลังบันทึก..." : "บันทึก"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-5 space-y-4">
+                {/* Avatar + name */}
+                <div className="text-center">
+                  {(() => {
+                    const av = selected.avatarUrl || googleAvatarUrl(selected.googleId);
+                    return av ? (
+                      <Image src={av} alt="" width={72} height={72} className="rounded-full object-cover mx-auto mb-2 w-18 h-18" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange text-2xl font-bold mx-auto mb-2">
+                        {selected.firstName[0]?.toUpperCase()}
+                      </div>
+                    );
+                  })()}
+                  <p className="font-bold text-navy text-lg">{selected.firstName} {selected.lastName}</p>
+                  {selected.nickname && <p className="text-gray-400 text-sm">"{selected.nickname}"</p>}
+                  <p className="text-gray-400 text-sm">@{selected.username}</p>
+                </div>
+
+                {/* Member code */}
+                <div className="bg-navy rounded-xl p-3 text-center">
+                  <p className="text-cream/60 text-xs mb-1">รหัสสมาชิก</p>
+                  <p className="text-2xl font-bold text-orange tracking-widest">{selected.memberCode}</p>
+                </div>
+
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    { label: "คะแนน", value: selected.points, color: "text-orange" },
+                    { label: "ยอดใช้จ่าย", value: `฿${selected.totalSpentTHB}`, color: "text-navy" },
+                    { label: "เข้าร้าน", value: `${selected.visitCount} ครั้ง`, color: "text-sage" },
+                  ].map(s => (
+                    <div key={s.label} className="bg-sand/40 rounded-xl p-3">
+                      <p className={`font-bold text-sm ${s.color}`}>{s.value}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
                     </div>
-                  );
-                })()}
-                <p className="font-bold text-navy text-lg">{selected.firstName} {selected.lastName}</p>
-                {selected.nickname && <p className="text-gray-400 text-sm">"{selected.nickname}"</p>}
-                <p className="text-gray-400 text-sm">@{selected.username}</p>
-              </div>
+                  ))}
+                </div>
 
-              {/* Member code */}
-              <div className="bg-navy rounded-xl p-3 text-center">
-                <p className="text-cream/60 text-xs mb-1">รหัสสมาชิก</p>
-                <p className="text-2xl font-bold text-orange tracking-widest">{selected.memberCode}</p>
+                {/* Details */}
+                <div className="space-y-2 text-sm">
+                  {[
+                    { label: "อีเมล", value: selected.email },
+                    { label: "เบอร์โทร", value: selected.phone },
+                    { label: "วันเกิด", value: selected.birthday },
+                    { label: "Instagram", value: selected.instagram },
+                    { label: "Facebook", value: selected.facebook },
+                    { label: "เข้าร้านด้วย", value: selected.googleId ? "Google" : "Email/Password" },
+                    { label: "สมัครเมื่อ", value: new Date(selected.createdAt).toLocaleDateString("th-TH") },
+                  ].map(row => row.value && (
+                    <div key={row.label} className="flex justify-between">
+                      <span className="text-gray-400">{row.label}</span>
+                      <span className="text-navy font-medium text-right max-w-[60%] truncate">{row.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              {/* Stats */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                {[
-                  { label: "คะแนน", value: selected.points, color: "text-orange" },
-                  { label: "ยอดใช้จ่าย", value: `฿${selected.totalSpentTHB}`, color: "text-navy" },
-                  { label: "เข้าร้าน", value: `${selected.visitCount} ครั้ง`, color: "text-sage" },
-                ].map(s => (
-                  <div key={s.label} className="bg-sand/40 rounded-xl p-3">
-                    <p className={`font-bold text-sm ${s.color}`}>{s.value}</p>
-                    <p className="text-xs text-gray-400">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Details */}
-              <div className="space-y-2 text-sm">
-                {[
-                  { label: "อีเมล", value: selected.email },
-                  { label: "เบอร์โทร", value: selected.phone },
-                  { label: "วันเกิด", value: selected.birthday },
-                  { label: "Instagram", value: selected.instagram },
-                  { label: "Facebook", value: selected.facebook },
-                  { label: "เข้าร้านด้วย", value: selected.googleId ? "Google" : "Email/Password" },
-                  { label: "สมัครเมื่อ", value: new Date(selected.createdAt).toLocaleDateString("th-TH") },
-                ].map(row => row.value && (
-                  <div key={row.label} className="flex justify-between">
-                    <span className="text-gray-400">{row.label}</span>
-                    <span className="text-navy font-medium text-right max-w-[60%] truncate">{row.value}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import useSWR from "swr";
 import QRCode from "qrcode";
 import Link from "next/link";
@@ -9,8 +9,6 @@ import { Suspense } from "react";
 import { wolfRoles, villagerRoles, indyRoles, vampireRoles, roleDescriptions } from "@/lib/werewolf-roles";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
-const FB_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "";
 
 interface Player {
   id: number;
@@ -44,45 +42,6 @@ interface SessionData {
   dayNumber: number;
   winTeam: string | null;
   playerRoles: { userId: number; role: string; team: string; status: string; seatName: string | null; seatOrder?: number }[];
-}
-
-interface StatusPlayer {
-  userId: number;
-  name: string;
-  role: string;
-  team: string;
-  status: string;
-  hasActed: boolean;
-  hasVoted: boolean;
-  voteCount: number;
-}
-
-interface StatusData {
-  phase: string;
-  nightNumber: number;
-  dayNumber: number;
-  currentStep: string | null;
-  winTeam: string | null;
-  players: StatusPlayer[];
-  nightActionCount: number;
-  voteCount: number;
-  totalAlive: number;
-}
-
-interface FbPlayerState {
-  status: string;
-  hasActed: boolean;
-  hasVoted: boolean;
-  voteCount: number;
-}
-interface FbState {
-  phase: string;
-  currentStep: string | null;
-  nightNumber: number;
-  dayNumber: number;
-  winTeam: string | null;
-  playerNames: Record<string, string>;
-  players: Record<string, FbPlayerState>;
 }
 
 // ── Role data ──────────────────────────────────────────────────────────
@@ -152,13 +111,6 @@ function GMRoomInner({ code }: { code: string }) {
   const [deletingRoom, setDeletingRoom]       = useState(false);
   const [deleteError, setDeleteError]         = useState("");
 
-  // Game control panel
-  const [fbState, setFbState]                 = useState<FbState | null>(null);
-  const fbEsRef = useRef<EventSource | null>(null);
-  const [showEndModal, setShowEndModal]       = useState(false);
-  const [selectedWinTeam, setSelectedWinTeam] = useState("");
-  const [endingGame, setEndingGame]           = useState(false);
-  const [controlMsg, setControlMsg]           = useState("");
 
   const { data: players, mutate: mutatePlayers } = useSWR<Player[]>(
     `/api/werewolf/rooms/${code}/players`,
@@ -215,27 +167,6 @@ function GMRoomInner({ code }: { code: string }) {
     players.forEach((p) => { names[p.user.id] = p.seatName; });
     setSeatNames(names);
   }, [players]);
-
-  // Firebase EventSource — live game state
-  useEffect(() => {
-    if (!assignments?.length || !FB_URL) return;
-    function connect() {
-      const es = new EventSource(`${FB_URL}/werewolf/sessions/${code}.json`);
-      fbEsRef.current = es;
-      es.addEventListener("put", (e: MessageEvent) => {
-        try { const d = JSON.parse(e.data); if (d.data) setFbState(d.data); } catch {}
-      });
-      es.addEventListener("patch", (e: MessageEvent) => {
-        try {
-          const d = JSON.parse(e.data);
-          if (d.data) setFbState((prev) => prev ? { ...prev, ...d.data } : d.data);
-        } catch {}
-      });
-      es.onerror = () => { es.close(); setTimeout(connect, 3000); };
-    }
-    connect();
-    return () => { fbEsRef.current?.close(); fbEsRef.current = null; };
-  }, [code, assignments?.length]);
 
   // Member search
   const searchMembers = useCallback(async (q: string) => {
@@ -339,56 +270,6 @@ function GMRoomInner({ code }: { code: string }) {
     }
   }
 
-  async function gmAction(endpoint: string, body?: object) {
-    setControlMsg("");
-    const res = await fetch(`/api/werewolf/sessions/${code}/${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = await res.json();
-    if (!res.ok) { setControlMsg(data.error || "เกิดข้อผิดพลาด"); return null; }
-    return data;
-  }
-
-  async function resolveNight() {
-    const data = await gmAction("resolve-night");
-    if (data) {
-      const msg = data.killed?.length
-        ? `💀 ตายแล้ว: ${data.killedNames}${data.winTeam ? ` · 🏆 ${data.winTeam} ชนะ!` : ""}`
-        : `😮 ไม่มีผู้เสียชีวิตคืนนี้${data.winTeam ? ` · 🏆 ${data.winTeam} ชนะ!` : ""}`;
-      setControlMsg(msg);
-    }
-  }
-
-  async function openVoting() {
-    const data = await gmAction("open-vote");
-    if (data) setControlMsg(`🗳️ เปิดโหวตวันที่ ${data.dayNumber} แล้ว`);
-  }
-
-  async function resolveVote() {
-    const data = await gmAction("resolve-vote");
-    if (data) {
-      const msg = data.tie
-        ? "🤝 เสมอกัน — ไม่มีใครถูกกำจัด"
-        : data.eliminated
-        ? `💀 ถูกกำจัด: User ${data.eliminated}${data.winTeam ? ` · 🏆 ${data.winTeam} ชนะ!` : ""}`
-        : "ไม่มีการโหวต";
-      setControlMsg(msg);
-    }
-  }
-
-  async function endGame() {
-    if (!selectedWinTeam) return;
-    setEndingGame(true);
-    const data = await gmAction("end", { winTeam: selectedWinTeam });
-    setEndingGame(false);
-    if (data) {
-      setShowEndModal(false);
-      setControlMsg(`🏆 เกมจบ — ${selectedWinTeam} ชนะ · แจกคะแนนแล้ว`);
-    }
-  }
-
   async function deleteRoom() {
     setDeletingRoom(true);
     setDeleteError("");
@@ -401,69 +282,6 @@ function GMRoomInner({ code }: { code: string }) {
       setDeletingRoom(false);
     }
   }
-
-  // ── Computed ──────────────────────────────────────────────────────────
-  const statusData = useMemo<StatusData | null>(() => {
-    if (!assignments?.length) return null;
-
-    // Prefer Firebase (real-time) — fall back to DB session poll
-    if (fbState) {
-      const ps: StatusPlayer[] = assignments.map((a) => {
-        const fp = fbState.players?.[String(a.userId)];
-        return {
-          userId: a.userId,
-          name: a.seatName,
-          role: a.role,
-          team: a.team,
-          status: fp?.status ?? "alive",
-          hasActed: fp?.hasActed ?? false,
-          hasVoted: fp?.hasVoted ?? false,
-          voteCount: fp?.voteCount ?? 0,
-        };
-      });
-      const alive = ps.filter((p) => p.status !== "dead");
-      return {
-        phase: fbState.phase,
-        nightNumber: fbState.nightNumber ?? 0,
-        dayNumber: fbState.dayNumber ?? 0,
-        currentStep: fbState.currentStep,
-        winTeam: fbState.winTeam,
-        players: ps,
-        nightActionCount: ps.filter((p) => p.hasActed).length,
-        voteCount: ps.filter((p) => p.hasVoted).length,
-        totalAlive: alive.length,
-      };
-    }
-
-    // Firebase unavailable — build from DB session (polled every 3s)
-    if (!dbSession?.playerRoles?.length) return null;
-    const roleMap = new Map(dbSession.playerRoles.map((r) => [r.userId, r]));
-    const ps: StatusPlayer[] = assignments.map((a) => {
-      const sp = roleMap.get(a.userId);
-      return {
-        userId: a.userId,
-        name: a.seatName,
-        role: a.role,
-        team: a.team,
-        status: sp?.status ?? "alive",
-        hasActed: false,
-        hasVoted: false,
-        voteCount: 0,
-      };
-    });
-    const alive = ps.filter((p) => p.status !== "dead");
-    return {
-      phase: dbSession.phase,
-      nightNumber: dbSession.nightNumber ?? 0,
-      dayNumber: dbSession.dayNumber ?? 0,
-      currentStep: dbSession.currentStep ?? null,
-      winTeam: dbSession.winTeam ?? null,
-      players: ps,
-      nightActionCount: 0,
-      voteCount: 0,
-      totalAlive: alive.length,
-    };
-  }, [fbState, assignments, dbSession]);
 
   const playerCount    = players?.length ?? 0;
   const hasSession     = !!assignments?.length;
@@ -516,12 +334,20 @@ function GMRoomInner({ code }: { code: string }) {
             <span className="bg-navy text-cream text-xs font-bold px-2.5 py-0.5 rounded-full">
               {playerCount} คน
             </span>
-            <button
-              onClick={() => setShowSeatModal(true)}
-              className="text-xs bg-gray-100 text-gray-600 font-bold px-3 py-1 rounded-full hover:bg-gray-200"
-            >
-              🪑 จัดที่นั่ง
-            </button>
+            <div className="flex items-center gap-1.5">
+              <Link
+                href={`/admin/werewolf/canvas?room=${code}&mode=seating`}
+                className="text-xs bg-navy text-cream font-bold px-3 py-1 rounded-full"
+              >
+                🗺️ จัดที่นั่ง
+              </Link>
+              <button
+                onClick={() => setShowSeatModal(true)}
+                className="text-xs bg-gray-100 text-gray-600 font-bold px-3 py-1 rounded-full hover:bg-gray-200"
+              >
+                ✏️ แก้ชื่อ
+              </button>
+            </div>
           </div>
         </div>
 
@@ -591,114 +417,20 @@ function GMRoomInner({ code }: { code: string }) {
         </div>
       ) : (
         <div className="space-y-3 mb-4">
+          <Link
+            href={`/admin/werewolf/canvas?room=${code}&mode=seating`}
+            className="block w-full bg-navy text-cream font-bold py-5 rounded-2xl text-base text-center shadow-lg"
+          >
+            🖥️ เปิด GM Canvas → จัดที่นั่ง + แจกไพ่ + เริ่มเกม
+            <p className="text-cream/60 text-xs font-normal mt-0.5">จัดตำแหน่งจริง · เลือกบทบาท · ดำเนินเกม — ครบในหน้าเดียว</p>
+          </Link>
           <button
             onClick={() => { setRoleStep("roles"); setSessionError(""); setShowRoleModal(true); }}
             disabled={!playerCount}
-            className="w-full bg-orange text-white font-bold py-4 rounded-2xl text-base flex items-center justify-center gap-2 disabled:opacity-40 shadow-md"
+            className="w-full border border-gray-200 text-gray-500 font-bold py-3 rounded-xl text-sm disabled:opacity-40"
           >
-            🎲 เลือกบทบาท + สุ่มแจก
+            🎲 หรือสุ่มแจกแบบเร็ว (ไม่ใช้ Canvas)
           </button>
-          <Link
-            href={`/admin/werewolf/canvas?room=${code}`}
-            className="block w-full border-2 border-navy text-navy font-bold py-4 rounded-2xl text-sm text-center"
-          >
-            🖥️ เปิด GM Canvas (ไม่สุ่มโรล)
-          </Link>
-        </div>
-      )}
-
-      {/* ── GAME CONTROL PANEL ── */}
-      {hasSession && statusData && statusData.phase !== "ENDED" && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="font-bold text-navy text-sm">⚙️ Game Control</h2>
-            <span className="text-xs bg-navy/10 text-navy px-2 py-0.5 rounded-full">
-              {statusData.currentStep ?? statusData.phase}
-            </span>
-          </div>
-
-          {/* Player status grid */}
-          <div className="grid grid-cols-2 gap-1.5 mb-3">
-            {statusData.players.map((p) => (
-              <div key={p.userId} className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${p.status === "dead" ? "bg-gray-100 text-gray-400 border-gray-200 opacity-50" : TEAM_CHIP[p.team]}`}>
-                <span>{p.status === "dead" ? "💀" : "●"}</span>
-                <span className="font-bold truncate flex-1">{p.name}</span>
-                {statusData.currentStep?.includes("🗳️") && p.status !== "dead" && (
-                  <span className={p.hasVoted ? "text-green-600" : "text-gray-400"}>
-                    {p.hasVoted ? "✓" : "…"} {p.voteCount > 0 ? `(${p.voteCount})` : ""}
-                  </span>
-                )}
-                {!statusData.currentStep?.includes("🗳️") && !statusData.currentStep?.startsWith("☀️") && p.status !== "dead" && (
-                  <span className={p.hasActed ? "text-green-600" : "text-gray-400"}>{p.hasActed ? "✓" : "…"}</span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Stats row */}
-          <div className="flex gap-3 text-xs text-gray-500 mb-3">
-            <span>👤 มีชีวิต: <b className="text-navy">{statusData.totalAlive}</b></span>
-            {!statusData.currentStep?.includes("🗳️") && (
-              <span>🌙 Action: <b className="text-navy">{statusData.nightActionCount}/{statusData.totalAlive}</b></span>
-            )}
-            {statusData.currentStep?.includes("🗳️") && (
-              <span>🗳️ Vote: <b className="text-navy">{statusData.voteCount}/{statusData.totalAlive}</b></span>
-            )}
-          </div>
-
-          {controlMsg && (
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-xl px-3 py-2 mb-3">
-              {controlMsg}
-            </div>
-          )}
-
-          {/* Auto-detected win */}
-          {statusData.winTeam && (
-            <div className="bg-green-50 border border-green-300 rounded-xl p-3 mb-3 text-center">
-              <p className="text-green-700 font-bold text-sm">🏆 ระบบตรวจพบว่า <span className="uppercase">{statusData.winTeam}</span> ชนะ!</p>
-              <p className="text-green-600 text-xs mt-0.5">กดยืนยันจบเกมด้านล่าง</p>
-            </div>
-          )}
-
-          {/* Control buttons */}
-          <div className="space-y-2">
-            {/* Night phase controls */}
-            {!statusData.currentStep?.includes("🗳️") && !statusData.currentStep?.startsWith("☀️") && (
-              <button
-                onClick={resolveNight}
-                className="w-full bg-navy text-cream py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-              >
-                🌙 Resolve Night — ประมวลผลกลางคืน
-              </button>
-            )}
-
-            {/* Day controls */}
-            {statusData.currentStep?.startsWith("☀️") && (
-              <button
-                onClick={openVoting}
-                className="w-full bg-orange text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-              >
-                🗳️ เปิดโหวต
-              </button>
-            )}
-
-            {/* Vote resolve */}
-            {statusData.currentStep?.includes("🗳️") && (
-              <button
-                onClick={resolveVote}
-                className="w-full bg-orange text-white py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2"
-              >
-                📊 ประมวลผลโหวต + กลางคืน
-              </button>
-            )}
-
-            <button
-              onClick={() => { setSelectedWinTeam(statusData.winTeam ?? ""); setShowEndModal(true); }}
-              className="w-full border border-red-200 text-red-600 bg-red-50 py-2.5 rounded-xl font-bold text-sm"
-            >
-              🏁 จบเกม + บันทึกคะแนน
-            </button>
-          </div>
         </div>
       )}
 
@@ -779,11 +511,19 @@ function GMRoomInner({ code }: { code: string }) {
                     ))}
                   </div>
 
-                  {/* Canvas position hint */}
-                  <div className="mt-3 bg-navy/5 rounded-xl p-3 text-xs text-gray-500 flex items-start gap-2">
-                    <span className="text-base">🖥️</span>
-                    <span>เมื่อเปิด GM Canvas ผู้เล่นที่นั่ง 1 จะอยู่บนสุด และเรียงตามเข็มนาฬิกาต่อไป</span>
-                  </div>
+                  {/* Visual seating on Canvas */}
+                  <Link
+                    href={`/admin/werewolf/canvas?room=${code}&mode=seating`}
+                    className="mt-3 flex items-center gap-3 bg-navy text-cream rounded-xl p-3 active:opacity-80"
+                    onClick={() => setShowSeatModal(false)}
+                  >
+                    <span className="text-xl shrink-0">🗺️</span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold leading-tight">จัดตำแหน่งบน Canvas</p>
+                      <p className="text-xs text-cream/60 leading-tight mt-0.5">ลากผู้เล่นไปวางตำแหน่งที่นั่งจริงรอบโต๊ะ</p>
+                    </div>
+                    <span className="ml-auto text-cream/40 text-lg shrink-0">›</span>
+                  </Link>
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 text-center py-2">ยังไม่มีผู้เล่น — รอ scan QR หรือเพิ่มด้านล่าง</p>
@@ -1029,47 +769,6 @@ function GMRoomInner({ code }: { code: string }) {
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════
-          MODAL: END GAME
-      ══════════════════════════════════════════════ */}
-      {showEndModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-xs p-6">
-            <h3 className="font-bold text-navy text-lg mb-1 text-center">🏁 จบเกม</h3>
-            <p className="text-xs text-gray-400 text-center mb-4">เลือกทีมที่ชนะ — ระบบจะบันทึกและแจกคะแนนอัตโนมัติ</p>
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {([
-                { key: "wolf",    label: "🐺 หมาป่า" },
-                { key: "village", label: "🏘️ ชาวบ้าน" },
-                { key: "indy",    label: "🟢 อิสระ" },
-                { key: "vampire", label: "🧛 แวมไพร์" },
-              ] as const).map(({ key, label }) => (
-                <button
-                  key={key}
-                  onClick={() => setSelectedWinTeam(key)}
-                  className={`py-3 rounded-xl font-bold text-sm border-2 transition-colors ${
-                    selectedWinTeam === key ? TEAM_CHIP[key] + " border-current" : "bg-gray-50 text-gray-600 border-gray-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            {controlMsg && <p className="text-red-500 text-xs text-center mb-3">{controlMsg}</p>}
-            <div className="flex gap-2">
-              <button onClick={() => setShowEndModal(false)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold text-sm">ยกเลิก</button>
-              <button
-                onClick={endGame}
-                disabled={!selectedWinTeam || endingGame}
-                className="flex-[2] bg-red-500 text-white py-3 rounded-xl font-bold text-sm disabled:opacity-40"
-              >
-                {endingGame ? "กำลังบันทึก..." : "✅ ยืนยันจบเกม"}
-              </button>
             </div>
           </div>
         </div>

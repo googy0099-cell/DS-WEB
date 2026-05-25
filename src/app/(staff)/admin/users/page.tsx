@@ -4,6 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
+import { Pencil, X } from "lucide-react";
 
 type AdminUser = {
   id: number;
@@ -24,6 +25,12 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", username: "", role: "STAFF" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
+
+  // Edit state
+  const [editUser, setEditUser] = useState<AdminUser | null>(null);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", username: "" });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
 
   if (session && session.user.role !== "OWNER") {
     redirect("/admin");
@@ -56,6 +63,27 @@ export default function AdminUsersPage() {
       body: JSON.stringify({ id, role }),
     });
     mutate();
+  }
+
+  function openEdit(u: AdminUser) {
+    setEditForm({ firstName: u.firstName, lastName: u.lastName, email: u.email, username: u.username });
+    setEditError("");
+    setEditUser(u);
+  }
+
+  async function saveEdit() {
+    if (!editUser) return;
+    setEditSaving(true);
+    setEditError("");
+    const res = await fetch("/api/users", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: editUser.id, ...editForm }),
+    });
+    setEditSaving(false);
+    if (!res.ok) { setEditError("บันทึกไม่สำเร็จ"); return; }
+    await mutate();
+    setEditUser(null);
   }
 
   async function deleteUser(id: number) {
@@ -104,7 +132,12 @@ export default function AdminUsersPage() {
                   </select>
                 </td>
                 <td className="p-3">
-                  <button onClick={() => deleteUser(u.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
+                  <div className="flex items-center gap-3 justify-end">
+                    <button onClick={() => openEdit(u)} className="text-orange hover:text-orange/80">
+                      <Pencil size={14} />
+                    </button>
+                    <button onClick={() => deleteUser(u.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -112,6 +145,45 @@ export default function AdminUsersPage() {
         </table>
       </div>
 
+      {/* Edit user modal */}
+      {editUser && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setEditUser(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-navy text-lg">แก้ไขข้อมูล</h2>
+              <button onClick={() => setEditUser(null)}><X size={18} className="text-gray-400" /></button>
+            </div>
+            <p className="text-gray-400 text-xs mb-4">@{editUser.username} · {editUser.role}</p>
+            <div className="space-y-3">
+              {([
+                { label: "ชื่อ", field: "firstName" },
+                { label: "นามสกุล", field: "lastName" },
+                { label: "Username", field: "username" },
+                { label: "อีเมล", field: "email", type: "email" },
+              ] as { label: string; field: keyof typeof editForm; type?: string }[]).map(({ label, field, type = "text" }) => (
+                <div key={field}>
+                  <label className="text-xs font-medium text-navy block mb-1">{label}</label>
+                  <input
+                    type={type}
+                    value={editForm[field]}
+                    onChange={e => setEditForm(f => ({ ...f, [field]: e.target.value }))}
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+            {editError && <p className="mt-3 text-sm text-red-500">{editError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setEditUser(null)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+              <button onClick={saveEdit} disabled={editSaving} className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
+                {editSaving ? "กำลังบันทึก..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create user modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowModal(false); setFormError(""); } }}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">

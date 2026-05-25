@@ -39,6 +39,9 @@ export type WerewolfSessionFb = {
   winTeam: string | null;
   playerNames: Record<string, string>;
   players: Record<string, WerewolfPlayerFb>;
+  announcement?: string | null;
+  identify?: { userId: number; at: number } | null;
+  voteDecision?: { yes: number; no: number; voters: Record<string, boolean> } | null;
 };
 
 export async function setWerewolfFb(code: string, state: WerewolfSessionFb) {

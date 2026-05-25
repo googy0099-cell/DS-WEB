@@ -1,61 +1,91 @@
 "use client";
 
-import { useEffect, useRef, useCallback, Suspense } from "react";
+import { useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
 function CanvasInner() {
   const searchParams = useSearchParams();
   const roomCode = searchParams.get("room");
+  const mode = searchParams.get("mode"); // "seating" or null
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // On iframe load: fetch session → send LOAD_SESSION + SET_DECOY_ROLES
   const onIframeLoad = useCallback(async () => {
     if (!roomCode || !iframeRef.current?.contentWindow) return;
+    // Always connect the canvas to the room: live player sync + game control + role dealing
+    iframeRef.current.contentWindow.postMessage({
+      type: "INIT_LIVE",
+      roomCode,
+      fbUrl: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "",
+    }, "*");
     try {
-      const res = await fetch(`/api/werewolf/sessions/${roomCode}`);
-      if (!res.ok) return;
-      const s = await res.json();
+      if (mode === "seating") {
+        // Seating mode: load players (session may not exist yet)
+        let players: { seatName: string; role: string }[] = [];
 
-      // Decoy roles for startNight()
-      const decoyRoles: string[] = JSON.parse(s.decoyRoles || "[]");
-      iframeRef.current.contentWindow.postMessage({ type: "SET_DECOY_ROLES", decoyRoles }, "*");
+        // Try session first
+        const sessionRes = await fetch(`/api/werewolf/sessions/${roomCode}`);
+        if (sessionRes.ok) {
+          const s = await sessionRes.json();
+          players = (s.playerRoles ?? []).map(
+            (sp: { seatName: string | null; userId: number; role: string }) => ({
+              seatName: sp.seatName ?? `User ${sp.userId}`,
+              role: sp.role ?? "",
+            })
+          );
+        }
 
-      // Player assignments → canvas loads names + roles automatically
-      const canvasPlayers = (s.playerRoles ?? []).map(
-        (sp: { seatName: string | null; userId: number; role: string }) => ({
-          seatName: sp.seatName ?? `User ${sp.userId}`,
-          role: sp.role,
-        })
-      );
-      iframeRef.current.contentWindow.postMessage(
-        { type: "LOAD_SESSION", roomCode, players: canvasPlayers },
-        "*"
-      );
+        // Fall back to room players (before session created)
+        if (!players.length) {
+          const roomRes = await fetch(`/api/werewolf/rooms/${roomCode}/players`);
+          if (roomRes.ok) {
+            const rps = await roomRes.json();
+            players = (rps ?? []).map(
+              (p: { seatName?: string; user?: { firstName?: string }; id?: number }) => ({
+                seatName: p.seatName ?? p.user?.firstName ?? `Player ${p.id ?? "?"}`,
+                role: "",
+              })
+            );
+          }
+        }
 
-      // Advance phase to PLAYING so player phones leave SETUP screen immediately
-      if (s.phase === "SETUP") {
-        fetch(`/api/werewolf/sessions/${roomCode}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ phase: "PLAYING" }),
-        }).catch(() => {});
+        iframeRef.current.contentWindow.postMessage(
+          { type: "SEATING_MODE", roomCode, players },
+          "*"
+        );
+      } else {
+        // Normal game mode
+        const res = await fetch(`/api/werewolf/sessions/${roomCode}`);
+        if (!res.ok) return;
+        const s = await res.json();
+
+        // Decoy roles for startNight()
+        const decoyRoles: string[] = JSON.parse(s.decoyRoles || "[]");
+        iframeRef.current.contentWindow.postMessage({ type: "SET_DECOY_ROLES", decoyRoles }, "*");
+
+        // Player assignments → canvas loads names + roles automatically
+        const canvasPlayers = (s.playerRoles ?? []).map(
+          (sp: { seatName: string | null; userId: number; role: string }) => ({
+            seatName: sp.seatName ?? `User ${sp.userId}`,
+            role: sp.role,
+          })
+        );
+        iframeRef.current.contentWindow.postMessage(
+          { type: "LOAD_SESSION", roomCode, players: canvasPlayers },
+          "*"
+        );
+
+        // Advance phase to PLAYING so player phones leave SETUP screen immediately
+        if (s.phase === "SETUP") {
+          fetch(`/api/werewolf/sessions/${roomCode}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phase: "PLAYING" }),
+          }).catch(() => {});
+        }
       }
     } catch {}
-  }, [roomCode]);
-
-  // Handle messages from canvas iframe
-  useEffect(() => {
-    function handleMessage(e: MessageEvent) {
-      // GAME_ENDED: canvas confirmed end directly — navigate to room
-      if (e.data?.type === "GAME_ENDED" && roomCode) {
-        setTimeout(() => {
-          window.location.href = `/admin/werewolf/rooms/${roomCode}`;
-        }, 1500);
-      }
-    }
-    window.addEventListener("message", handleMessage);
-    return () => window.removeEventListener("message", handleMessage);
-  }, [roomCode]);
+  }, [roomCode, mode]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black">

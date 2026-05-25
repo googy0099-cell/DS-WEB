@@ -47,8 +47,15 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
-  const { id, role } = await req.json();
-  const user = await db.user.update({ where: { id }, data: { role } });
+  const body = await req.json();
+  const { id, role, firstName, lastName, email, username } = body;
+  const data: Record<string, string> = {};
+  if (role) data.role = role;
+  if (firstName) data.firstName = firstName;
+  if (lastName) data.lastName = lastName;
+  if (email) data.email = email;
+  if (username) data.username = username;
+  const user = await db.user.update({ where: { id }, data });
   return NextResponse.json({ id: user.id, role: user.role });
 }
 

@@ -71,7 +71,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
   const patch: Record<string, unknown> = {};
   if (currentStep !== undefined) patch.currentStep = currentStep;
   if (phase !== undefined) patch.phase = phase;
-  if (Object.keys(patch).length) await patchWerewolfFb(code, patch);
+  // Clear voteDecision when step changes away from vote-decision phase
+  if (currentStep !== undefined && currentStep !== "❓ โหวตประหาร?") patch.voteDecision = null;
+  if (Object.keys(patch).length) await patchWerewolfFb(code, patch as never);
 
   return NextResponse.json(updated);
 }
