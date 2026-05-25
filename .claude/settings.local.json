@@ -94,7 +94,12 @@
       "Bash(mkdir -p \"/Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/[code]/me\")",
       "Bash(mkdir -p \"/Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/[code]/end\")",
       "Bash(npx next *)",
-      "Bash(grep -v \"^$\")"
+      "Bash(grep -v \"^$\")",
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/action)",
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/vote)",
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/resolve-night)",
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/open-vote)",
+      "Bash(mkdir -p /Users/wisdechsiri/Desktop/My-Diceshop-webpage/src/app/api/werewolf/sessions/\\\\[code\\\\]/resolve-vote)"
     ]
   }
 }

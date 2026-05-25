@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
+import { calcPoints } from "@/lib/werewolf-scoring";
 
 async function requireGM() {
   const session = await auth();
@@ -26,17 +27,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
   const s = room.session;
 
+  const playerCount = s.playerCount || s.playerRoles.length;
+
+  const results = s.playerRoles.map((sp) => {
+    const isWin = sp.team === winTeam;
+    const pointsEarned = calcPoints({ isWin, team: sp.team, playerCount });
+    return { userId: sp.userId, team: sp.team, role: sp.role, isWin, pointsEarned };
+  });
+
   const game = await db.werewolfGame.create({
     data: {
       roomId: room.id,
       gmId: Number(gmSession.user.id),
       winTeam,
       results: {
-        create: s.playerRoles.map((sp) => ({
-          userId: sp.userId,
-          team: sp.team,
-          role: sp.role,
-          isWin: sp.team === winTeam,
+        create: results.map((r) => ({
+          userId: r.userId,
+          team: r.team,
+          role: r.role,
+          isWin: r.isWin,
+          pointsEarned: r.pointsEarned,
         })),
       },
     },
@@ -47,5 +57,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     data: { phase: "ENDED", winTeam, gameId: game.id },
   });
 
-  return NextResponse.json({ gameId: game.id });
+  // Update each player's points balance
+  await Promise.all(
+    results.map((r) =>
+      db.user.update({
+        where: { id: r.userId },
+        data: { points: { increment: r.pointsEarned } },
+      })
+    )
+  );
+
+  return NextResponse.json({ gameId: game.id, results });
 }

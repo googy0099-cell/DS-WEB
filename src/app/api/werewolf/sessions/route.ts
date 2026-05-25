@@ -56,6 +56,9 @@ export async function POST(req: NextRequest) {
       phase: "SETUP",
       selectedRoles: JSON.stringify(selectedRoles),
       decoyRoles: JSON.stringify(decoyRoles),
+      playerCount: players.length,
+      nightNumber: 0,
+      dayNumber: 0,
     },
   });
 
@@ -65,6 +68,7 @@ export async function POST(req: NextRequest) {
       userId: p.userId,
       role: shuffledRoles[i],
       team: getTeam(shuffledRoles[i]),
+      status: "alive",
     })),
   });
 

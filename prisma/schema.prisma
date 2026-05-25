@@ -281,14 +281,15 @@ model WerewolfGame {
 }
 
 model WerewolfGameResult {
-  id     Int          @id @default(autoincrement())
-  gameId Int
-  game   WerewolfGame @relation(fields: [gameId], references: [id])
-  userId Int
-  user   User         @relation("WerewolfGameResults", fields: [userId], references: [id])
-  team   String
-  role   String
-  isWin  Boolean
+  id           Int          @id @default(autoincrement())
+  gameId       Int
+  game         WerewolfGame @relation(fields: [gameId], references: [id])
+  userId       Int
+  user         User         @relation("WerewolfGameResults", fields: [userId], references: [id])
+  team         String
+  role         String
+  isWin        Boolean
+  pointsEarned Int          @default(0)
 
   @@unique([gameId, userId])
 }
@@ -304,9 +305,14 @@ model WerewolfSession {
   winTeam       String?
   gameId        Int?                    @unique
   game          WerewolfGame?           @relation("WerewolfSessionGame", fields: [gameId], references: [id])
+  nightNumber   Int                     @default(0)
+  dayNumber     Int                     @default(0)
+  playerCount   Int                     @default(0)
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
   playerRoles   WerewolfSessionPlayer[]
+  nightActions  WerewolfNightAction[]
+  votes         WerewolfVote[]
 }
 
 model WerewolfSessionPlayer {
@@ -317,6 +323,32 @@ model WerewolfSessionPlayer {
   user      User            @relation("WerewolfSessionPlayers", fields: [userId], references: [id])
   role      String
   team      String
+  status    String          @default("alive")
 
   @@unique([sessionId, userId])
+}
+
+model WerewolfNightAction {
+  id           Int             @id @default(autoincrement())
+  sessionId    Int
+  session      WerewolfSession @relation(fields: [sessionId], references: [id])
+  night        Int
+  actorUserId  Int
+  targetUserId Int?
+  actionType   String          @default("action")
+  createdAt    DateTime        @default(now())
+
+  @@unique([sessionId, night, actorUserId])
+}
+
+model WerewolfVote {
+  id           Int             @id @default(autoincrement())
+  sessionId    Int
+  session      WerewolfSession @relation(fields: [sessionId], references: [id])
+  day          Int
+  voterUserId  Int
+  targetUserId Int
+  createdAt    DateTime        @default(now())
+
+  @@unique([sessionId, day, voterUserId])
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState, useRef } from "react";
+import { use, useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
@@ -12,14 +12,27 @@ interface RoomInfo {
   gmName: string;
 }
 
+interface AlivePlayer {
+  userId: number;
+  name: string;
+}
+
 interface GameState {
   phase: string;
   role: string | null;
   team: string | null;
+  status: string | null;
   currentStep: string | null;
   isMyTurn: boolean;
+  canAct: boolean;
+  canVote: boolean;
+  hasActed: boolean;
+  hasVoted: boolean;
   winTeam: string | null;
   isWin: boolean | null;
+  alivePlayers: AlivePlayer[];
+  nightNumber: number;
+  dayNumber: number;
 }
 
 const TEAM_STYLES: Record<string, { chip: string; emoji: string }> = {
@@ -28,6 +41,20 @@ const TEAM_STYLES: Record<string, { chip: string; emoji: string }> = {
   indy:    { chip: "bg-green-900/60 text-green-300 border-green-700", emoji: "🟢" },
   vampire: { chip: "bg-purple-900/60 text-purple-300 border-purple-700", emoji: "🧛" },
 };
+
+function ActionButton({ label, loading, onClick, disabled }: {
+  label: string; loading: boolean; onClick: () => void; disabled: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled || loading}
+      className="w-full bg-yellow-500 text-black font-bold py-4 rounded-xl text-base disabled:opacity-40 mt-3"
+    >
+      {loading ? "กำลังส่ง..." : label}
+    </button>
+  );
+}
 
 export default function JoinRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
@@ -40,6 +67,12 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const [joined, setJoined] = useState(false);
   const [joinError, setJoinError] = useState("");
   const [gameState, setGameState] = useState<GameState | null>(null);
+
+  // Night action / vote state
+  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [actionMsg, setActionMsg] = useState("");
+
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -56,21 +89,28 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     if (session?.user?.firstName) setSeatName(session.user.firstName);
   }, [session]);
 
-  // Start polling once joined and logged in
+  const poll = useCallback(() => {
+    fetch(`/api/werewolf/sessions/${code}/me`)
+      .then((r) => r.json())
+      .then((data: GameState) => {
+        setGameState((prev) => {
+          // Reset target selection when entering new night/day
+          if (prev && (prev.nightNumber !== data.nightNumber || prev.dayNumber !== data.dayNumber)) {
+            setSelectedTarget(null);
+            setActionMsg("");
+          }
+          return data;
+        });
+      })
+      .catch(() => {});
+  }, [code]);
+
   useEffect(() => {
     if (!joined || !session?.user) return;
-
-    function poll() {
-      fetch(`/api/werewolf/sessions/${code}/me`)
-        .then((r) => r.json())
-        .then((data: GameState) => setGameState(data))
-        .catch(() => {});
-    }
-
     poll();
-    pollRef.current = setInterval(poll, 3000);
+    pollRef.current = setInterval(poll, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [joined, session, code]);
+  }, [joined, session, poll]);
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
@@ -94,21 +134,72 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     }
   }
 
+  async function submitAction() {
+    setSubmitting(true);
+    setActionMsg("");
+    try {
+      const res = await fetch(`/api/werewolf/sessions/${code}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: selectedTarget }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActionMsg("✅ ส่งแล้ว! รอ GM ดำเนินการต่อ");
+        setSelectedTarget(null);
+        poll();
+      } else {
+        setActionMsg(data.error || "เกิดข้อผิดพลาด");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function submitVote() {
+    if (!selectedTarget) return;
+    setSubmitting(true);
+    setActionMsg("");
+    try {
+      const res = await fetch(`/api/werewolf/sessions/${code}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId: selectedTarget }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setActionMsg("✅ โหวตแล้ว! รอผลการโหวต");
+        setSelectedTarget(null);
+        poll();
+      } else {
+        setActionMsg(data.error || "เกิดข้อผิดพลาด");
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const gs = gameState;
   const teamStyle = TEAM_STYLES[gs?.team ?? "village"] ?? TEAM_STYLES.village;
   const thaiRole = gs?.role?.split(" (")[0] ?? "";
   const engRole  = gs?.role?.match(/\(([^)]+)\)/)?.[1] ?? "";
+  const isDead   = gs?.status === "dead";
+
+  // Voting targets: exclude self
+  const myUserId = session?.user?.id ? Number(session.user.id) : null;
+  const voteTargets = gs?.alivePlayers?.filter((p) => p.userId !== myUserId) ?? [];
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center p-6">
 
       {/* Fixed role chip — always visible when playing */}
       {joined && gs?.role && (
-        <div className={`fixed top-3 right-3 z-50 border px-3 py-1.5 rounded-2xl shadow-lg flex items-start gap-1.5 max-w-[180px] ${teamStyle.chip}`}>
+        <div className={`fixed top-3 right-3 z-50 border px-3 py-1.5 rounded-2xl shadow-lg flex items-start gap-1.5 max-w-[180px] ${teamStyle.chip} ${isDead ? "opacity-50" : ""}`}>
           <span className="text-base mt-0.5 shrink-0">{teamStyle.emoji}</span>
           <span>
             <span className="block text-xs font-bold leading-tight">{thaiRole}</span>
             {engRole && <span className="block text-[10px] opacity-70 leading-tight">{engRole}</span>}
+            {isDead && <span className="block text-[10px] text-red-400 leading-tight">💀 ตายแล้ว</span>}
           </span>
         </div>
       )}
@@ -134,8 +225,17 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
       ) : joined ? (
         /* ── Game View ── */
         <div className="w-full max-w-xs text-center">
+
+          {/* Dead player overlay */}
+          {isDead && gs?.phase === "PLAYING" && (
+            <div className="mb-6">
+              <p className="text-5xl mb-3">💀</p>
+              <h2 className="text-red-400 text-xl font-bold mb-1">คุณตายแล้ว</h2>
+              <p className="text-gray-500 text-sm">คุณต้องหลับตาและเงียบ<br />รอดูผลเกม</p>
+            </div>
+          )}
+
           {!gs || (!gs.role && gs.phase === "SETUP") ? (
-            /* Waiting for GM to assign roles */
             <div>
               <p className="text-5xl mb-4 animate-pulse">🐺</p>
               <h2 className="text-white text-xl font-bold mb-2">Join แล้ว!</h2>
@@ -144,7 +244,6 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
               <p className="text-gray-500 text-sm">รอ GM แจกไพ่...</p>
             </div>
           ) : gs.role && gs.phase === "SETUP" ? (
-            /* Role assigned, waiting for GM to open canvas */
             <div>
               <p className="text-5xl mb-4">🃏</p>
               <h2 className="text-white text-xl font-bold mb-2">ได้รับไพ่แล้ว!</h2>
@@ -152,7 +251,6 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
               <p className="text-gray-600 text-xs">อย่าเปิดเผยบทบาทของคุณ 🤫</p>
             </div>
           ) : gs.phase === "ENDED" ? (
-            /* Game over screen */
             <div>
               {gs.isWin ? (
                 <>
@@ -176,29 +274,117 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
               )}
               <p className="text-gray-500 text-sm">เกมจบแล้ว ขอบคุณที่เล่น!</p>
             </div>
-          ) : gs.currentStep?.startsWith("หลับตา") || gs.currentStep?.startsWith("☀️") ? (
-            /* Day or start-of-night */
-            <div>
-              {gs.currentStep?.startsWith("☀️") ? (
-                <>
-                  <p className="text-5xl mb-4">☀️</p>
-                  <h2 className="text-white text-xl font-bold">กลางวัน</h2>
-                  <p className="text-gray-400 text-sm mt-2">อภิปรายและโหวตได้เลย!</p>
-                </>
+          ) : isDead ? null : gs.canVote ? (
+            /* ── Voting phase ── */
+            <div className="text-left">
+              <div className="text-center mb-5">
+                <p className="text-5xl mb-2">🗳️</p>
+                <h2 className="text-yellow-400 text-xl font-bold">เวลาโหวต!</h2>
+                <p className="text-gray-400 text-sm mt-1">เลือกผู้เล่นที่คิดว่าเป็นหมาป่า</p>
+              </div>
+              {gs.hasVoted ? (
+                <div className="text-center">
+                  <p className="text-4xl mb-2">✅</p>
+                  <p className="text-green-400 font-bold">โหวตแล้ว</p>
+                  <p className="text-gray-500 text-sm mt-1">รอผลการโหวต...</p>
+                </div>
               ) : (
                 <>
-                  <p className="text-5xl mb-4">🌙</p>
-                  <h2 className="text-white text-xl font-bold">กลางคืน</h2>
-                  <p className="text-gray-400 text-sm mt-2">หลับตา รอ GM เรียก</p>
+                  <div className="space-y-2 mb-2">
+                    {voteTargets.map((p) => (
+                      <button
+                        key={p.userId}
+                        onClick={() => setSelectedTarget(selectedTarget === p.userId ? null : p.userId)}
+                        className={`w-full px-4 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                          selectedTarget === p.userId
+                            ? "bg-yellow-500 text-black border-yellow-500"
+                            : "bg-gray-800 text-white border-gray-700 hover:border-yellow-600"
+                        }`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                  {actionMsg && <p className="text-sm text-center mt-2 text-red-400">{actionMsg}</p>}
+                  <ActionButton
+                    label={`🗳️ โหวต ${selectedTarget ? (voteTargets.find((p) => p.userId === selectedTarget)?.name ?? "") : ""}`}
+                    loading={submitting}
+                    disabled={!selectedTarget}
+                    onClick={submitVote}
+                  />
+                </>
+              )}
+            </div>
+          ) : gs.canAct ? (
+            /* ── Night action phase ── */
+            <div className="text-left">
+              <div className="text-center mb-5">
+                <p className="text-5xl mb-2 animate-bounce">⚡</p>
+                <h2 className="text-yellow-400 text-xl font-bold animate-pulse">ถึงคิวคุณแล้ว!</h2>
+                <p className="text-gray-300 text-sm mt-1">{thaiRole}</p>
+              </div>
+              {gs.hasActed ? (
+                <div className="text-center">
+                  <p className="text-4xl mb-2">✅</p>
+                  <p className="text-green-400 font-bold">ส่งคำสั่งแล้ว</p>
+                  <p className="text-gray-500 text-sm mt-1">รอ GM ดำเนินการต่อ...</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-gray-400 text-xs mb-3">เลือกเป้าหมาย (ถ้ามี)</p>
+                  <div className="space-y-2 mb-2">
+                    {gs.alivePlayers
+                      .filter((p) => p.userId !== myUserId)
+                      .map((p) => (
+                        <button
+                          key={p.userId}
+                          onClick={() => setSelectedTarget(selectedTarget === p.userId ? null : p.userId)}
+                          className={`w-full px-4 py-3 rounded-xl font-bold text-sm border-2 transition-all ${
+                            selectedTarget === p.userId
+                              ? "bg-yellow-500 text-black border-yellow-500"
+                              : "bg-gray-800 text-white border-gray-700 hover:border-yellow-600"
+                          }`}
+                        >
+                          {p.name}
+                        </button>
+                      ))}
+                  </div>
+                  {actionMsg && <p className="text-sm text-center mt-2 text-red-400">{actionMsg}</p>}
+                  <ActionButton
+                    label="⚡ ยืนยันการกระทำ"
+                    loading={submitting}
+                    disabled={false}
+                    onClick={submitAction}
+                  />
+                  <button
+                    onClick={() => { setSelectedTarget(null); submitAction(); }}
+                    className="w-full text-gray-500 text-xs mt-2 py-2"
+                    disabled={submitting}
+                  >
+                    ข้ามรอบนี้ (ไม่เลือกเป้าหมาย)
+                  </button>
                 </>
               )}
             </div>
           ) : gs.isMyTurn ? (
-            /* It's your turn! */
+            /* Turn active but already acted */
             <div>
-              <p className="text-5xl mb-4 animate-bounce">⚡</p>
-              <h2 className="text-yellow-400 text-xl font-bold mb-2 animate-pulse">ถึงคิวคุณแล้ว!</h2>
-              <p className="text-gray-300 text-sm">ลืมตาและดำเนินการ</p>
+              <p className="text-5xl mb-4">✅</p>
+              <h2 className="text-green-400 text-xl font-bold mb-2">ส่งแล้ว!</h2>
+              <p className="text-gray-400 text-sm">รอ GM ดำเนินการต่อ</p>
+            </div>
+          ) : gs.currentStep?.startsWith("☀️") ? (
+            <div>
+              <p className="text-5xl mb-4">☀️</p>
+              <h2 className="text-white text-xl font-bold">กลางวัน</h2>
+              <p className="text-gray-400 text-sm mt-2">อภิปรายกัน!</p>
+            </div>
+          ) : gs.currentStep?.includes("🗳️") ? (
+            /* Voting open but already voted */
+            <div>
+              <p className="text-5xl mb-4">✅</p>
+              <h2 className="text-white text-xl font-bold mb-2">โหวตแล้ว</h2>
+              <p className="text-gray-400 text-sm">รอผลการโหวต...</p>
             </div>
           ) : (
             /* Night — not your turn */
