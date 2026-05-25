@@ -127,7 +127,7 @@ function GMRoomInner({ code }: { code: string }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Role selection
-  const [selectedRoles, setSelectedRoles]   = useState<string[]>([]);
+  const [roleCounts, setRoleCounts]         = useState<Record<string, number>>({});
   const [selectedDecoys, setSelectedDecoys] = useState<string[]>([]);
   const [roleStep, setRoleStep]             = useState<"roles" | "decoys">("roles");
   const [favRoles, setFavRoles]             = useState<string[]>([]);
@@ -314,11 +314,12 @@ function GMRoomInner({ code }: { code: string }) {
   async function startSession() {
     setStartingSession(true);
     setSessionError("");
+    const flatRoles = Object.entries(roleCounts).flatMap(([role, count]) => Array<string>(count).fill(role));
     try {
       const res = await fetch("/api/werewolf/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomCode: code, selectedRoles, decoyRoles: selectedDecoys }),
+        body: JSON.stringify({ roomCode: code, selectedRoles: flatRoles, decoyRoles: selectedDecoys }),
       });
       const data = await res.json();
       if (!res.ok) { setSessionError(data.error || "เกิดข้อผิดพลาด"); return; }
@@ -419,11 +420,23 @@ function GMRoomInner({ code }: { code: string }) {
     };
   }, [fbState, assignments]);
 
-  const playerCount  = players?.length ?? 0;
-  const hasSession   = !!assignments?.length;
-  const favFiltered  = favRoles.filter((r) =>
+  const playerCount    = players?.length ?? 0;
+  const hasSession     = !!assignments?.length;
+  const totalSelected  = Object.values(roleCounts).reduce((s, c) => s + c, 0);
+  const favFiltered    = favRoles.filter((r) =>
     [...wolfRoles, ...villagerRoles, ...indyRoles, ...vampireRoles].includes(r)
   );
+
+  function incrementRole(role: string) {
+    setRoleCounts((prev) => ({ ...prev, [role]: (prev[role] ?? 0) + 1 }));
+  }
+  function decrementRole(role: string) {
+    setRoleCounts((prev) => {
+      const cur = prev[role] ?? 0;
+      if (cur <= 1) { const next = { ...prev }; delete next[role]; return next; }
+      return { ...prev, [role]: cur - 1 };
+    });
+  }
   // Sorted assignments for check modal (by seatOrder)
   const sortedAssignments = assignments ? [...assignments].sort((a, b) => a.seatOrder - b.seatOrder) : [];
 
@@ -873,15 +886,15 @@ function GMRoomInner({ code }: { code: string }) {
                   </h2>
                   <p className="text-xs text-gray-400 mt-0.5">
                     {roleStep === "roles"
-                      ? `เลือกแล้ว ${selectedRoles.length} / ต้องการ ${playerCount} คน`
+                      ? `เลือกแล้ว ${totalSelected} / ต้องการ ${playerCount} คน`
                       : "บทบาทที่จะเรียกหลอกระหว่างกลางคืน"
                     }
                   </p>
                 </div>
                 <button onClick={() => setShowRoleModal(false)} className="text-gray-400 text-2xl leading-none">×</button>
               </div>
-              {roleStep === "roles" && selectedRoles.length < playerCount && (
-                <p className="text-xs text-red-400 mt-1">⚠ ต้องเลือกอย่างน้อย {playerCount} บทบาท</p>
+              {roleStep === "roles" && totalSelected < playerCount && (
+                <p className="text-xs text-red-400 mt-1">⚠ ต้องเลือกอย่างน้อย {playerCount} บทบาท (เลือกแล้ว {totalSelected})</p>
               )}
             </div>
 
@@ -895,9 +908,10 @@ function GMRoomInner({ code }: { code: string }) {
                         <RoleListItem
                           key={role}
                           role={role}
-                          isSelected={selectedRoles.includes(role)}
+                          count={roleCounts[role] ?? 0}
                           isFav
-                          onToggle={() => setSelectedRoles((p) => p.includes(role) ? p.filter((r) => r !== role) : [...p, role])}
+                          onIncrement={() => incrementRole(role)}
+                          onDecrement={() => decrementRole(role)}
                           onToggleFav={() => toggleFav(role)}
                         />
                       ))}
@@ -910,9 +924,10 @@ function GMRoomInner({ code }: { code: string }) {
                         <RoleListItem
                           key={role}
                           role={role}
-                          isSelected={selectedRoles.includes(role)}
+                          count={roleCounts[role] ?? 0}
                           isFav={favRoles.includes(role)}
-                          onToggle={() => setSelectedRoles((p) => p.includes(role) ? p.filter((r) => r !== role) : [...p, role])}
+                          onIncrement={() => incrementRole(role)}
+                          onDecrement={() => decrementRole(role)}
                           onToggleFav={() => toggleFav(role)}
                         />
                       ))}
@@ -952,7 +967,7 @@ function GMRoomInner({ code }: { code: string }) {
               {roleStep === "roles" ? (
                 <button
                   onClick={() => setRoleStep("decoys")}
-                  disabled={selectedRoles.length < playerCount}
+                  disabled={totalSelected < playerCount}
                   className="w-full bg-navy text-cream py-3.5 rounded-2xl font-bold text-sm disabled:opacity-40"
                 >
                   ถัดไป: เลือก Decoy Roles →
@@ -1038,27 +1053,42 @@ function GMRoomInner({ code }: { code: string }) {
 }
 
 // ── Role list item ─────────────────────────────────────────────────────
-function RoleListItem({ role, isSelected, isFav, onToggle, onToggleFav }: {
-  role: string; isSelected: boolean; isFav: boolean;
-  onToggle: () => void; onToggleFav: () => void;
+function RoleListItem({ role, count, isFav, onIncrement, onDecrement, onToggleFav }: {
+  role: string; count: number; isFav: boolean;
+  onIncrement: () => void; onDecrement: () => void; onToggleFav: () => void;
 }) {
-  const thaiName = role.split(" (")[0];
-  const engName  = role.match(/\(([^)]+)\)/)?.[1] ?? "";
+  const isSelected = count > 0;
+  const thaiName   = role.split(" (")[0];
+  const engName    = role.match(/\(([^)]+)\)/)?.[1] ?? "";
   return (
-    <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl mb-1 border transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100 hover:bg-gray-100"}`}>
-      <button onClick={onToggle} className="flex-1 text-left flex items-center gap-2">
-        <span className={`w-5 h-5 rounded flex items-center justify-center text-xs shrink-0 ${isSelected ? "bg-white/20" : "bg-gray-200"}`}>
-          {isSelected ? "✓" : ""}
-        </span>
-        <span>
-          <span className="text-sm font-bold block leading-tight">{thaiName}</span>
-          {engName && <span className={`text-[10px] leading-tight ${isSelected ? "text-cream/60" : "text-gray-400"}`}>{engName}</span>}
-        </span>
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-1 border transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100"}`}>
+      {/* Role name — clicking anywhere on name area increments */}
+      <button onClick={onIncrement} className="flex-1 text-left min-w-0">
+        <span className="text-sm font-bold block leading-tight truncate">{thaiName}</span>
+        {engName && <span className={`text-[10px] leading-tight ${isSelected ? "text-cream/60" : "text-gray-400"}`}>{engName}</span>}
       </button>
+
+      {/* Favorite star */}
       <button
         onClick={(e) => { e.stopPropagation(); onToggleFav(); }}
-        className={`text-base shrink-0 ${isFav ? "text-amber-400" : "text-gray-300 hover:text-amber-300"}`}
+        className={`text-base shrink-0 ${isFav ? "text-amber-400" : isSelected ? "text-white/30 hover:text-amber-300" : "text-gray-300 hover:text-amber-300"}`}
       >★</button>
+
+      {/* Counter: − count + */}
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDecrement(); }}
+          disabled={count === 0}
+          className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center disabled:opacity-25 transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+        >−</button>
+        <span className={`w-6 text-center font-bold text-sm tabular-nums ${isSelected ? "text-cream" : "text-gray-300"}`}>
+          {count > 0 ? count : ""}
+        </span>
+        <button
+          onClick={(e) => { e.stopPropagation(); onIncrement(); }}
+          className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+        >+</button>
+      </div>
     </div>
   );
 }
