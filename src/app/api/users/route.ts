@@ -3,6 +3,7 @@ import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 import { generateUniqueMemberCode } from "@/lib/member-code";
+import { Prisma } from "@prisma/client";
 
 async function requireOwner() {
   const session = await auth();
@@ -28,10 +29,20 @@ export async function POST(req: NextRequest) {
   }
   const passwordHash = await bcrypt.hash(password, 12);
   const memberCode = await generateUniqueMemberCode();
-  const user = await db.user.create({
-    data: { email, passwordHash, firstName, lastName, username, memberCode, role: role ?? "STAFF" },
-  });
-  return NextResponse.json({ id: user.id, email: user.email, role: user.role }, { status: 201 });
+  try {
+    const user = await db.user.create({
+      data: { email, passwordHash, firstName, lastName, username, memberCode, role: role ?? "STAFF" },
+    });
+    return NextResponse.json({ id: user.id, email: user.email, role: user.role }, { status: 201 });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      const fields = (e.meta?.target as string[] | undefined) ?? [];
+      if (fields.includes("email")) return NextResponse.json({ error: "อีเมลนี้มีในระบบแล้ว" }, { status: 409 });
+      if (fields.includes("username")) return NextResponse.json({ error: "Username นี้มีในระบบแล้ว" }, { status: 409 });
+      return NextResponse.json({ error: "ข้อมูลซ้ำกับที่มีอยู่แล้ว" }, { status: 409 });
+    }
+    throw e;
+  }
 }
 
 export async function PATCH(req: NextRequest) {

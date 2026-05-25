@@ -23,6 +23,7 @@ export default function AdminUsersPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", username: "", role: "STAFF" });
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
 
   if (session && session.user.role !== "OWNER") {
     redirect("/admin");
@@ -30,14 +31,21 @@ export default function AdminUsersPage() {
 
   async function createUser() {
     setSaving(true);
-    await fetch("/api/users", {
+    setFormError("");
+    const res = await fetch("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(form),
     });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) {
+      setFormError(data.error || "เกิดข้อผิดพลาด ลองใหม่อีกครั้ง");
+      return;
+    }
     await mutate();
     setShowModal(false);
-    setSaving(false);
+    setFormError("");
     setForm({ email: "", password: "", firstName: "", lastName: "", username: "", role: "STAFF" });
   }
 
@@ -105,7 +113,7 @@ export default function AdminUsersPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) { setShowModal(false); setFormError(""); } }}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
             <h2 className="font-bold text-navy text-lg mb-4">เพิ่ม Staff ใหม่</h2>
             <div className="space-y-3">
@@ -138,10 +146,15 @@ export default function AdminUsersPage() {
                 </select>
               </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowModal(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+            {formError && (
+              <p className="mt-4 text-sm text-red-500 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                ⚠️ {formError}
+              </p>
+            )}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => { setShowModal(false); setFormError(""); }} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
               <button onClick={createUser} disabled={saving} className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
-                {saving ? "..." : "สร้างบัญชี"}
+                {saving ? "กำลังสร้าง..." : "สร้างบัญชี"}
               </button>
             </div>
           </div>
