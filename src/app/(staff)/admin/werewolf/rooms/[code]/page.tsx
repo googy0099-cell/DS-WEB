@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Suspense } from "react";
-import { wolfRoles, villagerRoles, indyRoles, vampireRoles } from "@/lib/werewolf-roles";
+import { wolfRoles, villagerRoles, indyRoles, vampireRoles, roleDescriptions } from "@/lib/werewolf-roles";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -83,10 +83,10 @@ interface FbState {
 
 // ── Role data ──────────────────────────────────────────────────────────
 const ALL_ROLES = [
-  { group: "🔴 ฝ่ายหมาป่า", roles: wolfRoles },
-  { group: "🔵 ฝ่ายชาวบ้าน", roles: villagerRoles },
-  { group: "🟢 ฝ่ายอิสระ", roles: indyRoles },
-  { group: "🟣 ฝ่ายแวมไพร์", roles: vampireRoles },
+  { group: "ฝ่ายหมาป่า", roles: wolfRoles },
+  { group: "ฝ่ายชาวบ้าน", roles: villagerRoles },
+  { group: "ฝ่ายอิสระ", roles: indyRoles },
+  { group: "ฝ่ายแวมไพร์", roles: vampireRoles },
 ];
 
 const DECOY_ROLE_KEYS = [
@@ -1057,38 +1057,57 @@ function RoleListItem({ role, count, isFav, onIncrement, onDecrement, onToggleFa
   role: string; count: number; isFav: boolean;
   onIncrement: () => void; onDecrement: () => void; onToggleFav: () => void;
 }) {
+  const [showDesc, setShowDesc] = useState(false);
   const isSelected = count > 0;
   const thaiName   = role.split(" (")[0];
   const engName    = role.match(/\(([^)]+)\)/)?.[1] ?? "";
+  const desc       = roleDescriptions[role];
   return (
-    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl mb-1 border transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100"}`}>
-      {/* Role name — clicking anywhere on name area increments */}
-      <button onClick={onIncrement} className="flex-1 text-left min-w-0">
-        <span className="text-sm font-bold block leading-tight truncate">{thaiName}</span>
-        {engName && <span className={`text-[10px] leading-tight ${isSelected ? "text-cream/60" : "text-gray-400"}`}>{engName}</span>}
-      </button>
+    <div className={`rounded-xl mb-1 border transition-colors ${isSelected ? "bg-navy text-cream border-navy" : "bg-gray-50 text-gray-700 border-gray-100"}`}>
+      <div className="flex items-center gap-2 px-3 py-2">
+        {/* Role name */}
+        <button onClick={onIncrement} className="flex-1 text-left min-w-0">
+          <span className="text-sm font-bold block leading-tight truncate">{thaiName}</span>
+          {engName && <span className={`text-[10px] leading-tight ${isSelected ? "text-cream/60" : "text-gray-400"}`}>{engName}</span>}
+        </button>
 
-      {/* Favorite star */}
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggleFav(); }}
-        className={`text-base shrink-0 ${isFav ? "text-amber-400" : isSelected ? "text-white/30 hover:text-amber-300" : "text-gray-300 hover:text-amber-300"}`}
-      >★</button>
+        {/* Info button */}
+        {desc && (
+          <button
+            onClick={(e) => { e.stopPropagation(); setShowDesc((v) => !v); }}
+            className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center shrink-0 transition-colors ${showDesc ? (isSelected ? "bg-white text-navy" : "bg-navy text-cream") : isSelected ? "bg-white/20 text-cream hover:bg-white/30" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+          >i</button>
+        )}
 
-      {/* Counter: − count + */}
-      <div className="flex items-center gap-1 shrink-0">
+        {/* Favorite star */}
         <button
-          onClick={(e) => { e.stopPropagation(); onDecrement(); }}
-          disabled={count === 0}
-          className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center disabled:opacity-25 transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
-        >−</button>
-        <span className={`w-6 text-center font-bold text-sm tabular-nums ${isSelected ? "text-cream" : "text-gray-300"}`}>
-          {count > 0 ? count : ""}
-        </span>
-        <button
-          onClick={(e) => { e.stopPropagation(); onIncrement(); }}
-          className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
-        >+</button>
+          onClick={(e) => { e.stopPropagation(); onToggleFav(); }}
+          className={`text-base shrink-0 ${isFav ? "text-amber-400" : isSelected ? "text-white/30 hover:text-amber-300" : "text-gray-300 hover:text-amber-300"}`}
+        >★</button>
+
+        {/* Counter: − count + */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDecrement(); }}
+            disabled={count === 0}
+            className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center disabled:opacity-25 transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+          >−</button>
+          <span className={`w-6 text-center font-bold text-sm tabular-nums ${isSelected ? "text-cream" : "text-gray-300"}`}>
+            {count > 0 ? count : ""}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onIncrement(); }}
+            className={`w-7 h-7 rounded-lg font-bold text-base flex items-center justify-center transition-colors ${isSelected ? "bg-white/20 hover:bg-white/30 text-cream" : "bg-gray-200 hover:bg-gray-300 text-gray-600"}`}
+          >+</button>
+        </div>
       </div>
+
+      {/* Description panel */}
+      {showDesc && desc && (
+        <div className={`px-3 pb-2.5 text-xs leading-relaxed ${isSelected ? "text-cream/80" : "text-gray-500"}`}>
+          {desc}
+        </div>
+      )}
     </div>
   );
 }
