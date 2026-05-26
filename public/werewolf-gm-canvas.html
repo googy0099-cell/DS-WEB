@@ -1332,11 +1332,9 @@
                     }
                     if (!isDragging) {
                         if (nightMarkMode) {
-                            // Cycle through night marks
-                            const markCycle = [null, 'target', 'guard', 'check', 'save', 'poison', 'wolf_pick', 'piper'];
-                            const cur = players[index].nightMark;
-                            const idx = markCycle.indexOf(cur);
-                            players[index].nightMark = markCycle[(idx + 1) % markCycle.length];
+                            // Auto-select mark based on current night step
+                            const autoMark = getMarkForCurrentStep();
+                            players[index].nightMark = (players[index].nightMark === autoMark) ? null : autoMark;
                             renderTokens();
                         } else {
                             openModal(index);
@@ -1645,6 +1643,16 @@
             } catch(e) {}
         }
         function nextNightStep() { if (currentNightStepIndex < nightSteps.length - 1) { currentNightStepIndex++; updateNightUI(); } else { endNight(); } }
+
+        function getMarkForCurrentStep() {
+            var step = nightSteps[currentNightStepIndex] || '';
+            if (step.includes('ฝูงหมาป่า') || step.includes('ฆาตกร') || step.includes('แมรี่')) return 'wolf_pick';
+            if (step.includes('บอดี้การ์ด') || step.includes('นักบวช')) return 'guard';
+            if (step.includes('เทพพยากรณ์') || step.includes('ญาณทิพย์') || step.includes('เทพผู้รู้แจ้ง') || step.includes('นักสืบ') || step.includes('นางปีศาจ') || step.includes('นักสะกดจิต')) return 'check';
+            if (step.includes('แม่มด')) return 'save';
+            if (step.includes('นักเป่าขลุ่ย')) return 'piper';
+            return 'target';
+        }
         function prevNightStep() { if (currentNightStepIndex > 0) { currentNightStepIndex--; updateNightUI(); } }
         function endNight() { document.getElementById('night-guide').classList.add('hidden'); if (nightMarkMode) toggleNightMarkMode(); if (!isTimerVisible) toggleTimerWidget(); }
 
@@ -2206,9 +2214,12 @@
             if (!connectedRoomCode) return false;
             if (flat.length < rdPlayerCount()) return false;
             try {
+                // Collect offline token names to send to API for Firebase registration
+                var offlineTokens = players.filter(function(t) { return t.uid == null; });
+                var offlinePlayers = offlineTokens.map(function(t) { return { name: t.name }; });
                 var res = await fetch('/api/werewolf/sessions', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomCode: connectedRoomCode, selectedRoles: flat, decoyRoles: decoys || [] })
+                    body: JSON.stringify({ roomCode: connectedRoomCode, selectedRoles: flat, decoyRoles: decoys || [], offlinePlayers: offlinePlayers })
                 });
                 var data = await res.json();
                 if (!res.ok) return false;
@@ -2220,11 +2231,15 @@
                     if (!tok) tok = players.find(function(t) { return t.name === a.seatName; });
                     if (tok) { tok.uid = a.userId; tok.role = a.role; tok.status = 'alive'; tok.nightMark = null; }
                 });
-                // Assign leftover roles to offline (canvas-only) tokens
-                var offlineRoles = data.offlineRoles || [];
-                var offlineTokens = players.filter(function(t) { return t.uid == null; });
-                offlineTokens.forEach(function(tok, i) {
-                    if (offlineRoles[i]) { tok.role = offlineRoles[i]; tok.status = 'alive'; tok.nightMark = null; }
+                // Assign virtual IDs + roles to offline tokens (API registered them in Firebase)
+                var offlineAssignments = data.offlineAssignments || [];
+                offlineAssignments.forEach(function(a, i) {
+                    if (offlineTokens[i]) {
+                        offlineTokens[i].uid = a.virtualId;
+                        offlineTokens[i].role = a.role;
+                        offlineTokens[i].status = 'alive';
+                        offlineTokens[i].nightMark = null;
+                    }
                 });
                 _gameEndDetected = false; _pendingWinTeam = null;
                 renderTokens(); saveGameState();

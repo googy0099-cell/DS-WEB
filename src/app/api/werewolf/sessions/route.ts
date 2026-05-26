@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   const roomCode: string = body.roomCode;
   const selectedRoles: string[] = body.selectedRoles ?? [];
   const decoyRoles: string[] = body.decoyRoles ?? [];
+  const offlinePlayers: { name: string }[] = body.offlinePlayers ?? [];
 
   if (!roomCode || !selectedRoles.length)
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
@@ -95,6 +96,18 @@ export async function POST(req: NextRequest) {
     playerNames[uid] = p.user.nickname || p.user.firstName || `User ${p.userId}`;
     fbPlayers[uid] = { status: "alive", hasActed: false, hasVoted: false, voteCount: 0 };
   });
+
+  // Register offline canvas-only players in Firebase with virtual negative IDs
+  const offlineAssignments: { virtualId: number; name: string; role: string }[] = [];
+  offlinePlayers.forEach((op, i) => {
+    if (!offlineRoles[i]) return;
+    const virtualId = -(i + 1);
+    const vid = String(virtualId);
+    playerNames[vid] = op.name || `Offline ${i + 1}`;
+    fbPlayers[vid] = { status: "alive", hasActed: false, hasVoted: false, voteCount: 0 };
+    offlineAssignments.push({ virtualId, name: playerNames[vid], role: offlineRoles[i] });
+  });
+
   await setWerewolfFb(roomCode, {
     phase: "SETUP",
     currentStep: null,
@@ -114,5 +127,5 @@ export async function POST(req: NextRequest) {
     team: getTeam(shuffledRoles[i]),
   }));
 
-  return NextResponse.json({ sessionId: newSession.id, assignments, offlineRoles });
+  return NextResponse.json({ sessionId: newSession.id, assignments, offlineRoles, offlineAssignments });
 }

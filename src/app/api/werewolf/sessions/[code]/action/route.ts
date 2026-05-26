@@ -47,8 +47,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (alreadyActed) return NextResponse.json({ error: "ส่งแล้วในคืนนี้" }, { status: 400 });
 
   if (targetUserId) {
-    const target = s.playerRoles.find((p) => p.userId === targetUserId);
-    if (!target || target.status === "dead") return NextResponse.json({ error: "เป้าหมายไม่ถูกต้อง" }, { status: 400 });
+    if (targetUserId > 0) {
+      // Online player: validate against session
+      const target = s.playerRoles.find((p) => p.userId === targetUserId);
+      if (!target || target.status === "dead") return NextResponse.json({ error: "เป้าหมายไม่ถูกต้อง" }, { status: 400 });
+    }
+    // Negative = virtual offline player managed on GM canvas — skip DB validation
   }
 
   const actionType = actionTypeForRole(sp.role);

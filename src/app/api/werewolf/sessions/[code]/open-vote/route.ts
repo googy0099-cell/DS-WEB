@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
-import { patchWerewolfFb } from "@/lib/firebase-rtdb";
+import { patchWerewolfFb, patchWerewolfPlayersFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -29,12 +29,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     data: { currentStep: "🗳️ โหวต", dayNumber: newDay },
   });
 
-  // Reset hasVoted + voteCount for new round, push to Firebase
+  // Reset hasVoted + voteCount for new round; use flat paths to preserve offline player entries
   const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
   for (const sp of s.playerRoles) {
     fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
   }
-  await patchWerewolfFb(code, { currentStep: "🗳️ โหวต", dayNumber: newDay, players: fbPlayers });
+  await patchWerewolfFb(code, { currentStep: "🗳️ โหวต", dayNumber: newDay });
+  await patchWerewolfPlayersFb(code, fbPlayers);
 
   return NextResponse.json({ ok: true, dayNumber: newDay });
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
-import { patchWerewolfFb } from "@/lib/firebase-rtdb";
+import { patchWerewolfFb, patchWerewolfPlayersFb } from "@/lib/firebase-rtdb";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -73,9 +73,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     await patchWerewolfFb(code, {
       currentStep: "🗳️ โหวต",
       dayNumber: newDay,
-      players: fbPlayers,
       voteDecision: null,
     });
+    await patchWerewolfPlayersFb(code, fbPlayers);
     return NextResponse.json({ ok: true, result: "vote_opened" });
   }
 

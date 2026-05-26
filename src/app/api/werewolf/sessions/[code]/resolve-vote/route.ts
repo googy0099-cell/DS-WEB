@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
-import { patchWerewolfFb } from "@/lib/firebase-rtdb";
+import { patchWerewolfFb, patchWerewolfPlayersFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -86,17 +86,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   else if (eliminatedUserId) announcement = `☀️ ผลโหวต: ${getPlayerName(eliminatedUserId)} ถูกประหาร`;
   else announcement = "☀️ ผลโหวต: ไม่มีการประหาร";
 
-  // Push to Firebase — reset hasActed for the new night
+  // Push to Firebase — reset hasActed for the new night; use flat paths to preserve offline player entries
   const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
   for (const sp of updatedPlayers) {
     fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
   }
   await patchWerewolfFb(code, {
     currentStep: "🌙 กลางคืน",
-    players: fbPlayers,
     announcement,
     ...(winTeam ? { winTeam } : {}),
-  });
+  } as never);
+  await patchWerewolfPlayersFb(code, fbPlayers);
 
   const eliminatedName = eliminatedUserId ? getPlayerName(eliminatedUserId) : null;
   return NextResponse.json({ ok: true, eliminated: eliminatedUserId, eliminatedName, tie, tally, winTeam: winTeam ?? null });

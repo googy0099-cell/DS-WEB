@@ -82,3 +82,21 @@ export async function patchWerewolfPlayerFb(
     console.error("[Firebase] player patch error", e);
   }
 }
+
+// Updates multiple players using flat paths so offline (virtual) player entries are not overwritten.
+export async function patchWerewolfPlayersFb(
+  code: string,
+  updates: Record<string, Partial<WerewolfPlayerFb>>
+) {
+  try {
+    const flat: Record<string, unknown> = { _ts: Date.now() };
+    for (const [userId, data] of Object.entries(updates)) {
+      for (const [k, v] of Object.entries(data)) {
+        flat[`players/${userId}/${k}`] = v;
+      }
+    }
+    await withTimeout(rtdb().ref(`werewolf/sessions/${code}`).update(flat));
+  } catch (e) {
+    console.error("[Firebase] players patch error", e);
+  }
+}

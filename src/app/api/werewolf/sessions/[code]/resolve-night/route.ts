@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 import { wolfRoles, vampireRoles } from "@/lib/werewolf-roles";
-import { patchWerewolfFb } from "@/lib/firebase-rtdb";
+import { patchWerewolfFb, patchWerewolfPlayersFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
   const session = await auth();
@@ -95,10 +95,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const winTeam = checkWinCondition(updatedPlayers);
   if (winTeam) await db.werewolfSession.update({ where: { id: s.id }, data: { winTeam } });
 
-  // Push to Firebase
-  const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
+  // Push to Firebase — use flat paths so virtual offline player entries are not overwritten
+  const fbPlayerUpdates: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
   for (const sp of updatedPlayers) {
-    fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
+    fbPlayerUpdates[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
   }
 
   const seatMap = new Map((room.players ?? []).map((p) => [p.userId, p.seatName]));
@@ -115,10 +115,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   await patchWerewolfFb(code, {
     currentStep: "☀️ กลางวัน",
     nightNumber: newNight,
-    players: fbPlayers,
     announcement,
     ...(winTeam ? { winTeam } : {}),
-  });
+  } as never);
+  await patchWerewolfPlayersFb(code, fbPlayerUpdates);
 
   return NextResponse.json({ ok: true, killed: finalKills, protected: [...protectedIds], killedNames, winTeam: winTeam ?? null });
 }
