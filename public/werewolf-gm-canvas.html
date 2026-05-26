@@ -1556,20 +1556,27 @@
         function startRollCall() {
             rollCallMode = true;
             let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
-            let hasWolfPack = wolfRoles.some(r => aliveRolesSet.has(r));
-            let hasBodyguardPriest = aliveRolesSet.has('บอดี้การ์ด (Bodyguard)') || aliveRolesSet.has('นักบวช (Priest)');
-            let hasKiller = aliveRolesSet.has('บล็อบจอมเขมือบ (Serial Killer)') || aliveRolesSet.has('แมรี่กระหายเลือด (Bloody Mary)');
-            let hasSeer = aliveRolesSet.has('เทพพยากรณ์ (Seer)') || aliveRolesSet.has('ญาณทิพย์ (Aura Seer)') || aliveRolesSet.has('เทพผู้รู้แจ้ง (Oracle)') || aliveRolesSet.has('นักสืบเรื่องลี้ลับ (Paranormal Investigator)');
 
-            // Same ordered call list as the night, but no decoys (recognition is honest)
+            // Roll call = recognition only, no abilities performed
             nightSteps = ['หลับตาทุกคน (เริ่มแนะนำตัว 📣)'];
-            orderOfNight.forEach(roleKey => {
-                if (roleKey === 'WolfPack' && hasWolfPack) { nightSteps.push(roleInstructions['WolfPack']); }
-                else if (roleKey === 'บอดี้การ์ด_นักบวช' && hasBodyguardPriest) { nightSteps.push(roleInstructions['บอดี้การ์ด_นักบวช']); }
-                else if (roleKey === 'บล็อบจอมเขมือบ_แมรี่' && hasKiller) { nightSteps.push(roleInstructions['บล็อบจอมเขมือบ_แมรี่']); }
-                else if (roleKey === 'หมอดู_นักสืบ' && hasSeer) { nightSteps.push(roleInstructions['หมอดู_นักสืบ']); }
-                else if (aliveRolesSet.has(roleKey)) { nightSteps.push(roleInstructions[roleKey]); }
-            });
+
+            // Wolf pack — see each other
+            if (wolfRoles.some(r => aliveRolesSet.has(r))) {
+                nightSteps.push('🐺 ฝูงหมาป่า ลืมตา — รู้จักพวกเดียวกัน');
+            }
+            // Minion sees wolf pack
+            if (aliveRolesSet.has('สมุนหมาป่า (Minion)')) {
+                nightSteps.push('🐺 ฝูงหมาป่าชูนิ้วโป้ง\n🦴 สมุนหมาป่า ลืมตา ดูหน้าฝูงหมาป่า');
+            }
+            // Vampire team
+            if (vampireRoles.some(r => aliveRolesSet.has(r))) {
+                nightSteps.push('🧛 แวมไพร์ ลืมตา — รู้จักพวกเดียวกัน');
+            }
+            // Masons
+            if (aliveRolesSet.has('ภราดรแห่งเมสัน (Mason)')) {
+                nightSteps.push('🏛️ ภราดรแห่งเมสัน ลืมตา — รู้จักพวกเดียวกัน');
+            }
+
             nightSteps.push('✅ จบการแนะนำตัว — กด 🌙 กลางคืน เพื่อเริ่มเล่น');
 
             currentNightStepIndex = 0;
