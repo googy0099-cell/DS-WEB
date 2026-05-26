@@ -397,6 +397,8 @@
         let identifyEs = null;
         let lastIdentifyAt = 0;
         let identifyPollId = null;
+        let nightActionPollId = null;
+        let lastSeenNightActionTs = {}; // actorUserId → last seen timestamp
         let rollCallMode = false;
 
         const roleDescriptions = {
@@ -583,6 +585,7 @@
                 startGCPoll();
                 syncRoomPlayers();
                 startIdentifyListener();
+                startNightActionListener();
             }
 
             if (e.data.type === 'SEATING_MODE') {
@@ -702,8 +705,10 @@
                             // Sync tokens to current session: remove orphaned tokens, update/add session players
                             if (sessionPlayers.length > 0) {
                                 var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
-                                // Remove tokens that don't belong to any current session player
-                                players = players.filter(function(p) { return sessionNames.indexOf(p.name) !== -1; });
+                                // Remove tokens not in session; preserve offline tokens (uid null or negative virtual ID)
+                                players = players.filter(function(p) {
+                                    return sessionNames.indexOf(p.name) !== -1 || p.uid == null || (typeof p.uid === 'number' && p.uid < 0);
+                                });
                                 // Update roles/uid and add missing players
                                 sessionPlayers.forEach(function(sp) {
                                     var token = players.find(function(p) { return p.name === sp.seatName; });
@@ -1585,9 +1590,16 @@
 
         function startNight() {
             rollCallMode = false;
-            // Clear night marks from previous night
+            // Clear night marks and GM action notifications from previous night
             players.forEach(function(p) { p.nightMark = null; });
+            lastSeenNightActionTs = {};
             renderTokens();
+            // Clear gmNightActions in Firebase so old actions don't re-appear
+            if (connectedRoomCode && connectedFbUrl) {
+                fetch(connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/gmNightActions.json', {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'null'
+                }).catch(function() {});
+            }
             let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
             let hasWolfPack = wolfRoles.some(r => aliveRolesSet.has(r));
             let hasBodyguardPriest = aliveRolesSet.has('บอดี้การ์ด (Bodyguard)') || aliveRolesSet.has('นักบวช (Priest)');
@@ -2063,6 +2075,54 @@
             setTimeout(function() { el.classList.remove('token-identify'); }, 5000);
         }
 
+        var _nightActionToastTimer = null;
+        function showNightActionToast(text) {
+            var toast = document.getElementById('nightActionToast');
+            document.getElementById('nightActionToastText').textContent = text;
+            toast.classList.remove('hidden');
+            if (_nightActionToastTimer) clearTimeout(_nightActionToastTimer);
+            _nightActionToastTimer = setTimeout(function() { toast.classList.add('hidden'); }, 4000);
+        }
+
+        function applyNightActionMark(targetUid, actionType) {
+            var tok = players.find(function(p) { return p.uid == targetUid; });
+            if (!tok) return;
+            var markMap = { kill: 'wolf_pick', protect: 'guard', check: 'check', piper: 'piper', save: 'save', poison: 'poison' };
+            tok.nightMark = markMap[actionType] || 'target';
+            renderTokens();
+            saveGameState();
+        }
+
+        function startNightActionListener() {
+            if (!connectedRoomCode || !connectedFbUrl) return;
+            if (nightActionPollId) clearInterval(nightActionPollId);
+            nightActionPollId = setInterval(async function() {
+                if (!connectedFbUrl || !connectedRoomCode) return;
+                try {
+                    var res = await fetch(connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/gmNightActions.json');
+                    if (!res.ok) return;
+                    var actions = await res.json();
+                    if (!actions || typeof actions !== 'object') return;
+                    Object.keys(actions).forEach(function(actorIdStr) {
+                        var entry = actions[actorIdStr];
+                        if (!entry || !entry.at) return;
+                        var lastSeen = lastSeenNightActionTs[actorIdStr] || 0;
+                        if (entry.at <= lastSeen) return;
+                        lastSeenNightActionTs[actorIdStr] = entry.at;
+                        var actorUid = Number(actorIdStr);
+                        var targetUid = entry.targetUserId;
+                        var actorTok = players.find(function(p) { return p.uid == actorUid; });
+                        var targetTok = players.find(function(p) { return p.uid == targetUid; });
+                        var actorName = actorTok ? actorTok.name : 'Player ' + actorIdStr;
+                        var targetName = targetTok ? targetTok.name : (targetUid != null ? 'Player ' + targetUid : '—');
+                        var actionLabel = { kill: '⚔️ เลือกฆ่า', protect: '🛡️ ปกป้อง', check: '🔍 ส่อง', piper: '🎶 สะกดจิต', save: '💊 ชุบ', poison: '☠️ วางยา' }[entry.actionType] || '🎯 เลือก';
+                        showNightActionToast(actorName + ' ' + actionLabel + ' ' + targetName);
+                        if (targetUid != null) applyNightActionMark(targetUid, entry.actionType);
+                    });
+                } catch(e) {}
+            }, 2000);
+        }
+
         async function syncRoomPlayers() {
             if (!connectedRoomCode) return;
             var roomPlayers;
@@ -2431,6 +2491,11 @@
                 <button id="gc-end-confirm-btn" onclick="gcEndGame()" class="flex-[2] bg-red-600 text-white py-3 rounded-xl font-bold text-sm" disabled style="opacity:0.4">✅ ยืนยันจบเกม</button>
             </div>
         </div>
+    </div>
+
+    <!-- Night action toast (GM notification when player acts) -->
+    <div id="nightActionToast" class="hidden fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-gray-900 border border-indigo-500 text-white text-sm px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 pointer-events-none" style="min-width:220px;max-width:320px;">
+        <span id="nightActionToastText" class="flex-1 text-center"></span>
     </div>
 
     <!-- Game-end banner (shows when connected to room session) -->

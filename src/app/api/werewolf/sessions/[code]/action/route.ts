@@ -3,7 +3,7 @@ import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 import { stepToRoles } from "@/lib/werewolf-roles";
 import { actionTypeForRole } from "@/lib/werewolf-scoring";
-import { patchWerewolfPlayerFb } from "@/lib/firebase-rtdb";
+import { patchWerewolfPlayerFb, patchWerewolfFb } from "@/lib/firebase-rtdb";
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
@@ -61,8 +61,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     data: { sessionId: s.id, night: s.nightNumber, actorUserId: userId, targetUserId: targetUserId ?? null, actionType },
   });
 
-  // Push to Firebase immediately
+  // Push to Firebase: mark player as acted + notify GM canvas
   await patchWerewolfPlayerFb(code, userId, { hasActed: true });
+  await patchWerewolfFb(code, {
+    [`gmNightActions/${userId}`]: { targetUserId: targetUserId ?? null, actionType, at: Date.now() },
+  } as never);
 
   return NextResponse.json({ ok: true, actionType });
 }
