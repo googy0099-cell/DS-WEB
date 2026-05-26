@@ -1307,6 +1307,70 @@
             });
         }
 
+        const TOKEN_R = 37.5; // half of 75px token diameter
+        const TOKEN_DIAM = TOKEN_R * 2;
+
+        function resolveCollisions(idx, newX, newY) {
+            let cx = newX + TOKEN_R;
+            let cy = newY + TOKEN_R;
+
+            // Token-token: run 3 passes to settle multi-overlap cases
+            for (let pass = 0; pass < 3; pass++) {
+                for (let i = 0; i < players.length; i++) {
+                    if (i === idx) continue;
+                    let ox = players[i].x + TOKEN_R;
+                    let oy = players[i].y + TOKEN_R;
+                    let dx = cx - ox, dy = cy - oy;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < TOKEN_DIAM) {
+                        if (dist < 0.5) { cx += TOKEN_DIAM; } // exact overlap
+                        else {
+                            let push = (TOKEN_DIAM - dist) / dist;
+                            cx += dx * push;
+                            cy += dy * push;
+                        }
+                    }
+                }
+            }
+
+            // Token-table: treat as rectangle or ellipse
+            let tx = tableState.x, ty = tableState.y, tw = tableState.w, th = tableState.h;
+            if (tableState.shape === 'round') {
+                // Ellipse: expanded by TOKEN_R gives approximate exclusion zone
+                let ex = tx + tw / 2, ey = ty + th / 2;
+                let ra = tw / 2 + TOKEN_R, rb = th / 2 + TOKEN_R;
+                let nx = (cx - ex) / ra, ny = (cy - ey) / rb;
+                let dNorm = Math.sqrt(nx * nx + ny * ny);
+                if (dNorm < 1) {
+                    if (dNorm < 0.001) { cx = ex + ra; } // center overlap
+                    else { cx = ex + (nx / dNorm) * ra; cy = ey + (ny / dNorm) * rb; }
+                }
+            } else {
+                // Rectangle: find nearest point, push circle out
+                let nearX = Math.max(tx, Math.min(cx, tx + tw));
+                let nearY = Math.max(ty, Math.min(cy, ty + th));
+                let dx = cx - nearX, dy = cy - nearY;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < TOKEN_R) {
+                    if (dist < 0.5) {
+                        // Center inside rect: push to nearest edge
+                        let dL = cx - tx, dR = tx + tw - cx, dT = cy - ty, dB = ty + th - cy;
+                        let m = Math.min(dL, dR, dT, dB);
+                        if (m === dL) cx = tx - TOKEN_R;
+                        else if (m === dR) cx = tx + tw + TOKEN_R;
+                        else if (m === dT) cy = ty - TOKEN_R;
+                        else cy = ty + th + TOKEN_R;
+                    } else {
+                        let push = (TOKEN_R - dist) / dist;
+                        cx += dx * push;
+                        cy += dy * push;
+                    }
+                }
+            }
+
+            return { x: cx - TOKEN_R, y: cy - TOKEN_R };
+        }
+
         function setupTokenDragEvents(element, index) {
             element.addEventListener('pointerdown', function(e) {
                 if(currentTool !== 'move') return;
@@ -1318,7 +1382,8 @@
                     let dy = (ev.clientY - startY) / zoomLevel;
                     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDragging = true;
                     if (isDragging) {
-                        players[index].x += dx; players[index].y += dy;
+                        let raw = resolveCollisions(index, players[index].x + dx, players[index].y + dy);
+                        players[index].x = raw.x; players[index].y = raw.y;
                         element.style.left = `${players[index].x}px`; element.style.top = `${players[index].y}px`;
                         startX = ev.clientX; startY = ev.clientY;
                         let trashRect = trashBin.getBoundingClientRect();
