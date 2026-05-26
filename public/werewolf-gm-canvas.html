@@ -703,13 +703,14 @@
                                 var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
                                 // Remove tokens that don't belong to any current session player
                                 players = players.filter(function(p) { return sessionNames.indexOf(p.name) !== -1; });
-                                // Update roles and add missing players
+                                // Update roles/uid and add missing players
                                 sessionPlayers.forEach(function(sp) {
                                     var token = players.find(function(p) { return p.name === sp.seatName; });
                                     if (token) {
                                         token.role = sp.role || 'ไม่ระบุ';
+                                        if (sp.userId != null) token.uid = sp.userId;
                                     } else {
-                                        players.push({ id: Date.now() + Math.random(), name: sp.seatName, role: sp.role || 'ไม่ระบุ', gender: '', status: 'alive', x: 1500, y: 1500 });
+                                        players.push({ id: Date.now() + Math.random(), name: sp.seatName, uid: sp.userId ?? null, role: sp.role || 'ไม่ระบุ', gender: '', status: 'alive', x: 1500, y: 1500 });
                                     }
                                 });
                             }
@@ -726,6 +727,7 @@
                             return {
                                 id: Date.now() + i,
                                 name: sp.seatName,
+                                uid: sp.userId ?? null,
                                 role: sp.role,
                                 gender: '',
                                 status: 'alive',

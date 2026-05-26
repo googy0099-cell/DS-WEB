@@ -67,6 +67,7 @@ function CanvasInner() {
         const canvasPlayers = (s.playerRoles ?? []).map(
           (sp: { seatName: string | null; userId: number; role: string }) => ({
             seatName: sp.seatName ?? `User ${sp.userId}`,
+            userId: sp.userId,
             role: sp.role,
           })
         );
