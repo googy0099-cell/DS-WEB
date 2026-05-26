@@ -10,9 +10,10 @@
         body { font-family: 'Prompt', sans-serif; background-color: #0d0d0d; color: #f3f4f6; margin: 0; overflow: hidden; touch-action: none; }
         .pixel-font { font-family: 'Silkscreen', sans-serif; }
         
-        #board-container { 
-            position: relative; width: 100vw; 
+        #board-container {
+            position: relative; width: 100vw;
             overflow: hidden; background-color: #0d0d0d; transition: background-color 0.3s;
+            user-select: none; -webkit-user-select: none;
         }
 
         #workspace {
@@ -1304,6 +1305,7 @@
 
         tableDragArea.addEventListener('pointerdown', (e) => {
             if(currentTool !== 'move' || isTableLocked) return;
+            e.preventDefault();
             let startX = e.clientX; let startY = e.clientY;
             function move(ev) {
                 tableState.x += (ev.clientX - startX) / zoomLevel; 
@@ -1477,6 +1479,7 @@
         function setupTokenDragEvents(element, index) {
             element.addEventListener('pointerdown', function(e) {
                 if(currentTool !== 'move') return;
+                e.preventDefault();
                 let startX = e.clientX; let startY = e.clientY;
                 let isDragging = false; element.style.zIndex = 100;
                 isDraggingToken = true;
