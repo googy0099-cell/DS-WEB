@@ -16,6 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
+      players: { include: { user: { select: { id: true, firstName: true, nickname: true } } } },
       session: { include: { playerRoles: true, nightActions: true } },
     },
   });
@@ -67,5 +68,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     [`gmNightActions/${userId}`]: { targetUserId: targetUserId ?? null, actionType, at: Date.now() },
   } as never);
 
-  return NextResponse.json({ ok: true, actionType });
+  // For seer/detective: look up target role and return to the checker's phone
+  let checkResult: { role: string; team: string; targetName: string } | null = null;
+  if (actionType === "check" && targetUserId && targetUserId > 0) {
+    const targetRole = s.playerRoles.find((p) => p.userId === targetUserId);
+    if (targetRole) {
+      const targetPlayer = room.players?.find((p) => p.userId === targetUserId);
+      const targetName = targetPlayer?.user.nickname || targetPlayer?.user.firstName || `User ${targetUserId}`;
+      checkResult = { role: targetRole.role, team: targetRole.team, targetName };
+    }
+  }
+
+  return NextResponse.json({ ok: true, actionType, ...(checkResult ? { checkResult } : {}) });
 }

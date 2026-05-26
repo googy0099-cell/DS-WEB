@@ -9,7 +9,7 @@ export default function ContactSection() {
 
         <div className="grid md:grid-cols-2 gap-8">
           {/* Contact info */}
-          <div className="space-y-5">
+          <div className="space-y-5 bg-white rounded-2xl p-6 shadow-sm">
             <div className="flex gap-4 items-start">
               <span className="text-2xl">📍</span>
               <div>
@@ -99,7 +99,7 @@ export default function ContactSection() {
           </div>
 
           {/* Map */}
-          <div className="rounded-2xl overflow-hidden h-64 md:h-auto shadow-sm min-h-[300px]">
+          <div className="rounded-2xl overflow-hidden h-64 md:h-auto shadow-md ring-1 ring-sand min-h-[300px]">
             <iframe
               src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1980.6027884525588!2d101.2404283519481!3d6.8659510916585855!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31b305fc5204d243%3A0x25dbaf97e1f4784!2z4Lij4LmJ4Liy4LiZ4Lil4Li54LiB4LmA4LiV4LmL4LiyIChEaWNlU2hvcCk!5e0!3m2!1sen!2sth!4v1779327034066!5m2!1sen!2sth"
               width="100%"

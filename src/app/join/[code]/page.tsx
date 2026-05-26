@@ -70,6 +70,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionMsg, setActionMsg] = useState("");
+  const [checkResult, setCheckResult] = useState<{ role: string; team: string; targetName: string } | null>(null);
 
   // Role card visibility + description modal
   const [roleHidden, setRoleHidden] = useState(false);
@@ -189,8 +190,11 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
         body: JSON.stringify({ targetUserId: selectedTarget }),
       });
       const data = await res.json();
-      if (res.ok) { setActionMsg("✅ ส่งแล้ว! รอ GM ดำเนินการต่อ"); setSelectedTarget(null); }
-      else setActionMsg(data.error || "เกิดข้อผิดพลาด");
+      if (res.ok) {
+        setActionMsg("✅ ส่งแล้ว! รอ GM ดำเนินการต่อ");
+        setSelectedTarget(null);
+        if (data.checkResult) setCheckResult(data.checkResult);
+      } else setActionMsg(data.error || "เกิดข้อผิดพลาด");
     } finally { setSubmitting(false); }
   }
 
@@ -312,6 +316,29 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
             </p>
             <button onClick={() => setShowRoleDesc(false)} className="mt-5 w-full bg-gray-700 text-white font-bold py-3 rounded-xl text-sm">
               ปิด
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Seer check result modal */}
+      {checkResult && (
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-6" onClick={() => setCheckResult(null)}>
+          <div className="bg-gray-900 border border-yellow-600 rounded-2xl w-full max-w-xs p-6 text-center" onClick={e => e.stopPropagation()}>
+            <p className="text-4xl mb-3">🔍</p>
+            <h3 className="text-yellow-400 font-bold text-lg mb-1">ผลการส่อง</h3>
+            <p className="text-gray-300 text-sm mb-4">{checkResult.targetName}</p>
+            <div className={`inline-flex items-center gap-2 border px-4 py-2 rounded-xl mb-5 ${TEAM_STYLES[checkResult.team]?.chip ?? "bg-gray-800 text-white border-gray-600"}`}>
+              <span className="text-lg">{TEAM_STYLES[checkResult.team]?.emoji ?? "🎭"}</span>
+              <span>
+                <span className="block text-sm font-bold leading-tight">{checkResult.role.split(" (")[0]}</span>
+                {checkResult.role.match(/\(([^)]+)\)/)?.[1] && (
+                  <span className="block text-[10px] opacity-70 leading-tight">{checkResult.role.match(/\(([^)]+)\)/)?.[1]}</span>
+                )}
+              </span>
+            </div>
+            <button onClick={() => setCheckResult(null)} className="w-full bg-yellow-500 text-black font-bold py-3 rounded-xl text-sm">
+              รับทราบ
             </button>
           </div>
         </div>

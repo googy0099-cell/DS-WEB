@@ -490,6 +490,10 @@
 
         // === SYSTEM: AUTO SAVE ===
         var _serverLayoutTimer = null;
+        var _lastOwnSaveNonce = null;
+        var _layoutEsRef = null;
+        var _initialLoadComplete = false; // Guards against syncRoomPlayers() clobbering server layout before initial load
+
         function saveGameState() {
             const state = {
                 players: players,
@@ -517,8 +521,10 @@
                     }, '*');
                 }
             } catch(e) {}
-            // Debounce server save (3s) — syncs layout to Firebase so all devices share the same state
+            // Debounce server save (800ms) — syncs layout to Firebase for real-time multi-GM sync
             if (connectedRoomCode) {
+                // Assign nonce now; the debounced callback reads _lastOwnSaveNonce at fire time
+                _lastOwnSaveNonce = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
                 if (_serverLayoutTimer) clearTimeout(_serverLayoutTimer);
                 _serverLayoutTimer = setTimeout(function() {
                     _serverLayoutTimer = null;
@@ -533,15 +539,17 @@
                             panY: panY,
                             bgColor: document.getElementById('bgColorPicker').value,
                             tableColor: document.getElementById('tableColorPicker').value,
-                            penColor: penColorPicker.value
+                            penColor: penColorPicker.value,
+                            canvasData: canvas.toDataURL(),
+                            _saveNonce: _lastOwnSaveNonce
                         })
                     }).catch(function() {});
-                }, 3000);
+                }, 800);
             }
         }
 
-        // Load server canvas layout and merge positions into current tokens.
-        // Called after LOAD_SESSION so roles/uids are already set; this only updates positions.
+        // Load server canvas layout — server is authoritative source of truth.
+        // Full replaces players from server; preserves session roles where server has none.
         async function loadLayoutFromServer() {
             if (!connectedFbUrl || !connectedRoomCode) return;
             try {
@@ -551,27 +559,24 @@
                 if (!layout || typeof layout !== 'object') return;
 
                 var changed = false;
-                // Merge positions from server into existing tokens (match by uid then name)
-                if (layout.players && layout.players.length > 0) {
-                    layout.players.forEach(function(sv) {
-                        var tok = players.find(function(p) {
-                            return (sv.uid != null && p.uid === sv.uid) ||
-                                   (sv.uid == null && p.name === sv.name);
+
+                if (Array.isArray(layout.players) && layout.players.length > 0) {
+                    var localSnapshot = players.slice();
+                    // Full replace from server — server is single source of truth
+                    players = layout.players.map(function(sv) {
+                        var local = localSnapshot.find(function(p) {
+                            return (sv.uid != null && p.uid === sv.uid) || (p.name === sv.name);
                         });
-                        if (tok) {
-                            tok.x = sv.x; tok.y = sv.y; changed = true;
-                            // Restore offline token fields (role, status, nightMark)
-                            if (isOfflineToken(tok)) {
-                                if (sv.role && sv.role !== 'ไม่ระบุ') { tok.role = sv.role; }
-                                if (sv.status) tok.status = sv.status;
-                                if (sv.nightMark !== undefined) tok.nightMark = sv.nightMark;
-                            }
-                        } else if (isOfflineToken(sv)) {
-                            // Offline token present on server but not locally — restore it
-                            players.push(sv); changed = true;
+                        // Preserve role/uid from LOAD_SESSION if server has none (e.g., pre-deal layout)
+                        if (local && (!sv.role || sv.role === 'ไม่ระบุ') && local.role && local.role !== 'ไม่ระบุ') {
+                            return Object.assign({}, sv, { role: local.role, uid: (local.uid !== undefined ? local.uid : sv.uid) });
                         }
+                        return sv;
                     });
+                    // Server is the single source of truth — no local tokens re-added.
+                    changed = true;
                 }
+
                 if (layout.tableState) { tableState = layout.tableState; changed = true; }
                 if (layout.zoomLevel) { zoomLevel = layout.zoomLevel; changed = true; }
                 if (layout.panX !== undefined) { panX = layout.panX; changed = true; }
@@ -587,12 +592,61 @@
                     changed = true;
                 }
                 if (layout.penColor) { penColorPicker.value = layout.penColor; changed = true; }
+                if (layout.canvasData) { applyCanvasData(layout.canvasData); }
 
                 if (changed) {
                     applyWorkspaceTransform();
                     updateTableStyle();
                     renderTokens();
-                    // Update localStorage without re-triggering server save
+                }
+            } catch(e) {}
+        }
+
+        // Draw a saved canvas data-URL onto the drawing layer (clears first for an exact mirror).
+        function applyCanvasData(dataUrl) {
+            try {
+                var img = new Image();
+                img.onload = function() {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0);
+                };
+                img.src = dataUrl;
+            } catch(_e) {}
+        }
+
+        // Apply a layout received from another GM in real-time — mirror EVERYTHING (incl. pan/zoom + drawing).
+        function applyRemoteLayout(layout) {
+            if (!layout || typeof layout !== 'object') return;
+            var changed = false;
+
+            if (Array.isArray(layout.players)) {
+                players = layout.players.slice();
+                changed = true;
+            }
+
+            if (layout.tableState) { tableState = layout.tableState; changed = true; }
+            if (layout.zoomLevel) { zoomLevel = layout.zoomLevel; changed = true; }
+            if (layout.panX !== undefined) { panX = layout.panX; changed = true; }
+            if (layout.panY !== undefined) { panY = layout.panY; changed = true; }
+            if (layout.bgColor) {
+                document.getElementById('bgColorPicker').value = layout.bgColor;
+                document.getElementById('board-container').style.backgroundColor = layout.bgColor;
+                changed = true;
+            }
+            if (layout.tableColor) {
+                document.getElementById('tableColorPicker').value = layout.tableColor;
+                document.getElementById('table-element').style.backgroundColor = layout.tableColor;
+                changed = true;
+            }
+            if (layout.penColor) { penColorPicker.value = layout.penColor; changed = true; }
+            if (layout.canvasData !== undefined) { applyCanvasData(layout.canvasData || ''); }
+
+            if (changed) {
+                applyWorkspaceTransform();
+                updateTableStyle();
+                renderTokens();
+                // Update localStorage cache so a reload mirrors the latest shared state.
+                if (connectedRoomCode) {
                     var storageKey = 'werewolfGMState_' + connectedRoomCode;
                     try {
                         var ex = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -601,11 +655,45 @@
                             tableState: tableState,
                             zoomLevel: zoomLevel,
                             panX: panX,
-                            panY: panY
+                            panY: panY,
+                            bgColor: layout.bgColor || ex.bgColor,
+                            tableColor: layout.tableColor || ex.tableColor,
+                            penColor: layout.penColor || ex.penColor
                         })));
                     } catch(_e) {}
                 }
-            } catch(e) {}
+            }
+        }
+
+        // Subscribe to Firebase layout changes for real-time multi-GM sync
+        function startLayoutSync() {
+            if (!connectedFbUrl || !connectedRoomCode) return;
+            if (_layoutEsRef) { _layoutEsRef.close(); _layoutEsRef = null; }
+
+            var url = connectedFbUrl + '/werewolf/rooms/' + connectedRoomCode + '/canvasLayout.json';
+            var es = new EventSource(url);
+            _layoutEsRef = es;
+
+            function handleLayout(raw) {
+                try {
+                    var msg = JSON.parse(raw);
+                    var layout = msg.data;
+                    if (!layout || typeof layout !== 'object') return;
+                    // Skip if this is our own save (identified by nonce)
+                    if (layout._saveNonce && layout._saveNonce === _lastOwnSaveNonce) return;
+                    applyRemoteLayout(layout);
+                } catch(_e) {}
+            }
+
+            es.addEventListener('put', function(e) { handleLayout(e.data); });
+            es.addEventListener('patch', function(e) { handleLayout(e.data); });
+            es.onerror = function() {
+                es.close();
+                _layoutEsRef = null;
+                setTimeout(function() {
+                    if (connectedRoomCode && connectedFbUrl) startLayoutSync();
+                }, 5000);
+            };
         }
 
         function loadGameState() {
@@ -672,6 +760,7 @@
             if (e.data.type === 'INIT_LIVE') {
                 if (e.data.roomCode) connectedRoomCode = e.data.roomCode;
                 if (e.data.fbUrl) connectedFbUrl = e.data.fbUrl;
+                _initialLoadComplete = false; // Block syncRoomPlayers() from pushing to server until loadLayoutFromServer() completes
                 // Pre-load room-specific state BEFORE syncRoomPlayers() so the immediate
                 // sync doesn't overwrite the room key with stale data from the generic key
                 // (which loadGameState() loaded into `players` at window.onload time).
@@ -688,6 +777,7 @@
                 syncRoomPlayers();
                 startIdentifyListener();
                 startNightActionListener();
+                startLayoutSync(); // Real-time multi-GM canvas sync
             }
 
             if (e.data.type === 'SEATING_MODE') {
@@ -773,106 +863,80 @@
                     });
                 }
                 renderTokens();
-                saveGameState();
+                loadLayoutFromServer().then(function() {
+                    _initialLoadComplete = true;
+                    saveGameState();
+                });
             }
 
             if (e.data.type === 'LOAD_SESSION') {
                 var roomCode = e.data.roomCode || null;
                 var sessionPlayers = e.data.players || [];
 
-                // Set connected room code + phase
                 if (roomCode) connectedRoomCode = roomCode;
                 if (e.data.phase) connectedPhase = e.data.phase;
 
+                // Restore ONLY viewport (pan/zoom/colors) from localStorage — device-specific prefs.
+                // Players/tableState are NOT read from localStorage here; server layout is authoritative.
                 if (connectedRoomCode) {
                     var roomKey = 'werewolfGMState_' + connectedRoomCode;
                     var roomSavedState = localStorage.getItem(roomKey);
-
                     if (roomSavedState) {
-                        // Load existing room-specific state (positions preserved)
                         try {
                             var rs = JSON.parse(roomSavedState);
-                            players = rs.players || players;
-                            tableState = rs.tableState || tableState;
                             zoomLevel = rs.zoomLevel || zoomLevel;
-                            panX = rs.panX || panX;
-                            panY = rs.panY || panY;
+                            panX = rs.panX !== undefined ? rs.panX : panX;
+                            panY = rs.panY !== undefined ? rs.panY : panY;
                             if (rs.bgColor) {
                                 document.getElementById('bgColorPicker').value = rs.bgColor;
                                 document.getElementById('board-container').style.backgroundColor = rs.bgColor;
-                                document.getElementById('tableColorPicker').value = rs.tableColor || '#2d1a11';
-                                document.getElementById('table-element').style.backgroundColor = rs.tableColor || '#2d1a11';
+                            }
+                            if (rs.tableColor) {
+                                document.getElementById('tableColorPicker').value = rs.tableColor;
+                                document.getElementById('table-element').style.backgroundColor = rs.tableColor;
                             }
                             if (rs.penColor) penColorPicker.value = rs.penColor;
-                            // Sync tokens to current session: remove orphaned tokens, update/add session players
-                            if (sessionPlayers.length > 0) {
-                                var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
-                                // Remove tokens not in session; preserve offline tokens (uid null or negative virtual ID)
-                                players = players.filter(function(p) {
-                                    return sessionNames.indexOf(p.name) !== -1 || isOfflineToken(p);
-                                });
-                                // Update roles/uid and add missing players
-                                sessionPlayers.forEach(function(sp) {
-                                    var token = players.find(function(p) { return p.name === sp.seatName; });
-                                    if (token) {
-                                        token.role = sp.role || 'ไม่ระบุ';
-                                        if (sp.userId != null) token.uid = sp.userId;
-                                    } else {
-                                        players.push({ id: Date.now() + Math.random(), name: sp.seatName, uid: sp.userId ?? null, role: sp.role || 'ไม่ระบุ', gender: '', status: 'alive', x: 1500, y: 1500 });
-                                    }
-                                });
-                            }
-                            applyWorkspaceTransform();
-                            updateTableStyle();
-                            updateLockButtonUI();
                         } catch(err) {}
-                    } else if (sessionPlayers.length > 0) {
-                        // No saved state for this room — create tokens from session
-                        var total = sessionPlayers.length;
-                        var radius = Math.max(200, total * 30);
-                        players = sessionPlayers.map(function(sp, i) {
-                            var angle = (i / total) * 2 * Math.PI - Math.PI / 2;
-                            return {
-                                id: Date.now() + i,
-                                name: sp.seatName,
-                                uid: sp.userId ?? null,
-                                role: sp.role,
-                                gender: '',
-                                status: 'alive',
-                                x: 1500 - 37.5 + Math.cos(angle) * radius,
-                                y: 1500 - 37.5 + Math.sin(angle) * radius
-                            };
-                        });
-                    }
-                } else if (sessionPlayers.length > 0) {
-                    // No room code — match by seatName or create if empty
-                    var matched = 0;
-                    sessionPlayers.forEach(function(sp) {
-                        var token = players.find(function(p) { return p.name === sp.seatName; });
-                        if (token) { token.role = sp.role; matched++; }
-                    });
-                    if (matched === 0) {
-                        var total2 = sessionPlayers.length;
-                        var radius2 = Math.max(200, total2 * 30);
-                        players = sessionPlayers.map(function(sp, i) {
-                            var angle = (i / total2) * 2 * Math.PI - Math.PI / 2;
-                            return {
-                                id: Date.now() + i,
-                                name: sp.seatName,
-                                role: sp.role,
-                                gender: '',
-                                status: 'alive',
-                                x: 1500 - 37.5 + Math.cos(angle) * radius2,
-                                y: 1500 - 37.5 + Math.sin(angle) * radius2
-                            };
-                        });
                     }
                 }
 
+                // Set up player tokens from session (correct roles/uids, default positions).
+                // loadLayoutFromServer() below will apply authoritative positions from server.
+                if (sessionPlayers.length > 0) {
+                    var ls_total = sessionPlayers.length;
+                    var ls_radius = Math.max(200, ls_total * 30);
+                    var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
+                    // Remove orphaned online tokens; keep offline tokens as-is
+                    players = players.filter(function(p) {
+                        return sessionNames.indexOf(p.name) !== -1 || isOfflineToken(p);
+                    });
+                    // Update existing tokens + add missing ones at default circle positions
+                    sessionPlayers.forEach(function(sp, i) {
+                        var token = players.find(function(p) { return p.name === sp.seatName; });
+                        if (token) {
+                            token.role = sp.role || 'ไม่ระบุ';
+                            if (sp.userId != null) token.uid = sp.userId;
+                        } else {
+                            var angle = (i / ls_total) * 2 * Math.PI - Math.PI / 2;
+                            players.push({ id: Date.now() + Math.random(), name: sp.seatName, uid: sp.userId ?? null, role: sp.role || 'ไม่ระบุ', gender: '', status: 'alive',
+                                x: 1500 - 37.5 + Math.cos(angle) * ls_radius,
+                                y: 1500 - 37.5 + Math.sin(angle) * ls_radius });
+                        }
+                    });
+                }
+
+                applyWorkspaceTransform();
+                updateTableStyle();
+                updateLockButtonUI();
                 renderTokens();
-                saveGameState();
-                // Apply server canvas layout on top — updates positions for all devices
-                loadLayoutFromServer();
+
+                // Server layout is authoritative — load it first, then save.
+                // Setting _initialLoadComplete unblocks syncRoomPlayers() for subsequent saves.
+                loadLayoutFromServer().then(function() {
+                    _initialLoadComplete = true;
+                    saveGameState();
+                });
+
                 // Start auto-polling game control data
                 if (!gcPollId) {
                     gcPollId = setInterval(function() {
@@ -1511,6 +1575,7 @@
                             // Auto-select mark based on current night step
                             const autoMark = getMarkForCurrentStep();
                             players[index].nightMark = (players[index].nightMark === autoMark) ? null : autoMark;
+                            updateStatusForMark(players[index], players[index].nightMark);
                             renderTokens();
                         } else {
                             openModal(index);
@@ -2255,11 +2320,26 @@
             _nightActionToastTimer = setTimeout(function() { toast.classList.add('hidden'); }, 4000);
         }
 
+        function updateStatusForMark(tok, markType) {
+            if (markType === null) {
+                tok.status = 'alive';
+            } else if (markType === 'guard') {
+                tok.status = 'protected';
+            } else if (markType === 'wolf_pick') {
+                if (tok.status !== 'protected') tok.status = 'dead';
+            } else if (markType === 'save') {
+                tok.status = 'alive';
+            } else if (markType === 'poison') {
+                tok.status = 'dead';
+            }
+        }
+
         function applyNightActionMark(targetUid, actionType) {
             var tok = players.find(function(p) { return p.uid == targetUid; });
             if (!tok) return;
             var markMap = { kill: 'wolf_pick', protect: 'guard', check: 'check', piper: 'piper', save: 'save', poison: 'poison' };
             tok.nightMark = markMap[actionType] || 'target';
+            updateStatusForMark(tok, tok.nightMark);
             renderTokens();
             saveGameState();
         }
@@ -2308,7 +2388,7 @@
             } catch(e) { return; }
             if (mergeRoomPlayers(roomPlayers)) {
                 renderTokens();
-                saveGameState();
+                if (_initialLoadComplete) saveGameState(); // Skip server push before initial load to avoid clobbering layout
             }
         }
 

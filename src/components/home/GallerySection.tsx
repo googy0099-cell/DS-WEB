@@ -52,15 +52,16 @@ export default function GallerySection() {
                 </div>
               ))
             : items.map((item) => (
-                <div key={item.id} className="aspect-[4/3] rounded-2xl overflow-hidden shadow-sm relative">
+                <div key={item.id} className="group aspect-[4/3] rounded-2xl overflow-hidden shadow-sm relative hover:shadow-xl transition-all duration-300 hover:-translate-y-0.5">
                   <Image
                     src={item.imageUrl}
                     alt={item.caption ?? "gallery"}
                     fill
-                    className="object-cover"
+                    className="object-cover group-hover:scale-105 transition-transform duration-500"
                   />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                   {item.caption && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+                    <div className="absolute bottom-0 left-0 right-0 px-3 py-2 translate-y-1 group-hover:translate-y-0 transition-transform duration-300">
                       <p className="text-white text-xs font-medium">{item.caption}</p>
                     </div>
                   )}

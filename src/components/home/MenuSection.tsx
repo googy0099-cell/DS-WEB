@@ -50,9 +50,10 @@ export default function MenuSection() {
         </div>
 
         {/* Promo banner */}
-        <div className="bg-orange rounded-2xl p-5 mb-8 text-white">
-          <p className="font-bold text-lg">🎉 โปรโมชั่นพิเศษ!</p>
-          <p className="text-white/80 text-sm">สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)</p>
+        <div className="relative overflow-hidden bg-orange rounded-2xl p-5 mb-8 text-white">
+          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+          <p className="font-bold text-lg relative">🎉 โปรโมชั่นพิเศษ!</p>
+          <p className="text-white/80 text-sm relative">สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)</p>
         </div>
 
         {/* Featured items */}
@@ -62,15 +63,15 @@ export default function MenuSection() {
               <Link
                 key={item.id}
                 href="/menu"
-                className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
               >
                 {item.imageUrl ? (
-                  <div className="relative aspect-square w-full">
-                    <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover" />
+                  <div className="relative aspect-square w-full overflow-hidden">
+                    <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover group-hover:scale-105 transition-transform duration-300" />
                   </div>
                 ) : (
-                  <div className="aspect-square flex items-center justify-center bg-sand">
-                    <span className="text-4xl">{CATEGORY_ICON[item.category] ?? "🍽️"}</span>
+                  <div className="aspect-square flex items-center justify-center bg-sand group-hover:bg-sand/80 transition-colors">
+                    <span className="text-4xl group-hover:scale-110 transition-transform duration-200 inline-block">{CATEGORY_ICON[item.category] ?? "🍽️"}</span>
                   </div>
                 )}
                 <div className="p-3 text-center">

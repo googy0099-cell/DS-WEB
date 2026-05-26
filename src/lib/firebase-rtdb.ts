@@ -5,7 +5,7 @@ function getApp() {
   if (getApps().length > 0) return getApps()[0];
   const sa = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!);
   const databaseURL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL
-    ?? `https://${sa.project_id}-default-rtdb.firebaseio.com`;
+    ?? `https://${sa.project_id}-default-rtdb.asia-southeast1.firebasedatabase.app`;
   return initializeApp({ credential: cert(sa), databaseURL });
 }
 

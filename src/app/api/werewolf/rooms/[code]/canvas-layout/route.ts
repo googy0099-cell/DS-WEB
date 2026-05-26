@@ -13,8 +13,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
   if (!(await requireStaff())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
-  // Strip canvas drawing (data URL — too large for RTDB) before persisting
-  const { canvasData: _omit, favoriteRoles: _fav, timerSeconds: _t, ...layout } = body;
+  // Strip only device-local prefs; canvasData (drawing) IS synced for a 100% mirror.
+  const { favoriteRoles: _fav, timerSeconds: _t, ...layout } = body;
   await saveRoomCanvasLayout(code, layout);
   return NextResponse.json({ ok: true });
 }

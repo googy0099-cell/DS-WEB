@@ -23,7 +23,7 @@ export default async function ActivitiesSection() {
 
         <div className="grid md:grid-cols-3 gap-4">
           {activities.map((act) => (
-            <div key={act.id} className="bg-white rounded-2xl p-5 shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow">
+            <div key={act.id} className="bg-white rounded-2xl p-5 shadow-sm flex flex-col gap-3 hover:-translate-y-1 hover:shadow-lg transition-all duration-200">
               <div className="flex items-start gap-3">
                 <span className="text-3xl shrink-0">{act.emoji}</span>
                 <div className="flex-1 min-w-0">

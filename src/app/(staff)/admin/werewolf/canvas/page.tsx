@@ -16,7 +16,7 @@ function CanvasInner() {
     iframeRef.current.contentWindow.postMessage({
       type: "INIT_LIVE",
       roomCode,
-      fbUrl: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "",
+      fbUrl: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "https://diceshopadmin-default-rtdb.asia-southeast1.firebasedatabase.app",
     }, "*");
     try {
       if (mode === "seating") {
