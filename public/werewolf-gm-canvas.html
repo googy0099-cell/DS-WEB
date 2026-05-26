@@ -707,7 +707,7 @@
                                 var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
                                 // Remove tokens not in session; preserve offline tokens (uid null or negative virtual ID)
                                 players = players.filter(function(p) {
-                                    return sessionNames.indexOf(p.name) !== -1 || p.uid == null || (typeof p.uid === 'number' && p.uid < 0);
+                                    return sessionNames.indexOf(p.name) !== -1 || isOfflineToken(p);
                                 });
                                 // Update roles/uid and add missing players
                                 sessionPlayers.forEach(function(sp) {
@@ -2206,16 +2206,18 @@
             }
         }
 
+        function isOfflineToken(t) { return t.uid == null || (typeof t.uid === 'number' && t.uid < 0); }
+
         function mergeRoomPlayers(roomPlayers) {
             var changed = false;
             if (!roomPlayers || !roomPlayers.length) {
                 var before0 = players.length;
-                players = players.filter(function(t) { return t.uid == null; });
+                players = players.filter(isOfflineToken);
                 return players.length !== before0;
             }
             var uids = roomPlayers.map(function(rp) { return rp.uid; });
             var before = players.length;
-            players = players.filter(function(t) { return t.uid == null || uids.indexOf(t.uid) !== -1; });
+            players = players.filter(function(t) { return isOfflineToken(t) || uids.indexOf(t.uid) !== -1; });
             if (players.length !== before) changed = true;
             var cx = tableState.x + tableState.w / 2 - 37.5;
             var cy = tableState.y + tableState.h / 2 - 37.5;
@@ -2340,7 +2342,8 @@
             if (flat.length < rdPlayerCount()) return false;
             try {
                 // Collect offline token names to send to API for Firebase registration
-                var offlineTokens = players.filter(function(t) { return t.uid == null; });
+                // (includes tokens that already have negative virtual IDs from a prior deal)
+                var offlineTokens = players.filter(isOfflineToken);
                 var offlinePlayers = offlineTokens.map(function(t) { return { name: t.name }; });
                 var res = await fetch('/api/werewolf/sessions', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
