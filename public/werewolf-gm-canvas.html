@@ -396,6 +396,7 @@
         let connectedFbUrl = '';
         let identifyEs = null;
         let lastIdentifyAt = 0;
+        let identifyPollId = null;
         let rollCallMode = false;
 
         const roleDescriptions = {
@@ -2006,7 +2007,25 @@
         }
 
         function startIdentifyListener() {
-            if (!connectedFbUrl || !connectedRoomCode) return;
+            if (!connectedRoomCode) return;
+
+            // Poll Firebase REST directly every 2s — more reliable than SSE on child path
+            if (identifyPollId) clearInterval(identifyPollId);
+            identifyPollId = setInterval(async function() {
+                if (!connectedFbUrl || !connectedRoomCode) return;
+                try {
+                    var res = await fetch(connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/identify.json');
+                    if (!res.ok) return;
+                    var d = await res.json();
+                    if (d && d.userId && d.at && d.at > lastIdentifyAt) {
+                        lastIdentifyAt = d.at;
+                        blinkToken(d.userId);
+                    }
+                } catch(e) {}
+            }, 2000);
+
+            // Also keep SSE as a faster path when it works
+            if (!connectedFbUrl) return;
             if (identifyEs) { identifyEs.close(); identifyEs = null; }
             var url = connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/identify.json';
             try {
@@ -2025,7 +2044,6 @@
                 identifyEs.onerror = function() {
                     identifyEs.close();
                     identifyEs = null;
-                    setTimeout(function() { if (connectedRoomCode) startIdentifyListener(); }, 5000);
                 };
             } catch(e) {}
         }
