@@ -578,9 +578,7 @@
                 }
 
                 if (layout.tableState) { tableState = layout.tableState; changed = true; }
-                if (layout.zoomLevel) { zoomLevel = layout.zoomLevel; changed = true; }
-                if (layout.panX !== undefined) { panX = layout.panX; changed = true; }
-                if (layout.panY !== undefined) { panY = layout.panY; changed = true; }
+                // pan/zoom intentionally NOT loaded from server — device-local viewport
                 if (layout.bgColor) {
                     document.getElementById('bgColorPicker').value = layout.bgColor;
                     document.getElementById('board-container').style.backgroundColor = layout.bgColor;
@@ -625,9 +623,7 @@
             }
 
             if (layout.tableState) { tableState = layout.tableState; changed = true; }
-            if (layout.zoomLevel) { zoomLevel = layout.zoomLevel; changed = true; }
-            if (layout.panX !== undefined) { panX = layout.panX; changed = true; }
-            if (layout.panY !== undefined) { panY = layout.panY; changed = true; }
+            // pan/zoom intentionally NOT synced — each GM keeps their own viewport
             if (layout.bgColor) {
                 document.getElementById('bgColorPicker').value = layout.bgColor;
                 document.getElementById('board-container').style.backgroundColor = layout.bgColor;
@@ -642,10 +638,9 @@
             if (layout.canvasData !== undefined) { applyCanvasData(layout.canvasData || ''); }
 
             if (changed) {
-                applyWorkspaceTransform();
                 updateTableStyle();
                 renderTokens();
-                // Update localStorage cache so a reload mirrors the latest shared state.
+                // Update localStorage cache (content only; pan/zoom stays device-local).
                 if (connectedRoomCode) {
                     var storageKey = 'werewolfGMState_' + connectedRoomCode;
                     try {
@@ -653,9 +648,6 @@
                         localStorage.setItem(storageKey, JSON.stringify(Object.assign({}, ex, {
                             players: players,
                             tableState: tableState,
-                            zoomLevel: zoomLevel,
-                            panX: panX,
-                            panY: panY,
                             bgColor: layout.bgColor || ex.bgColor,
                             tableColor: layout.tableColor || ex.tableColor,
                             penColor: layout.penColor || ex.penColor
