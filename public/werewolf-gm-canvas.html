@@ -698,11 +698,21 @@
                                 document.getElementById('table-element').style.backgroundColor = rs.tableColor || '#2d1a11';
                             }
                             if (rs.penColor) penColorPicker.value = rs.penColor;
-                            // Update roles from session (roles may have changed)
-                            sessionPlayers.forEach(function(sp) {
-                                var token = players.find(function(p) { return p.name === sp.seatName; });
-                                if (token) token.role = sp.role;
-                            });
+                            // Sync tokens to current session: remove orphaned tokens, update/add session players
+                            if (sessionPlayers.length > 0) {
+                                var sessionNames = sessionPlayers.map(function(sp) { return sp.seatName; });
+                                // Remove tokens that don't belong to any current session player
+                                players = players.filter(function(p) { return sessionNames.indexOf(p.name) !== -1; });
+                                // Update roles and add missing players
+                                sessionPlayers.forEach(function(sp) {
+                                    var token = players.find(function(p) { return p.name === sp.seatName; });
+                                    if (token) {
+                                        token.role = sp.role || 'ไม่ระบุ';
+                                    } else {
+                                        players.push({ id: Date.now() + Math.random(), name: sp.seatName, role: sp.role || 'ไม่ระบุ', gender: '', status: 'alive', x: 1500, y: 1500 });
+                                    }
+                                });
+                            }
                             applyWorkspaceTransform();
                             updateTableStyle();
                             updateLockButtonUI();
