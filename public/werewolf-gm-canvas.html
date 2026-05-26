@@ -581,6 +581,17 @@
             if (e.data.type === 'INIT_LIVE') {
                 if (e.data.roomCode) connectedRoomCode = e.data.roomCode;
                 if (e.data.fbUrl) connectedFbUrl = e.data.fbUrl;
+                // Pre-load room-specific state BEFORE syncRoomPlayers() so the immediate
+                // sync doesn't overwrite the room key with stale data from the generic key
+                // (which loadGameState() loaded into `players` at window.onload time).
+                var _preKey = 'werewolfGMState_' + connectedRoomCode;
+                var _preSaved = localStorage.getItem(_preKey);
+                if (_preSaved) {
+                    try {
+                        var _preState = JSON.parse(_preSaved);
+                        if (_preState.players) players = _preState.players;
+                    } catch(_e) {}
+                }
                 startLiveSync();
                 startGCPoll();
                 syncRoomPlayers();
