@@ -155,7 +155,7 @@ function GMRoomInner({ code }: { code: string }) {
 
   // Sync seat rows when players change
   useEffect(() => {
-    if (!players) return;
+    if (!Array.isArray(players)) return;
     const rows: SeatRow[] = players.map((p) => ({
       userId: p.user.id,
       seatName: p.seatName,

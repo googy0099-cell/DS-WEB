@@ -84,7 +84,6 @@
             <button onclick="startNight()" class="bg-indigo-700 border border-indigo-400 text-white py-1.5 rounded text-sm font-bold shadow-[0_0_8px_rgba(99,102,241,0.8)] active:bg-indigo-800">🌙 กลางคืน</button>
             <button onclick="startNewDay()" class="bg-yellow-600 border border-yellow-400 text-white py-1.5 rounded text-sm font-bold active:bg-yellow-700 shadow-md">🌞 ช่วงเช้า</button>
             <button onclick="toggleTimerWidget()" class="bg-blue-700 border border-blue-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-blue-800">⏱️ จับเวลา</button>
-            <button id="btn-gc" onclick="toggleGC()" class="bg-gray-700 border border-gray-500 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-gray-600">📊 เกม</button>
             <button onclick="openSettingsMenu()" class="bg-gray-700 border border-gray-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-gray-600 flex items-center justify-center gap-1">⚙️ ตั้งค่า</button>
         </div>
         
@@ -195,6 +194,7 @@
 
             <h3 class="text-sm text-gray-400 mb-2 font-bold">ระบบเกม (Game Control)</h3>
             <div class="grid grid-cols-1 gap-3">
+                <button id="btn-gc" onclick="toggleGC(); closeSettingsMenu();" class="bg-gray-800 border border-gray-500 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md active:bg-gray-700 w-full text-left flex justify-between">📊 ดูสถานะเกม <span class="text-gray-500">&gt;</span></button>
                 <button onclick="openColorSettings(); closeSettingsMenu();" class="bg-gray-800 border border-gray-600 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md active:bg-gray-700 w-full text-left flex justify-between">🎨 ตั้งค่าสีสันหน้าจอ / สีโต๊ะ <span class="text-gray-500">&gt;</span></button>
                 <button onclick="resetGame(); closeSettingsMenu();" class="bg-yellow-700 border border-yellow-500 text-white px-4 py-3 rounded-xl text-sm font-bold active:bg-yellow-800 shadow-md w-full text-left flex justify-between">🔄 เริ่มเกมใหม่ (ล้างบทบาท/สถานะ) <span class="text-gray-400">&gt;</span></button>
                 <button onclick="hardReset()" class="bg-red-900 border border-red-500 active:bg-red-700 text-white px-4 py-3 rounded-xl text-sm font-bold shadow-md w-full mt-2 flex items-center justify-center gap-2">⚠️ ล้างข้อมูลกระดานทั้งหมด (Hard Reset)</button>
@@ -383,6 +383,7 @@
 
         // === SESSION CONNECTION ===
         let connectedRoomCode = null;
+        let connectedPhase = null;
         let _gameEndDetected = false;
         let _pendingWinTeam = null;
         let isSeatingMode = false;
@@ -673,8 +674,9 @@
                 var roomCode = e.data.roomCode || null;
                 var sessionPlayers = e.data.players || [];
 
-                // Set connected room code
+                // Set connected room code + phase
                 if (roomCode) connectedRoomCode = roomCode;
+                if (e.data.phase) connectedPhase = e.data.phase;
 
                 if (connectedRoomCode) {
                     var roomKey = 'werewolfGMState_' + connectedRoomCode;
@@ -1521,6 +1523,7 @@
                 endNight();
                 saveGameState();
                 // Reset the session so all player phones return to the standby screen
+                connectedPhase = 'SETUP';
                 if (connectedRoomCode) {
                     fetch('/api/werewolf/sessions/' + connectedRoomCode + '/reset', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' }
@@ -2182,6 +2185,7 @@
                 });
                 _gameEndDetected = false; _pendingWinTeam = null;
                 renderTokens(); saveGameState();
+                connectedPhase = 'PLAYING';
                 fetch('/api/werewolf/sessions/' + connectedRoomCode, {
                     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phase: 'PLAYING' })
@@ -2237,6 +2241,7 @@
         // === GAME-END DETECTION (connected to session) ===
         function checkGameEnd() {
             if (!connectedRoomCode || _gameEndDetected) return;
+            if (connectedPhase !== 'PLAYING') return;
 
             // Game hasn't started until every player has a real role dealt.
             // Guard against false "village wins" before the deal (all 'ไม่ระบุ').

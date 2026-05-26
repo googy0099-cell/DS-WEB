@@ -71,7 +71,7 @@ function CanvasInner() {
           })
         );
         iframeRef.current.contentWindow.postMessage(
-          { type: "LOAD_SESSION", roomCode, players: canvasPlayers },
+          { type: "LOAD_SESSION", roomCode, players: canvasPlayers, phase: s.phase },
           "*"
         );
 

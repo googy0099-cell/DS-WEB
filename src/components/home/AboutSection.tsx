@@ -31,12 +31,12 @@ export default function AboutSection() {
 กับพวกเราร้านลูกเต๋า
           </p>
           <p className="text-gray-600 leading-relaxed mb-6">
-            บอร์ดเกมกว่า 200 เกมพร้อมให้เลือกเล่น พร้อมทีมงานที่คอยแนะนำวิธีเล่น
+            บอร์ดเกมกว่า 170 เกมพร้อมให้เลือกเล่น พร้อมทีมงานที่คอยแนะนำวิธีเล่น
             อาหารและเครื่องดื่มคุณภาพดี สั่งได้ทันทีไม่ต้องรอนาน
           </p>
           <div className="flex gap-8 justify-center md:justify-start">
             <div>
-              <p className="text-2xl font-bold text-orange">200+</p>
+              <p className="text-2xl font-bold text-orange">170+</p>
               <p className="text-sm text-gray-500">บอร์ดเกม</p>
             </div>
             <div>
