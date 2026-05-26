@@ -2186,13 +2186,12 @@
             document.getElementById('roleDescText').textContent = desc;
             popup.classList.remove('hidden');
         }
-        function rdInc(idx) { var r = rdAllRoles[idx]; roleCounts[r] = (roleCounts[r] || 0) + 1; renderRoleDealList(); updateRoleDealCount(); }
+        function rdInc(idx) { var r = rdAllRoles[idx]; if (rdTotal() >= rdPlayerCount()) return; roleCounts[r] = (roleCounts[r] || 0) + 1; renderRoleDealList(); updateRoleDealCount(); }
         function rdDec(idx) { var r = rdAllRoles[idx]; var c = roleCounts[r] || 0; if (c <= 1) delete roleCounts[r]; else roleCounts[r] = c - 1; renderRoleDealList(); updateRoleDealCount(); }
         function rdToggleDecoy(i) { var k = DECOY_ROLE_KEYS[i]; var idx = selectedDecoys.indexOf(k); if (idx === -1) selectedDecoys.push(k); else selectedDecoys.splice(idx, 1); window._decoyRoles = selectedDecoys.slice(); renderRoleDealList(); }
 
         function rdPlayerCount() {
-            var withUid = players.filter(function(p) { return p.uid != null; }).length;
-            return withUid || players.length;
+            return players.length; // all tokens on board — online + offline
         }
         function rdTotal() { return Object.keys(roleCounts).reduce(function(s, k) { return s + roleCounts[k]; }, 0); }
         function updateRoleDealCount() {
@@ -2215,10 +2214,17 @@
                 if (!res.ok) return false;
                 lastDealConfig = { selectedRoles: flat.slice(), decoyRoles: (decoys || []).slice() };
                 window._decoyRoles = (decoys || []).slice();
+                // Assign roles to online (DB) players
                 (data.assignments || []).forEach(function(a) {
                     var tok = players.find(function(t) { return t.uid === a.userId; });
                     if (!tok) tok = players.find(function(t) { return t.name === a.seatName; });
                     if (tok) { tok.uid = a.userId; tok.role = a.role; tok.status = 'alive'; tok.nightMark = null; }
+                });
+                // Assign leftover roles to offline (canvas-only) tokens
+                var offlineRoles = data.offlineRoles || [];
+                var offlineTokens = players.filter(function(t) { return t.uid == null; });
+                offlineTokens.forEach(function(tok, i) {
+                    if (offlineRoles[i]) { tok.role = offlineRoles[i]; tok.status = 'alive'; tok.nightMark = null; }
                 });
                 _gameEndDetected = false; _pendingWinTeam = null;
                 renderTokens(); saveGameState();

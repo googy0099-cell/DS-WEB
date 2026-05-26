@@ -48,7 +48,9 @@ export async function POST(req: NextRequest) {
   if (selectedRoles.length < players.length)
     return NextResponse.json({ error: "บทบาทไม่พอสำหรับผู้เล่น" }, { status: 400 });
 
-  const shuffledRoles = shuffle(selectedRoles).slice(0, players.length);
+  const shuffledAll = shuffle(selectedRoles);
+  const shuffledRoles = shuffledAll.slice(0, players.length);
+  const offlineRoles = shuffledAll.slice(players.length); // leftover for canvas-only (offline) tokens
 
   // Delete existing session — clear child tables then break circular FK before deleting
   if (room.session) {
@@ -112,5 +114,5 @@ export async function POST(req: NextRequest) {
     team: getTeam(shuffledRoles[i]),
   }));
 
-  return NextResponse.json({ sessionId: newSession.id, assignments });
+  return NextResponse.json({ sessionId: newSession.id, assignments, offlineRoles });
 }
