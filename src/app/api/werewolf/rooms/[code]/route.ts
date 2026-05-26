@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
+import { clearRoomCanvasLayout } from "@/lib/firebase-rtdb";
 
 async function requireGM(code: string) {
   const session = await auth();
@@ -71,6 +72,7 @@ export async function DELETE(
   }
   await db.werewolfRoomPlayer.deleteMany({ where: { roomId: gm.room.id } });
   await db.werewolfRoom.delete({ where: { code } });
+  await clearRoomCanvasLayout(code);
 
   return NextResponse.json({ ok: true });
 }

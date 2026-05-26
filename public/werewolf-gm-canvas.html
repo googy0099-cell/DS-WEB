@@ -488,6 +488,7 @@
         const penColorPicker = document.getElementById('penColorPicker');
 
         // === SYSTEM: AUTO SAVE ===
+        var _serverLayoutTimer = null;
         function saveGameState() {
             const state = {
                 players: players,
@@ -513,6 +514,95 @@
                         nightSteps: nightSteps,
                         currentNightStepIndex: currentNightStepIndex
                     }, '*');
+                }
+            } catch(e) {}
+            // Debounce server save (3s) — syncs layout to Firebase so all devices share the same state
+            if (connectedRoomCode) {
+                if (_serverLayoutTimer) clearTimeout(_serverLayoutTimer);
+                _serverLayoutTimer = setTimeout(function() {
+                    _serverLayoutTimer = null;
+                    fetch('/api/werewolf/rooms/' + connectedRoomCode + '/canvas-layout', {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            players: players,
+                            tableState: tableState,
+                            zoomLevel: zoomLevel,
+                            panX: panX,
+                            panY: panY,
+                            bgColor: document.getElementById('bgColorPicker').value,
+                            tableColor: document.getElementById('tableColorPicker').value,
+                            penColor: penColorPicker.value
+                        })
+                    }).catch(function() {});
+                }, 3000);
+            }
+        }
+
+        // Load server canvas layout and merge positions into current tokens.
+        // Called after LOAD_SESSION so roles/uids are already set; this only updates positions.
+        async function loadLayoutFromServer() {
+            if (!connectedFbUrl || !connectedRoomCode) return;
+            try {
+                var res = await fetch(connectedFbUrl + '/werewolf/rooms/' + connectedRoomCode + '/canvasLayout.json');
+                if (!res.ok) return;
+                var layout = await res.json();
+                if (!layout || typeof layout !== 'object') return;
+
+                var changed = false;
+                // Merge positions from server into existing tokens (match by uid then name)
+                if (layout.players && layout.players.length > 0) {
+                    layout.players.forEach(function(sv) {
+                        var tok = players.find(function(p) {
+                            return (sv.uid != null && p.uid === sv.uid) ||
+                                   (sv.uid == null && p.name === sv.name);
+                        });
+                        if (tok) {
+                            tok.x = sv.x; tok.y = sv.y; changed = true;
+                            // Restore offline token fields (role, status, nightMark)
+                            if (isOfflineToken(tok)) {
+                                if (sv.role && sv.role !== 'ไม่ระบุ') { tok.role = sv.role; }
+                                if (sv.status) tok.status = sv.status;
+                                if (sv.nightMark !== undefined) tok.nightMark = sv.nightMark;
+                            }
+                        } else if (isOfflineToken(sv)) {
+                            // Offline token present on server but not locally — restore it
+                            players.push(sv); changed = true;
+                        }
+                    });
+                }
+                if (layout.tableState) { tableState = layout.tableState; changed = true; }
+                if (layout.zoomLevel) { zoomLevel = layout.zoomLevel; changed = true; }
+                if (layout.panX !== undefined) { panX = layout.panX; changed = true; }
+                if (layout.panY !== undefined) { panY = layout.panY; changed = true; }
+                if (layout.bgColor) {
+                    document.getElementById('bgColorPicker').value = layout.bgColor;
+                    document.getElementById('board-container').style.backgroundColor = layout.bgColor;
+                    changed = true;
+                }
+                if (layout.tableColor) {
+                    document.getElementById('tableColorPicker').value = layout.tableColor;
+                    document.getElementById('table-element').style.backgroundColor = layout.tableColor;
+                    changed = true;
+                }
+                if (layout.penColor) { penColorPicker.value = layout.penColor; changed = true; }
+
+                if (changed) {
+                    applyWorkspaceTransform();
+                    updateTableStyle();
+                    renderTokens();
+                    // Update localStorage without re-triggering server save
+                    var storageKey = 'werewolfGMState_' + connectedRoomCode;
+                    try {
+                        var ex = JSON.parse(localStorage.getItem(storageKey) || '{}');
+                        localStorage.setItem(storageKey, JSON.stringify(Object.assign({}, ex, {
+                            players: players,
+                            tableState: tableState,
+                            zoomLevel: zoomLevel,
+                            panX: panX,
+                            panY: panY
+                        })));
+                    } catch(_e) {}
                 }
             } catch(e) {}
         }
@@ -780,6 +870,8 @@
 
                 renderTokens();
                 saveGameState();
+                // Apply server canvas layout on top — updates positions for all devices
+                loadLayoutFromServer();
                 // Start auto-polling game control data
                 if (!gcPollId) {
                     gcPollId = setInterval(function() {

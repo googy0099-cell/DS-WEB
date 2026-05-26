@@ -83,6 +83,25 @@ export async function patchWerewolfPlayerFb(
   }
 }
 
+// Canvas layout stored at room level so it survives session resets and is shared across devices.
+export async function saveRoomCanvasLayout(code: string, layout: Record<string, unknown>) {
+  try {
+    await withTimeout(
+      rtdb().ref(`werewolf/rooms/${code}/canvasLayout`).set({ ...layout, _ts: Date.now() })
+    );
+  } catch (e) {
+    console.error("[Firebase] canvas layout save error", e);
+  }
+}
+
+export async function clearRoomCanvasLayout(code: string) {
+  try {
+    await withTimeout(rtdb().ref(`werewolf/rooms/${code}/canvasLayout`).remove());
+  } catch (e) {
+    console.error("[Firebase] canvas layout clear error", e);
+  }
+}
+
 // Updates multiple players using flat paths so offline (virtual) player entries are not overwritten.
 export async function patchWerewolfPlayersFb(
   code: string,
