@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: "กิจกรรม", href: "/activities" },
   { label: "เกี่ยวกับเรา", href: "/#about" },
   { label: "ติดต่อเรา", href: "/#contact" },
+  { label: "🐺 Werewolf", href: "/#werewolf" },
 ];
 
 export default function Navbar() {
@@ -39,16 +40,16 @@ export default function Navbar() {
   }, []);
 
   return (
-    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-navy/95 backdrop-blur-md shadow-lg" : "bg-navy"}`}>
+    <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-orange/95 backdrop-blur-md shadow-lg" : "bg-navy"}`}>
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <Image
-            src="/DS-new-logo.png"
+            src="/แแแแ-Photoroom.png"
             alt="Dice Shop"
             width={144}
             height={48}
-            className="object-contain brightness-0 invert h-11 w-auto"
+            className="object-contain brightness-0 invert h-25 w-auto"
             priority
           />
         </Link>

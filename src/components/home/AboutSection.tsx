@@ -48,8 +48,8 @@ export default function AboutSection() {
         {/* Text */}
         <div className="text-center md:text-left">
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">เกี่ยวกับเรา</p>
-          <h2 className="text-3xl md:text-4xl font-bold text-navy mb-4 leading-snug">
-            พื้นที่สำหรับ<br className="hidden md:block" />ทุกคน
+          <h2 className="text-3xl md:text-2xl font-bold text-navy mb-4 leading-snug">
+            พื้นที่สำหรับทุกคน
           </h2>
           <p className="text-gray-600 leading-relaxed mb-4">
             เราไม่ได้แค่วางเกมไว้บนโต๊ะ แต่เราสร้างพื้นที่ให้คุณได้พักจากหน้าจอ

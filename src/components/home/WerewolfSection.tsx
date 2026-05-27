@@ -30,7 +30,7 @@ export default function WerewolfSection() {
   }, []);
 
   return (
-    <section className="relative py-20 px-4 overflow-hidden bg-[#080d18]">
+    <section id="werewolf" className="relative py-20 px-4 overflow-hidden bg-[#080d18]">
       {/* Decorative glow blobs */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[350px] bg-orange/8 rounded-full blur-[80px] pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-[400px] h-[400px] bg-navy/60 rounded-full blur-[100px] pointer-events-none" />
@@ -43,7 +43,7 @@ export default function WerewolfSection() {
             🐺 Dice Shop Werewolf
           </span>
           <h2 className="text-3xl md:text-4xl font-bold text-white text-center leading-tight">
-            แรงกิ้งนักล่า
+            - RANKING -
           </h2>
           <p className="text-white/35 text-sm text-center mt-2">ผู้เล่นที่แข็งแกร่งที่สุดแห่ง Dice Shop</p>
         </div>
@@ -105,7 +105,7 @@ export default function WerewolfSection() {
             href="/join"
             className="inline-flex items-center justify-center gap-2 bg-orange text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-orange/90 transition-all shadow-[0_0_24px_rgba(251,133,0,0.35)] hover:shadow-[0_0_32px_rgba(251,133,0,0.5)]"
           >
-            🐺 เข้าร่วมเกม Werewolf
+            🐺 เข้าสู่ DiceShop Werewolf
           </Link>
         </div>
         <p className="text-center text-xs text-white/20 mb-10">

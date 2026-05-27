@@ -11,7 +11,7 @@ type Slide = {
 };
 
 const DEFAULT_SLIDES: Slide[] = [
-  { bg: "from-navy to-navy/80", image: null, title: "ร้านเกมกระดาน", subtitle: "นั่งสบาย อาหารอร่อย เกมเพียบ" },
+  { bg: "from-navy to-navy/80", image: null, title: "", subtitle: "" },
   { bg: "from-orange/80 to-sand", image: null, title: "บรรยากาศอบอุ่น", subtitle: "พื้นที่พักผ่อนสำหรับทุกวัย" },
   { bg: "from-sage/80 to-cream", image: null, title: "เกมหลากหลาย", subtitle: "บอร์ดเกมกว่า 170 ชื่อ พร้อมให้เล่น" },
   { bg: "from-navy/90 to-orange/50", image: null, title: "อาหาร & เครื่องดื่ม", subtitle: "เมนูอร่อยสั่งได้ทันที ไม่ต้องรอนาน" },

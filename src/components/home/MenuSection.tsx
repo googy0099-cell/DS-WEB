@@ -44,7 +44,7 @@ export default function MenuSection() {
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">เมนูแนะนำ</p>
           <Link href="/menu" className="group inline-block">
             <h2 className="text-2xl md:text-3xl font-bold text-navy group-hover:text-orange transition-colors">
-              อาหาร &amp; เครื่องดื่ม →
+              FOODS &amp; DRINKS →
             </h2>
           </Link>
         </div>

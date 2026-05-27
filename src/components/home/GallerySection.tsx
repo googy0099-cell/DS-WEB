@@ -37,7 +37,7 @@ export default function GallerySection() {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-8">
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">แกลเลอรี</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-navy">บรรยากาศในร้าน</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-navy">GALLERY</h2>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">

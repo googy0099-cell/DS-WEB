@@ -4,7 +4,7 @@ export default function ContactSection() {
       <div className="max-w-5xl mx-auto">
         <div className="text-center mb-10">
           <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-2">ติดต่อเรา</p>
-          <h2 className="text-2xl md:text-3xl font-bold text-navy">มาเจอกัน</h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-navy">CONTACT</h2>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
@@ -26,7 +26,8 @@ export default function ContactSection() {
               <span className="text-2xl">🕐</span>
               <div>
                 <p className="font-bold text-navy mb-0.5">เวลาเปิดทำการ</p>
-                <p className="text-gray-600 text-sm">15:00 – 23:00 น. ทุกวัน</p>
+                <p className="text-gray-600 text-sm">15:00 – 23:00 น. ทุกวัน จ - ศ</p>
+                <p className="text-gray-600 text-sm">13:00 – 23:00 น. ทุกวัน ส - อา</p>
               </div>
             </div>
 
@@ -78,7 +79,7 @@ export default function ContactSection() {
                   TikTok
                 </a>
                 <a
-                  href="https://www.youtube.com/@diceshop"
+                  href="https://www.youtube.com/@%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%99%E0%B8%A5%E0%B8%B9%E0%B8%81%E0%B9%80%E0%B8%95%E0%B9%8B%E0%B8%B2Diceshop"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-[#FF0000] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"
@@ -87,7 +88,7 @@ export default function ContactSection() {
                   YouTube
                 </a>
                 <a
-                  href="www.youtube.com/@ร้านลูกเต๋าDiceshop"
+                  href="https://line.me/R/ti/p/@984osoky"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 bg-[#00B900] text-white text-sm font-semibold px-4 py-2.5 rounded-xl hover:opacity-90 transition-opacity"

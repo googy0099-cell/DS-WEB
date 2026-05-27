@@ -13,8 +13,8 @@
   /* Brand colors */
   --color-cream: #f8f1e5;
   --color-navy: #182a47;
-  --color-orange: #fb8500;
-  --color-sand: #f0dcbe;
+  --color-orange: #ff7300;
+  --color-sand: #84a98c;
   --color-sage: #84a98c;
 
   /* Shadcn tokens mapped to brand */
@@ -56,12 +56,12 @@
   --secondary-foreground: #182a47;
   --muted: #f0dcbe;
   --muted-foreground: #6b7280;
-  --accent: #fb8500;
+  --accent: #ff7300;
   --accent-foreground: #ffffff;
   --destructive: oklch(0.577 0.245 27.325);
   --border: #e5d8c5;
   --input: #e5d8c5;
-  --ring: #fb8500;
+  --ring: #ff7300;
   --radius: 0.75rem;
 }
 

@@ -103,7 +103,16 @@
       "Bash(npx tsx -e ' *)",
       "Bash(vercel --version)",
       "Bash(grep -v \"^src/app$\")",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "mcp__claude_ai_Canva__search-designs",
+      "mcp__claude_ai_Canva__generate-design",
+      "Bash(echo \"exit:$?\")",
+      "Bash(rm \"src/app/api/werewolf/sessions/[code]/gm-action/route.ts\")",
+      "Bash(rmdir \"src/app/api/werewolf/sessions/[code]/gm-action\")",
+      "Bash(grep -c 'function __TRACKED_VAR__' public/werewolf-gm-canvas.html)",
+      "Bash(grep -c 'function __TRACKED_VAR__' /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/werewolf-gm-canvas.html)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs ps -o comm= -p)"
     ]
   }
 }

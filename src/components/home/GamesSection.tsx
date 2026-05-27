@@ -43,7 +43,7 @@ export default function GamesSection() {
         <div className="flex items-end justify-between mb-6">
           <div>
             <p className="text-orange font-semibold text-sm uppercase tracking-wider mb-1">บอร์ดเกม</p>
-            <h2 className="text-2xl md:text-3xl font-bold text-navy">เกมในร้าน</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-navy">BOARD GAMES</h2>
           </div>
           <Link href="/games" className="text-orange font-semibold text-sm hover:underline shrink-0">
             ดูทั้งหมด →
