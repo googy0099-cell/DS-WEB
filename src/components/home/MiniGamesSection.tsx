@@ -15,6 +15,7 @@ export default async function MiniGamesSection() {
   const games = await db.miniGame.findMany({
     where: { isActive: true },
     orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    take: 3,
   });
 
   if (games.length === 0) return null;
@@ -31,7 +32,7 @@ export default async function MiniGamesSection() {
           <p className="text-white/60 text-sm max-w-sm mx-auto">รอเพื่อนอยู่? เล่นฟรีทันที ไม่ต้องดาวน์โหลด</p>
         </div>
 
-        <div className={`grid gap-3 md:gap-5 mb-8 ${games.length <= 3 ? "grid-cols-3" : "grid-cols-3 md:grid-cols-4"}`}>
+        <div className="grid grid-cols-3 gap-3 md:gap-5 mb-8">
           {games.map((g, i) => {
             const grad = GRADIENTS[i % GRADIENTS.length];
             return (
