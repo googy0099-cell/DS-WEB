@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
       points: true,
       totalSpentTHB: true,
       visitCount: true,
+      playMinutes: true,
       createdAt: true,
     },
     orderBy: { createdAt: "desc" },

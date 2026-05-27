@@ -21,6 +21,7 @@ interface Member {
   points: number;
   totalSpentTHB: number;
   visitCount: number;
+  playMinutes: number;
   createdAt: string;
   googleId: string | null;
 }
@@ -229,11 +230,12 @@ export default function AdminMembersPage() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                   {[
                     { label: "คะแนน", value: selected.points, color: "text-orange" },
                     { label: "ยอดใช้จ่าย", value: `฿${selected.totalSpentTHB}`, color: "text-navy" },
                     { label: "เข้าร้าน", value: `${selected.visitCount} ครั้ง`, color: "text-sage" },
+                    { label: "ชั่วโมงเล่นสะสม", value: `${Math.floor((selected.playMinutes ?? 0) / 60)} ชม. ${(selected.playMinutes ?? 0) % 60} น.`, color: "text-purple-500" },
                   ].map(s => (
                     <div key={s.label} className="bg-sand/40 rounded-xl p-3">
                       <p className={`font-bold text-sm ${s.color}`}>{s.value}</p>

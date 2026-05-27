@@ -28,14 +28,27 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { tableId, nickname, packageType } = await req.json() as {
+  const { tableId, nickname, packageType, memberCode } = await req.json() as {
     tableId: number;
     nickname: string;
     packageType: PackageKey;
+    memberCode?: string;
   };
 
   if (!tableId || !nickname?.trim() || !PACKAGES[packageType]) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
+  }
+
+  let userId: number | null = null;
+  if (memberCode?.trim()) {
+    const member = await db.user.findUnique({
+      where: { memberCode: memberCode.trim().toUpperCase() },
+      select: { id: true },
+    });
+    if (!member) {
+      return NextResponse.json({ error: "ไม่พบรหัสสมาชิกนี้" }, { status: 400 });
+    }
+    userId = member.id;
   }
 
   const pkg = PACKAGES[packageType];
@@ -46,6 +59,7 @@ export async function POST(req: NextRequest) {
       packageType,
       packagePrice: pkg.price,
       timeRemaining: pkg.timeSeconds,
+      userId,
     },
   });
 

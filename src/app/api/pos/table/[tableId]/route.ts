@@ -15,13 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tab
       playerSessions: {
         where: { status: "ACTIVE" },
         include: {
-          orders: {
-            include: {
-              items: {
-                include: { menuItem: { select: { nameTh: true, priceTHB: true, priceS: true, category: true } } },
-              },
-            },
-          },
+          user: { select: { id: true, username: true, memberCode: true } },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -33,9 +27,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ tab
   const sessions = table.playerSessions.map((s) => ({
     ...s,
     timeRemaining: syncedRemaining(s.timeRemaining, s.updatedAt),
-    totalSpent: s.orders
-      .filter((o) => o.status !== "CANCELLED")
-      .reduce((sum, o) => sum + o.totalTHB, 0),
   }));
 
   return NextResponse.json({ ...table, playerSessions: sessions });

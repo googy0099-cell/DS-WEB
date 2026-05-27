@@ -49,6 +49,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
 
   if (body.status === "PAID" || body.status === "LEFT") {
+    // Credit accumulated play hours to linked member (actual elapsed time)
+    if (session.userId && body.status === "PAID") {
+      const playedMinutes = Math.round((Date.now() - session.createdAt.getTime()) / 60000);
+      if (playedMinutes > 0) {
+        await db.user.update({
+          where: { id: session.userId },
+          data: { playMinutes: { increment: playedMinutes } },
+        });
+      }
+    }
+
     const remaining = await db.playerSession.count({
       where: { tableId: session.tableId, status: "ACTIVE", id: { not: Number(id) } },
     });

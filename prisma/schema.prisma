@@ -23,8 +23,10 @@ model User {
   avatarUrl     String?
   visitCount    Int        @default(0)
   points        Int        @default(0)
+  playMinutes   Int        @default(0)
   totalSpentTHB Int        @default(0)
   role          String     @default("USER")
+  memberSessions      PlayerSession[]      @relation("MemberSessions")
   orders              Order[]              @relation("CustomerOrders")
   handledOrders       Order[]              @relation("StaffOrders")
   auditLogs           AuditLog[]
@@ -54,6 +56,8 @@ model PlayerSession {
   packagePrice  Int      @default(0)
   timeRemaining Int
   status        String   @default("ACTIVE")
+  userId        Int?
+  user          User?    @relation("MemberSessions", fields: [userId], references: [id])
   orders        Order[]
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

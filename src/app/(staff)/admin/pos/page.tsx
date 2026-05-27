@@ -1,16 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
-import QRCode from "qrcode";
+import { useEffect, useState, useCallback } from "react";
 
-type OrderItem = {
-  id: number;
-  quantity: number;
-  unitPriceTHB: number;
-  selectedSize: string | null;
-  menuItem: { nameTh: string; category: string };
-};
-type Order = { id: number; status: string; totalTHB: number; createdAt: string; items: OrderItem[] };
+type MemberRef = { id: number; username: string; memberCode: string };
 type PlayerSession = {
   id: number;
   nickname: string;
@@ -18,9 +10,9 @@ type PlayerSession = {
   packagePrice: number;
   timeRemaining: number;
   status: string;
-  totalSpent: number;
-  orders: Order[];
   updatedAt: string;
+  userId: number | null;
+  user: MemberRef | null;
 };
 type TableData = {
   id: number;
@@ -81,7 +73,6 @@ function SessionCard({
   const color = timerColor(remaining);
   const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? 3600;
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
-  const [showOrders, setShowOrders] = useState(false);
 
   return (
     <div className="bg-navy/80 rounded-2xl p-4 space-y-3 border border-white/10">
@@ -95,6 +86,16 @@ function SessionCard({
         </span>
       </div>
 
+      {/* Member hour-points badge */}
+      {session.user && (
+        <div className="bg-green-500/15 border border-green-400/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
+          <span className="text-sm">🎯</span>
+          <span className="text-green-300 text-xs font-semibold">
+            เก็บแต้มให้ {session.user.username}
+          </span>
+        </div>
+      )}
+
       {/* Timer */}
       <div>
         <div className={`text-2xl font-mono font-bold ${color.text}`}>{fmt(remaining)}</div>
@@ -105,35 +106,6 @@ function SessionCard({
           />
         </div>
       </div>
-
-      {/* Spend summary */}
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-white/60">ยอดสะสม</span>
-        <span className="font-bold text-orange">฿{session.totalSpent}</span>
-      </div>
-
-      {/* Order summary toggle */}
-      {session.orders.length > 0 && (
-        <button
-          onClick={() => setShowOrders(!showOrders)}
-          className="text-xs text-white/40 hover:text-white/70 w-full text-left"
-        >
-          {showOrders ? "▲ ซ่อนออเดอร์" : `▼ ดูออเดอร์ (${session.orders.length} รายการ)`}
-        </button>
-      )}
-
-      {showOrders && (
-        <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
-          {session.orders.flatMap((o) =>
-            o.items.map((item, i) => (
-              <div key={`${o.id}-${i}`} className="flex justify-between text-xs text-white/60">
-                <span>{item.menuItem.nameTh} {item.selectedSize ? `(${item.selectedSize})` : ""} ×{item.quantity}</span>
-                <span>฿{item.unitPriceTHB * item.quantity}</span>
-              </div>
-            ))
-          )}
-        </div>
-      )}
 
       {/* Actions */}
       <div className="flex gap-2 pt-1">
@@ -147,64 +119,7 @@ function SessionCard({
           onClick={() => onCheckout(session.id)}
           className="flex-1 text-xs bg-orange hover:bg-orange/80 text-white font-bold py-2 rounded-xl transition-colors"
         >
-          ชำระเงิน
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---- QR Modal ----
-function QRModal({ tableNumber, onClose }: { tableNumber: number; onClose: () => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [count, setCount] = useState(2);
-  const [copied, setCopied] = useState(false);
-
-  const url = typeof window !== "undefined"
-    ? `${window.location.origin}/table/${tableNumber}/${String(count).padStart(2, "0")}`
-    : `/table/${tableNumber}/${String(count).padStart(2, "0")}`;
-
-  useEffect(() => {
-    if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, url, { width: 210, margin: 2 });
-    }
-  }, [url]);
-
-  function copy() {
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-bold text-navy text-lg text-center">QR โต๊ะ {tableNumber}</h3>
-
-        {/* Count selector */}
-        <div>
-          <p className="text-xs font-semibold text-navy mb-2">จำนวนคน</p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCount((c) => Math.max(1, c - 1))}
-              className="w-9 h-9 bg-sand rounded-xl font-bold text-navy text-lg flex items-center justify-center"
-            >−</button>
-            <span className="flex-1 text-center font-bold text-navy text-xl">{count} คน</span>
-            <button
-              onClick={() => setCount((c) => Math.min(20, c + 1))}
-              className="w-9 h-9 bg-sand rounded-xl font-bold text-navy text-lg flex items-center justify-center"
-            >+</button>
-          </div>
-        </div>
-
-        <canvas ref={canvasRef} className="mx-auto rounded-xl block" />
-        <p className="text-[11px] text-gray-400 break-all text-center">{url}</p>
-
-        <button onClick={copy} className="w-full bg-navy text-white font-semibold py-2.5 rounded-xl text-sm">
-          {copied ? "✅ คัดลอกแล้ว!" : "📋 คัดลอกลิงก์"}
-        </button>
-        <button onClick={onClose} className="w-full border border-sand text-gray-500 font-semibold py-2.5 rounded-xl text-sm">
-          ปิด
+          ปิดบิล
         </button>
       </div>
     </div>
@@ -218,8 +133,9 @@ export default function AdminPosPage() {
   const [addPlayerModal, setAddPlayerModal] = useState<{ tableId: number } | null>(null);
   const [newNickname, setNewNickname] = useState("");
   const [newPackage, setNewPackage] = useState<"A" | "B" | "C">("A");
+  const [memberCode, setMemberCode] = useState("");
+  const [memberCheck, setMemberCheck] = useState<{ status: "idle" | "found" | "notfound"; username?: string }>({ status: "idle" });
   const [saving, setSaving] = useState(false);
-  const [qrTable, setQrTable] = useState<{ id: number; number: number } | null>(null);
   const [alert, setAlert] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -253,7 +169,7 @@ export default function AdminPosPage() {
   }, [tables, alert]);
 
   async function checkout(sessionId: number) {
-    if (!confirm("ยืนยันชำระเงินและปิด Session?")) return;
+    if (!confirm("ยืนยันปิดบิลและจบ Session? (ถ้ามีสมาชิกจะเก็บแต้มชั่วโมงให้)")) return;
     await fetch(`/api/pos/sessions/${sessionId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -271,18 +187,50 @@ export default function AdminPosPage() {
     load();
   }
 
-  async function addPlayer() {
-    if (!addPlayerModal || !newNickname.trim()) return;
-    setSaving(true);
-    await fetch("/api/pos/sessions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tableId: addPlayerModal.tableId, nickname: newNickname, packageType: newPackage }),
-    });
-    setAddPlayerModal(null);
+  async function checkMember() {
+    const code = memberCode.trim();
+    if (!code) { setMemberCheck({ status: "idle" }); return; }
+    const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code)}`);
+    if (res.ok) {
+      const m = await res.json();
+      setMemberCheck({ status: "found", username: m.username });
+    } else {
+      setMemberCheck({ status: "notfound" });
+    }
+  }
+
+  function openAddPlayer(tableId: number) {
+    setAddPlayerModal({ tableId });
     setNewNickname("");
     setNewPackage("A");
+    setMemberCode("");
+    setMemberCheck({ status: "idle" });
+  }
+
+  async function addPlayer() {
+    if (!addPlayerModal || !newNickname.trim()) return;
+    if (memberCode.trim() && memberCheck.status === "notfound") {
+      window.alert("รหัสสมาชิกไม่ถูกต้อง — แก้ไขหรือเว้นว่าง");
+      return;
+    }
+    setSaving(true);
+    const res = await fetch("/api/pos/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tableId: addPlayerModal.tableId,
+        nickname: newNickname,
+        packageType: newPackage,
+        memberCode: memberCode.trim() || undefined,
+      }),
+    });
     setSaving(false);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      window.alert(err.error ?? "เกิดข้อผิดพลาด");
+      return;
+    }
+    setAddPlayerModal(null);
     load();
   }
 
@@ -318,20 +266,12 @@ export default function AdminPosPage() {
               <h2 className="text-white font-bold text-lg">โต๊ะ {table.number}</h2>
               <p className="text-white/50 text-xs">{table.playerSessions.length} ผู้เล่น</p>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setQrTable({ id: table.id, number: table.number })}
-                className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-              >
-                QR
-              </button>
-              <button
-                onClick={() => setAddPlayerModal({ tableId: table.id })}
-                className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
-              >
-                + เพิ่มผู้เล่น
-              </button>
-            </div>
+            <button
+              onClick={() => openAddPlayer(table.id)}
+              className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              + เพิ่มผู้เล่น
+            </button>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -353,35 +293,23 @@ export default function AdminPosPage() {
           <p className="text-gray-400 text-sm font-semibold mb-3">โต๊ะว่าง ({freeTables.length})</p>
           <div className="flex flex-wrap gap-3">
             {freeTables.map((t) => (
-              <div key={t.id} className="flex gap-2">
-                <button
-                  onClick={() => setAddPlayerModal({ tableId: t.id })}
-                  className="bg-white border-2 border-dashed border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-5 py-3 rounded-2xl text-sm transition-colors"
-                >
-                  + โต๊ะ {t.number}
-                </button>
-                <button
-                  onClick={() => setQrTable({ id: t.id, number: t.number })}
-                  className="bg-white border-2 border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-3 py-3 rounded-2xl text-sm transition-colors"
-                >
-                  QR
-                </button>
-              </div>
+              <button
+                key={t.id}
+                onClick={() => openAddPlayer(t.id)}
+                className="bg-white border-2 border-dashed border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-5 py-3 rounded-2xl text-sm transition-colors"
+              >
+                + โต๊ะ {t.number}
+              </button>
             ))}
           </div>
         </div>
-      )}
-
-      {/* QR Modal */}
-      {qrTable && (
-        <QRModal tableNumber={qrTable.number} onClose={() => setQrTable(null)} />
       )}
 
       {/* Add Player Modal */}
       {addPlayerModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
-            <h3 className="font-bold text-navy text-lg">เพิ่มผู้เล่นใหม่</h3>
+            <h3 className="font-bold text-navy text-lg">เปิดบิลผู้เล่นใหม่</h3>
 
             <div>
               <label className="text-xs font-semibold text-navy block mb-1">ชื่อเล่น</label>
@@ -390,7 +318,6 @@ export default function AdminPosPage() {
                 type="text"
                 value={newNickname}
                 onChange={(e) => setNewNickname(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addPlayer()}
                 placeholder="เช่น ปลา, มิ้ง, โต..."
                 className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm focus:border-orange focus:outline-none"
               />
@@ -414,6 +341,28 @@ export default function AdminPosPage() {
               ))}
             </div>
 
+            {/* Member code (optional) for hour points */}
+            <div>
+              <label className="text-xs font-semibold text-navy block mb-1">
+                รหัสสมาชิก <span className="text-gray-400 font-normal">(เก็บแต้มชั่วโมง — ไม่ใส่ก็ได้)</span>
+              </label>
+              <input
+                type="text"
+                value={memberCode}
+                onChange={(e) => { setMemberCode(e.target.value.toUpperCase()); setMemberCheck({ status: "idle" }); }}
+                onBlur={checkMember}
+                placeholder="เช่น A2B3"
+                maxLength={4}
+                className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm uppercase tracking-widest focus:border-orange focus:outline-none"
+              />
+              {memberCheck.status === "found" && (
+                <p className="text-green-600 text-xs mt-1 font-semibold">✓ {memberCheck.username}</p>
+              )}
+              {memberCheck.status === "notfound" && (
+                <p className="text-red-500 text-xs mt-1 font-semibold">✗ ไม่พบสมาชิก</p>
+              )}
+            </div>
+
             <div className="flex gap-3">
               <button
                 onClick={() => setAddPlayerModal(null)}
@@ -426,7 +375,7 @@ export default function AdminPosPage() {
                 disabled={saving || !newNickname.trim()}
                 className="flex-1 bg-orange text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50"
               >
-                {saving ? "..." : "เพิ่มผู้เล่น"}
+                {saving ? "..." : "เปิดบิล"}
               </button>
             </div>
           </div>
