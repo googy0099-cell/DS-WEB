@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import RegisterSW from "@/components/admin/RegisterSW";
+import MobileNav from "@/components/admin/MobileNav";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
@@ -76,24 +77,11 @@ export default async function AdminLayout({
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-navy z-50 border-t border-cream/10">
-        <div className="flex overflow-x-auto scrollbar-none">
-          {allNav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex flex-col items-center gap-0.5 px-3 py-2.5 text-cream/60 active:text-cream min-w-[64px] shrink-0"
-            >
-              <span className="text-xl">{item.icon}</span>
-              <span className="text-[9px] whitespace-nowrap">{item.label}</span>
-            </Link>
-          ))}
-        </div>
-      </div>
+      {/* Mobile hamburger nav */}
+      <MobileNav items={allNav} username={session.user.username ?? ""} role={session.user.role ?? ""} />
 
       {/* Main content */}
-      <main className="flex-1 p-4 md:p-6 pb-24 md:pb-6 w-full overflow-x-hidden">
+      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full overflow-x-hidden">
         <RegisterSW />
         {children}
       </main>
