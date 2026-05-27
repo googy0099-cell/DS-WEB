@@ -24,7 +24,7 @@ type Bill = {
   sessions: PlayerSession[];
 };
 type TableRef = { id: number; number: number };
-type DrinkItem = { id: number; nameTh: string; category: string; price: number };
+type DrinkItem = { id: number; nameTh: string; category: string; priceTHB: number };
 
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
@@ -147,7 +147,7 @@ function PackagePicker({
   drinks: DrinkItem[];
 }) {
   const drinkPrice = value === "A" && drinkName
-    ? (drinks.find((d) => d.nameTh === drinkName)?.price ?? 0)
+    ? (drinks.find((d) => d.nameTh === drinkName)?.priceTHB ?? 0)
     : 0;
   const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price + drinkPrice;
   const totalHours = value === "B" ? 2 * qty : value === "A" ? 1 : "∞";
@@ -178,14 +178,14 @@ function PackagePicker({
           value={drinkName}
           onChange={(e) => {
             const found = drinks.find((d) => d.nameTh === e.target.value);
-            onDrinkChange(e.target.value, found?.price ?? 0);
+            onDrinkChange(e.target.value, found?.priceTHB ?? 0);
           }}
           className="w-full text-xs border border-sand rounded-lg px-2 py-1.5 bg-white focus:border-orange focus:outline-none"
         >
           <option value="">— เลือกเครื่องดื่ม —</option>
           {drinks.map((d) => (
             <option key={d.id} value={d.nameTh}>
-              {d.nameTh}{value === "A" ? ` — ฿${d.price}` : " (รวมแล้ว)"}
+              {d.nameTh}{value === "A" ? ` — ฿${d.priceTHB}` : " (รวมแล้ว)"}
             </option>
           ))}
         </select>
