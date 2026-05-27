@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
+type Promo = { promo_title?: string; promo_body?: string; promo_enabled?: string };
+
 type MenuItem = {
   id: number;
   nameTh: string;
@@ -21,13 +23,24 @@ const CATEGORY_ICON: Record<string, string> = {
   drink: "🧃", food: "🍜", snack: "🍿", dessert: "🍮",
 };
 
+const DEFAULT_PROMO: Promo = {
+  promo_title: "🎉 โปรโมชั่นพิเศษ!",
+  promo_body: "สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)",
+  promo_enabled: "true",
+};
+
 export default function MenuSection() {
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [promo, setPromo] = useState<Promo>(DEFAULT_PROMO);
 
   useEffect(() => {
     fetch("/api/menu?featured=1")
       .then((r) => r.json())
       .then((data: MenuItem[]) => setItems(data))
+      .catch(() => {});
+    fetch("/api/site-settings")
+      .then((r) => r.json())
+      .then((data: Promo) => { if (data?.promo_title) setPromo(data); })
       .catch(() => {});
   }, []);
 
@@ -50,11 +63,13 @@ export default function MenuSection() {
         </div>
 
         {/* Promo banner */}
-        <div className="relative overflow-hidden bg-orange rounded-2xl p-5 mb-8 text-white">
-          <div className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
-          <p className="font-bold text-lg relative">🎉 โปรโมชั่นพิเศษ!</p>
-          <p className="text-white/80 text-sm relative">สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)</p>
-        </div>
+        {promo.promo_enabled !== "false" && (
+          <div className="relative overflow-hidden bg-orange rounded-2xl p-5 mb-8 text-white">
+            <div className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+            <p className="font-bold text-lg relative">{promo.promo_title}</p>
+            <p className="text-white/80 text-sm relative">{promo.promo_body}</p>
+          </div>
+        )}
 
         {/* Featured items */}
         {items.length > 0 ? (
