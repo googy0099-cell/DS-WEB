@@ -10,6 +10,7 @@ import { useOrderStore, makeCartKey } from "@/store/orderStore";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
 const CATEGORIES = [
+  { id: "gametime", label: "ค่าชั่วโมงเกม", icon: "🎲" },
   { id: "milktea", label: "Milk & Tea", icon: "🧋" },
   { id: "coffee", label: "Coffee", icon: "☕" },
   { id: "soda", label: "Soda Zaa", icon: "🥤" },
@@ -17,6 +18,41 @@ const CATEGORIES = [
   { id: "food", label: "อาหารจานเดียว", icon: "🍜" },
   { id: "snack", label: "ของทานเล่น", icon: "🍿" },
   { id: "dessert", label: "ของหวาน", icon: "🍮" },
+];
+
+const DRINK_CATS = ["#milktea", "#coffee", "#soda"];
+
+const GAME_PACKAGES = [
+  {
+    emoji: "⏱️",
+    title: "2 ชั่วโมง",
+    price: "49",
+    desc: "ซื้อ 1 ชม. ฟรีอีก 1 ชม.",
+    tag: "ยอดนิยม",
+    tagColor: "bg-orange text-white",
+    gradient: "from-orange/10 to-amber-50",
+    border: "border-orange/30",
+  },
+  {
+    emoji: "🥤",
+    title: "1 ชั่วโมงฟรี",
+    price: "0",
+    desc: "สั่งเครื่องดื่ม 1 แก้ว ได้เล่นฟรี 1 ชม.",
+    tag: "ฟรี!",
+    tagColor: "bg-green-500 text-white",
+    gradient: "from-green-50 to-emerald-50",
+    border: "border-green-300",
+  },
+  {
+    emoji: "🌟",
+    title: "เล่นทั้งวัน",
+    price: "120",
+    desc: "ไม่จำกัดเวลา + ฟรีเครื่องดื่ม 1 แก้ว",
+    tag: "เหมาวัน",
+    tagColor: "bg-purple-500 text-white",
+    gradient: "from-purple-50 to-indigo-50",
+    border: "border-purple-300",
+  },
 ];
 
 export default function MenuPage() {
@@ -151,7 +187,7 @@ export default function MenuPage() {
 
         <div className="sticky top-16 z-10 bg-cream border-b border-sand flex overflow-x-auto no-scrollbar">
           {CATEGORIES.filter(
-            (cat) => loading || availableItems.some((i) => i.category === cat.id)
+            (cat) => cat.id === "gametime" || loading || availableItems.some((i) => i.category === cat.id)
           ).map((cat) => (
             <a
               key={cat.id}
@@ -164,7 +200,40 @@ export default function MenuPage() {
         </div>
 
         <div className="max-w-4xl mx-auto px-4 py-8 space-y-12">
+          {/* Game Time Packages */}
+          <section id="gametime">
+            <h2 className="text-xl font-bold text-navy mb-4 flex items-center gap-2">
+              🎲 ค่าชั่วโมงเกม
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {GAME_PACKAGES.map((pkg) => (
+                <a
+                  key={pkg.title}
+                  href={DRINK_CATS[GAME_PACKAGES.indexOf(pkg) % DRINK_CATS.length]}
+                  className={`block bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5 hover:scale-[1.02] transition-transform`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="text-3xl">{pkg.emoji}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pkg.tagColor}`}>{pkg.tag}</span>
+                  </div>
+                  <p className="font-bold text-navy text-lg leading-tight">{pkg.title}</p>
+                  <p className="text-orange font-bold text-2xl mt-0.5">
+                    {pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}
+                  </p>
+                  <p className="text-gray-500 text-xs mt-2 leading-snug">{pkg.desc}</p>
+                  <p className="text-orange text-xs font-semibold mt-3">
+                    ดูเมนูเครื่องดื่ม →
+                  </p>
+                </a>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-3 text-center">
+              * เครื่องดื่มที่นับเวลา: Coffee · Milk &amp; Tea · Soda Zaa
+            </p>
+          </section>
+
           {CATEGORIES.map((cat) => {
+            if (cat.id === "gametime") return null;
             const catItems = availableItems.filter((i) => i.category === cat.id);
             if (catItems.length === 0 && !loading) return null;
 
