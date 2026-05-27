@@ -3,7 +3,7 @@ import db from "@/lib/db";
 import { PACKAGES, type PackageKey } from "@/app/api/pos/sessions/route";
 import { generatePromptPayQR } from "@/lib/promptpay";
 
-type PlayerInput = { nameOrCode?: string; packageType: PackageKey };
+type PlayerInput = { nameOrCode?: string; packageType: PackageKey; drinkName?: string; qty?: number };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const pkg = PACKAGES[p.packageType];
     if (!pkg) return NextResponse.json({ error: "แพ็กเกจไม่ถูกต้อง" }, { status: 400 });
 
+    const qty = p.packageType === "B" ? Math.max(1, p.qty ?? 1) : 1;
     const raw = p.nameOrCode?.trim() ?? "";
     let userId: number | null = null;
     let nickname = raw || `Player ${existingCount + i + 1}`;
@@ -42,18 +43,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    const drinkNote = p.drinkName?.trim();
+    if (drinkNote) nickname = `${nickname} (${drinkNote})`;
+
+    const price = pkg.price * qty;
+    const timeSeconds = pkg.timeSeconds * qty;
+
     await db.playerSession.create({
       data: {
         tableId: bill.tableId,
         billId,
         nickname,
         packageType: p.packageType,
-        packagePrice: pkg.price,
-        timeRemaining: pkg.timeSeconds,
+        packagePrice: price,
+        timeRemaining: timeSeconds,
         userId,
       },
     });
-    total += pkg.price;
+    total += price;
   }
 
   const qrDataUrl = total > 0 ? await generatePromptPayQR(total) : null;

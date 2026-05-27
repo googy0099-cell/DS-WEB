@@ -24,12 +24,14 @@ type Bill = {
   sessions: PlayerSession[];
 };
 type TableRef = { id: number; number: number };
+type DrinkItem = { id: number; nameTh: string; category: string };
 
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
   B: { label: "Package B", price: 49, timeSeconds: 7200, desc: "49฿ — เล่น 2 ชม." },
   C: { label: "Package C", price: 120, timeSeconds: 86400, desc: "120฿ — เหมาวัน + ฟรีเครื่องดื่ม" },
 };
+const DRINK_CATS = ["coffee", "milktea", "soda"];
 const PKG_KEYS = ["A", "B", "C"] as const;
 type PkgKey = (typeof PKG_KEYS)[number];
 
@@ -117,8 +119,9 @@ function SessionCard({
         <button
           onClick={() => onAddTime(session.id, 3600)}
           className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
+          title="สั่งน้ำเพิ่ม → เพิ่มเวลา 1 ชั่วโมง"
         >
-          +1 ชม.
+          🥤 +1 ชม.
         </button>
         <button
           onClick={() => onCheckout(session.id)}
@@ -131,35 +134,84 @@ function SessionCard({
   );
 }
 
-// ---- Package picker (inline buttons) ----
-function PackagePicker({ value, onChange }: { value: PkgKey; onChange: (k: PkgKey) => void }) {
+// ---- Package picker (context-aware) ----
+function PackagePicker({
+  value, onChange,
+  drinkName, onDrinkChange,
+  qty, onQtyChange,
+  drinks,
+}: {
+  value: PkgKey; onChange: (k: PkgKey) => void;
+  drinkName: string; onDrinkChange: (name: string) => void;
+  qty: number; onQtyChange: (q: number) => void;
+  drinks: DrinkItem[];
+}) {
+  const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price;
+  const totalHours = value === "B" ? 2 * qty : value === "A" ? 1 : "∞";
+
   return (
-    <div className="flex gap-1.5">
-      {PKG_KEYS.map((k) => (
-        <button
-          key={k}
-          onClick={() => onChange(k)}
-          className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold border-2 transition-all ${
-            value === k ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-400"
-          }`}
-          title={PACKAGES[k].desc}
+    <div className="space-y-2">
+      <div className="flex gap-1">
+        {PKG_KEYS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => onChange(k)}
+            className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold border-2 transition-all ${
+              value === k ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-400 hover:border-orange/40"
+            }`}
+            title={PACKAGES[k].desc}
+          >
+            {k}
+            <span className="block text-[10px] font-normal">
+              {PACKAGES[k].price === 0 ? "ฟรี" : `฿${PACKAGES[k].price}`}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {(value === "A" || value === "C") && (
+        <select
+          value={drinkName}
+          onChange={(e) => onDrinkChange(e.target.value)}
+          className="w-full text-xs border border-sand rounded-lg px-2 py-1.5 bg-white focus:border-orange focus:outline-none"
         >
-          {k}
-          <span className="block text-[10px] font-normal">
-            {PACKAGES[k].price === 0 ? "ฟรี" : `฿${PACKAGES[k].price}`}
-          </span>
-        </button>
-      ))}
+          <option value="">— เลือกเครื่องดื่ม —</option>
+          {drinks.map((d) => (
+            <option key={d.id} value={d.nameTh}>{d.nameTh}</option>
+          ))}
+        </select>
+      )}
+
+      {value === "B" && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onQtyChange(Math.max(1, qty - 1))}
+            className="w-6 h-6 rounded-full bg-sand hover:bg-orange/20 text-navy font-bold text-sm flex items-center justify-center"
+          >−</button>
+          <span className="text-xs font-bold text-navy w-4 text-center">{qty}</span>
+          <button
+            type="button"
+            onClick={() => onQtyChange(qty + 1)}
+            className="w-6 h-6 rounded-full bg-sand hover:bg-orange/20 text-navy font-bold text-sm flex items-center justify-center"
+          >+</button>
+          <span className="text-[10px] text-gray-400">{totalHours}ชม. · ฿{totalPrice}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-type PlayerDraft = { nameOrCode: string; pkg: PkgKey };
+type PlayerDraft = { nameOrCode: string; pkg: PkgKey; drinkName: string; qty: number };
+
+const BLANK_DRAFT: PlayerDraft = { nameOrCode: "", pkg: "A", drinkName: "", qty: 1 };
 
 // ---- Main Page ----
 export default function AdminTimePage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [tables, setTables] = useState<TableRef[]>([]);
+  const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // open-bill flow
@@ -174,16 +226,22 @@ export default function AdminTimePage() {
 
   // per-bill add player / change table
   const [addToBill, setAddToBill] = useState<Bill | null>(null);
-  const [addPlayers, setAddPlayers] = useState<PlayerDraft[]>([{ nameOrCode: "", pkg: "A" }]);
+  const [addPlayers, setAddPlayers] = useState<PlayerDraft[]>([{ ...BLANK_DRAFT }]);
   const [changeTableBill, setChangeTableBill] = useState<Bill | null>(null);
 
   const load = useCallback(async () => {
-    const [b, t] = await Promise.all([
+    const [b, t, m] = await Promise.all([
       fetch("/api/pos/bills").then((r) => r.json()).catch(() => []),
       fetch("/api/tables").then((r) => r.json()).catch(() => []),
+      fetch("/api/menu").then((r) => r.json()).catch(() => []),
     ]);
     setBills(Array.isArray(b) ? b : []);
     setTables(Array.isArray(t) ? t : []);
+    setDrinks(
+      Array.isArray(m)
+        ? (m as DrinkItem[]).filter((item) => DRINK_CATS.includes(item.category))
+        : []
+    );
     setLoading(false);
   }, []);
 
@@ -215,7 +273,7 @@ export default function AdminTimePage() {
     if (!res.ok) { window.alert("เปิดบิลไม่สำเร็จ"); return; }
     const bill = await res.json();
     setDraftBillId(bill.id);
-    setPlayers(Array.from({ length: peopleCount }, () => ({ nameOrCode: "", pkg: "A" as PkgKey })));
+    setPlayers(Array.from({ length: peopleCount }, () => ({ ...BLANK_DRAFT })));
     setStep(2);
   }
 
@@ -225,7 +283,7 @@ export default function AdminTimePage() {
     const res = await fetch(`/api/pos/bills/${draftBillId}/players`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: players.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg })) }),
+      body: JSON.stringify({ players: players.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, qty: p.qty })) }),
     });
     setSaving(false);
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
@@ -276,11 +334,11 @@ export default function AdminTimePage() {
     await fetch(`/api/pos/bills/${addToBill.id}/players`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: addPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg })) }),
+      body: JSON.stringify({ players: addPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, qty: p.qty })) }),
     });
     setSaving(false);
     setAddToBill(null);
-    setAddPlayers([{ nameOrCode: "", pkg: "A" }]);
+    setAddPlayers([{ ...BLANK_DRAFT }]);
     load();
   }
 
@@ -327,7 +385,7 @@ export default function AdminTimePage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => { setAddToBill(bill); setAddPlayers([{ nameOrCode: "", pkg: "A" }]); }}
+                onClick={() => { setAddToBill(bill); setAddPlayers([{ ...BLANK_DRAFT }]); }}
                 className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
               >
                 + เพิ่มผู้เล่น
@@ -404,15 +462,25 @@ export default function AdminTimePage() {
         <Modal onClose={() => setStep(0)} title="ใส่ข้อมูลผู้เล่น" wide>
           <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
             {players.map((p, i) => (
-              <div key={i} className="grid grid-cols-1 sm:grid-cols-[80px_1fr_150px] gap-2 items-center bg-sand/30 rounded-xl p-2.5">
-                <span className="font-bold text-navy text-sm">ผู้เล่น {i + 1}</span>
-                <input
-                  value={p.nameOrCode}
-                  onChange={(e) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, nameOrCode: e.target.value } : x))}
-                  placeholder={`ใส่ชื่อ/รหัสลูกค้า ไม่ใส่ = Player ${i + 1}`}
-                  className="w-full border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
+              <div key={i} className="bg-sand/30 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-navy text-sm w-16 shrink-0">ผู้เล่น {i + 1}</span>
+                  <input
+                    value={p.nameOrCode}
+                    onChange={(e) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, nameOrCode: e.target.value } : x))}
+                    placeholder={`ชื่อ/รหัสลูกค้า (ไม่ใส่ = Player ${i + 1})`}
+                    className="flex-1 border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+                <PackagePicker
+                  value={p.pkg}
+                  onChange={(k) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
+                  drinkName={p.drinkName}
+                  onDrinkChange={(name) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name } : x))}
+                  qty={p.qty}
+                  onQtyChange={(q) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
+                  drinks={drinks}
                 />
-                <PackagePicker value={p.pkg} onChange={(k) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))} />
               </div>
             ))}
           </div>
@@ -453,19 +521,27 @@ export default function AdminTimePage() {
         <Modal onClose={() => setAddToBill(null)} title={`เพิ่มผู้เล่น — ${addToBill.name}`} wide>
           <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
             {addPlayers.map((p, i) => (
-              <div key={i} className="grid grid-cols-1 sm:grid-cols-[1fr_150px] gap-2 items-center bg-sand/30 rounded-xl p-2.5">
+              <div key={i} className="bg-sand/30 rounded-xl p-3 space-y-2">
                 <input
                   value={p.nameOrCode}
                   onChange={(e) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, nameOrCode: e.target.value } : x))}
-                  placeholder="ใส่ชื่อ/รหัสลูกค้า"
+                  placeholder="ชื่อ/รหัสลูกค้า"
                   className="w-full border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />
-                <PackagePicker value={p.pkg} onChange={(k) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))} />
+                <PackagePicker
+                  value={p.pkg}
+                  onChange={(k) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
+                  drinkName={p.drinkName}
+                  onDrinkChange={(name) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name } : x))}
+                  qty={p.qty}
+                  onQtyChange={(q) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
+                  drinks={drinks}
+                />
               </div>
             ))}
           </div>
           <button
-            onClick={() => setAddPlayers((prev) => [...prev, { nameOrCode: "", pkg: "A" }])}
+            onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
             className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange"
           >
             + อีกคน
