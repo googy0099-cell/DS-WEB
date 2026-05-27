@@ -24,7 +24,7 @@ type Bill = {
   sessions: PlayerSession[];
 };
 type TableRef = { id: number; number: number };
-type DrinkItem = { id: number; nameTh: string; category: string };
+type DrinkItem = { id: number; nameTh: string; category: string; price: number };
 
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
@@ -142,11 +142,14 @@ function PackagePicker({
   drinks,
 }: {
   value: PkgKey; onChange: (k: PkgKey) => void;
-  drinkName: string; onDrinkChange: (name: string) => void;
+  drinkName: string; onDrinkChange: (name: string, price: number) => void;
   qty: number; onQtyChange: (q: number) => void;
   drinks: DrinkItem[];
 }) {
-  const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price;
+  const drinkPrice = value === "A" && drinkName
+    ? (drinks.find((d) => d.nameTh === drinkName)?.price ?? 0)
+    : 0;
+  const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price + drinkPrice;
   const totalHours = value === "B" ? 2 * qty : value === "A" ? 1 : "∞";
 
   return (
@@ -173,14 +176,22 @@ function PackagePicker({
       {(value === "A" || value === "C") && (
         <select
           value={drinkName}
-          onChange={(e) => onDrinkChange(e.target.value)}
+          onChange={(e) => {
+            const found = drinks.find((d) => d.nameTh === e.target.value);
+            onDrinkChange(e.target.value, found?.price ?? 0);
+          }}
           className="w-full text-xs border border-sand rounded-lg px-2 py-1.5 bg-white focus:border-orange focus:outline-none"
         >
           <option value="">— เลือกเครื่องดื่ม —</option>
           {drinks.map((d) => (
-            <option key={d.id} value={d.nameTh}>{d.nameTh}</option>
+            <option key={d.id} value={d.nameTh}>
+              {d.nameTh}{value === "A" ? ` — ฿${d.price}` : " (รวมแล้ว)"}
+            </option>
           ))}
         </select>
+      )}
+      {value === "A" && drinkName && (
+        <p className="text-[10px] text-orange font-semibold pl-1">1ชม. ฟรี + เครื่องดื่ม ฿{drinkPrice}</p>
       )}
 
       {value === "B" && (
@@ -203,9 +214,9 @@ function PackagePicker({
   );
 }
 
-type PlayerDraft = { nameOrCode: string; pkg: PkgKey; drinkName: string; qty: number };
+type PlayerDraft = { nameOrCode: string; pkg: PkgKey; drinkName: string; drinkPrice: number; qty: number };
 
-const BLANK_DRAFT: PlayerDraft = { nameOrCode: "", pkg: "A", drinkName: "", qty: 1 };
+const BLANK_DRAFT: PlayerDraft = { nameOrCode: "", pkg: "A", drinkName: "", drinkPrice: 0, qty: 1 };
 
 // ---- Main Page ----
 export default function AdminTimePage() {
@@ -283,7 +294,7 @@ export default function AdminTimePage() {
     const res = await fetch(`/api/pos/bills/${draftBillId}/players`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: players.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, qty: p.qty })) }),
+      body: JSON.stringify({ players: players.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
     });
     setSaving(false);
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
@@ -334,7 +345,7 @@ export default function AdminTimePage() {
     await fetch(`/api/pos/bills/${addToBill.id}/players`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: addPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, qty: p.qty })) }),
+      body: JSON.stringify({ players: addPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
     });
     setSaving(false);
     setAddToBill(null);
@@ -476,7 +487,7 @@ export default function AdminTimePage() {
                   value={p.pkg}
                   onChange={(k) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
                   drinkName={p.drinkName}
-                  onDrinkChange={(name) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name } : x))}
+                  onDrinkChange={(name, price) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name, drinkPrice: price } : x))}
                   qty={p.qty}
                   onQtyChange={(q) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
                   drinks={drinks}
@@ -532,7 +543,7 @@ export default function AdminTimePage() {
                   value={p.pkg}
                   onChange={(k) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
                   drinkName={p.drinkName}
-                  onDrinkChange={(name) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name } : x))}
+                  onDrinkChange={(name, price) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name, drinkPrice: price } : x))}
                   qty={p.qty}
                   onQtyChange={(q) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
                   drinks={drinks}

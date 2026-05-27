@@ -3,7 +3,7 @@ import db from "@/lib/db";
 import { PACKAGES, type PackageKey } from "@/app/api/pos/sessions/route";
 import { generatePromptPayQR } from "@/lib/promptpay";
 
-type PlayerInput = { nameOrCode?: string; packageType: PackageKey; drinkName?: string; qty?: number };
+type PlayerInput = { nameOrCode?: string; packageType: PackageKey; drinkName?: string; drinkPrice?: number; qty?: number };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const drinkNote = p.drinkName?.trim();
     if (drinkNote) nickname = `${nickname} (${drinkNote})`;
 
-    const price = pkg.price * qty;
+    const drinkCharge = p.packageType === "A" ? Math.max(0, p.drinkPrice ?? 0) : 0;
+    const price = pkg.price * qty + drinkCharge;
     const timeSeconds = pkg.timeSeconds * qty;
 
     await db.playerSession.create({
