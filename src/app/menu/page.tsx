@@ -27,7 +27,7 @@ const GAME_PACKAGES = [
     emoji: "⏱️",
     title: "2 ชั่วโมง",
     price: "49",
-    desc: "ซื้อ 1 ชม. ฟรีอีก 1 ชม.",
+    desc: "เล่นได้ 2 ชม. ไม่รวมเครื่องดื่ม",
     tag: "ยอดนิยม",
     tagColor: "bg-orange text-white",
     gradient: "from-orange/10 to-amber-50",
