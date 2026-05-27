@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
 type MemberRef = { id: number; username: string; memberCode: string };
 type PlayerSession = {
@@ -24,7 +25,7 @@ type Bill = {
   sessions: PlayerSession[];
 };
 type TableRef = { id: number; number: number };
-type DrinkItem = { id: number; nameTh: string; category: string; priceTHB: number };
+type DrinkItem = MenuItemType;
 
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
@@ -137,19 +138,14 @@ function SessionCard({
 // ---- Package picker (context-aware) ----
 function PackagePicker({
   value, onChange,
-  drinkName, onDrinkChange,
+  drinkName, drinkPrice, onOpenDrinkPicker,
   qty, onQtyChange,
-  drinks,
 }: {
   value: PkgKey; onChange: (k: PkgKey) => void;
-  drinkName: string; onDrinkChange: (name: string, price: number) => void;
+  drinkName: string; drinkPrice: number; onOpenDrinkPicker: () => void;
   qty: number; onQtyChange: (q: number) => void;
-  drinks: DrinkItem[];
 }) {
-  const drinkPrice = value === "A" && drinkName
-    ? (drinks.find((d) => d.nameTh === drinkName)?.priceTHB ?? 0)
-    : 0;
-  const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price + drinkPrice;
+  const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price + (value === "A" ? drinkPrice : 0);
   const totalHours = value === "B" ? 2 * qty : value === "A" ? 1 : "∞";
 
   return (
@@ -174,21 +170,26 @@ function PackagePicker({
       </div>
 
       {(value === "A" || value === "C") && (
-        <select
-          value={drinkName}
-          onChange={(e) => {
-            const found = drinks.find((d) => d.nameTh === e.target.value);
-            onDrinkChange(e.target.value, found?.priceTHB ?? 0);
-          }}
-          className="w-full text-xs border border-sand rounded-lg px-2 py-1.5 bg-white focus:border-orange focus:outline-none"
+        <button
+          type="button"
+          onClick={onOpenDrinkPicker}
+          className={`w-full text-left text-xs border-2 rounded-lg px-3 py-2 transition-all ${
+            drinkName
+              ? "border-orange bg-orange/5 text-navy"
+              : "border-sand text-gray-400 hover:border-orange/40"
+          }`}
         >
-          <option value="">— เลือกเครื่องดื่ม —</option>
-          {drinks.map((d) => (
-            <option key={d.id} value={d.nameTh}>
-              {d.nameTh}{value === "A" ? ` — ฿${d.priceTHB}` : " (รวมแล้ว)"}
-            </option>
-          ))}
-        </select>
+          {drinkName ? (
+            <span className="flex items-center justify-between">
+              <span>🥤 {drinkName}</span>
+              <span className="text-orange font-semibold">
+                {value === "A" ? `฿${drinkPrice}` : "รวมแล้ว"} · เปลี่ยน
+              </span>
+            </span>
+          ) : (
+            "🥤 เลือกเครื่องดื่ม →"
+          )}
+        </button>
       )}
       {value === "A" && drinkName && (
         <p className="text-[10px] text-orange font-semibold pl-1">1ชม. ฟรี + เครื่องดื่ม ฿{drinkPrice}</p>
@@ -240,6 +241,14 @@ export default function AdminTimePage() {
   const [addPlayers, setAddPlayers] = useState<PlayerDraft[]>([{ ...BLANK_DRAFT }]);
   const [changeTableBill, setChangeTableBill] = useState<Bill | null>(null);
 
+  // drink picker modal (shared for both flows)
+  type DrinkPickerCtx = { list: "players" | "addPlayers"; idx: number };
+  const [drinkPickerCtx, setDrinkPickerCtx] = useState<DrinkPickerCtx | null>(null);
+  const [drinkPickerItem, setDrinkPickerItem] = useState<DrinkItem | null>(null);
+  const [drinkPickerSize, setDrinkPickerSize] = useState<"S" | "XL">("S");
+  const [drinkPickerAddons, setDrinkPickerAddons] = useState<CartSelectedAddon[]>([]);
+  const [drinkPickerOptions, setDrinkPickerOptions] = useState<CartSelectedOption[]>([]);
+
   const load = useCallback(async () => {
     const [b, t, m] = await Promise.all([
       fetch("/api/pos/bills").then((r) => r.json()).catch(() => []),
@@ -261,6 +270,49 @@ export default function AdminTimePage() {
     const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, [load]);
+
+  function openDrinkPicker(ctx: { list: "players" | "addPlayers"; idx: number }, item: DrinkItem) {
+    setDrinkPickerCtx(ctx);
+    setDrinkPickerItem(item);
+    setDrinkPickerSize("S");
+    setDrinkPickerAddons([]);
+    const defaults: CartSelectedOption[] = [];
+    for (const og of item.optionGroups) {
+      const def = og.choices.find((c) => c.isDefault && c.isActive);
+      if (def) defaults.push({ groupId: og.id, groupName: og.nameTh, choiceId: def.id, choiceName: def.nameTh, priceTHB: def.priceTHB });
+    }
+    setDrinkPickerOptions(defaults);
+  }
+
+  function closeDrinkPicker() {
+    setDrinkPickerCtx(null);
+    setDrinkPickerItem(null);
+    setDrinkPickerAddons([]);
+    setDrinkPickerOptions([]);
+  }
+
+  function confirmDrinkPicker() {
+    if (!drinkPickerCtx || !drinkPickerItem) return;
+    const hasSizes = drinkPickerItem.priceS != null || drinkPickerItem.priceXL != null;
+    let basePrice = drinkPickerItem.priceTHB;
+    if (hasSizes && drinkPickerSize === "S" && drinkPickerItem.priceS != null) basePrice = drinkPickerItem.priceS;
+    if (hasSizes && drinkPickerSize === "XL" && drinkPickerItem.priceXL != null) basePrice = drinkPickerItem.priceXL;
+    const addonTotal = drinkPickerAddons.reduce((s, a) => s + a.priceTHB, 0);
+    const optionTotal = drinkPickerOptions.reduce((s, o) => s + o.priceTHB, 0);
+    const totalPrice = basePrice + addonTotal + optionTotal;
+    const sizeLabel = hasSizes ? ` (${drinkPickerSize})` : "";
+    const addonLabels = drinkPickerAddons.map((a) => a.nameTh).join(", ");
+    const optionLabels = drinkPickerOptions.map((o) => o.choiceName).join(", ");
+    const extras = [addonLabels, optionLabels].filter(Boolean).join(", ");
+    const fullName = `${drinkPickerItem.nameTh}${sizeLabel}${extras ? ` + ${extras}` : ""}`;
+
+    if (drinkPickerCtx.list === "players") {
+      setPlayers((prev) => prev.map((x, idx) => idx === drinkPickerCtx.idx ? { ...x, drinkName: fullName, drinkPrice: totalPrice } : x));
+    } else {
+      setAddPlayers((prev) => prev.map((x, idx) => idx === drinkPickerCtx.idx ? { ...x, drinkName: fullName, drinkPrice: totalPrice } : x));
+    }
+    closeDrinkPicker();
+  }
 
   function openBillFlow() {
     setBillName("");
@@ -485,12 +537,12 @@ export default function AdminTimePage() {
                 </div>
                 <PackagePicker
                   value={p.pkg}
-                  onChange={(k) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
+                  onChange={(k) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k, drinkName: "", drinkPrice: 0 } : x))}
                   drinkName={p.drinkName}
-                  onDrinkChange={(name, price) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name, drinkPrice: price } : x))}
+                  drinkPrice={p.drinkPrice}
+                  onOpenDrinkPicker={() => setDrinkPickerCtx({ list: "players", idx: i })}
                   qty={p.qty}
                   onQtyChange={(q) => setPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
-                  drinks={drinks}
                 />
               </div>
             ))}
@@ -541,12 +593,12 @@ export default function AdminTimePage() {
                 />
                 <PackagePicker
                   value={p.pkg}
-                  onChange={(k) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k } : x))}
+                  onChange={(k) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, pkg: k, drinkName: "", drinkPrice: 0 } : x))}
                   drinkName={p.drinkName}
-                  onDrinkChange={(name, price) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, drinkName: name, drinkPrice: price } : x))}
+                  drinkPrice={p.drinkPrice}
+                  onOpenDrinkPicker={() => setDrinkPickerCtx({ list: "addPlayers", idx: i })}
                   qty={p.qty}
                   onQtyChange={(q) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? { ...x, qty: q } : x))}
-                  drinks={drinks}
                 />
               </div>
             ))}
@@ -566,6 +618,129 @@ export default function AdminTimePage() {
           </button>
         </Modal>
       )}
+
+      {/* Drink picker — phase 1: list, phase 2: detail */}
+      {drinkPickerCtx && !drinkPickerItem && (
+        <Modal onClose={closeDrinkPicker} title="เลือกเครื่องดื่ม" wide>
+          <div className="grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
+            {drinks.map((d) => {
+              const hasSizes = d.priceS != null || d.priceXL != null;
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => openDrinkPicker(drinkPickerCtx, d)}
+                  className="text-left bg-sand/30 hover:bg-orange/10 border border-sand hover:border-orange rounded-xl p-3 transition-all"
+                >
+                  <p className="font-semibold text-navy text-sm leading-tight">{d.nameTh}</p>
+                  <p className="text-gray-400 text-xs mt-0.5">{d.nameEn}</p>
+                  <p className="text-orange font-bold text-xs mt-1">
+                    {hasSizes ? `S ฿${d.priceS} / XL ฿${d.priceXL}` : `฿${d.priceTHB}`}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
+
+      {drinkPickerCtx && drinkPickerItem && (() => {
+        const item = drinkPickerItem;
+        const hasSizes = item.priceS != null || item.priceXL != null;
+        let basePrice = item.priceTHB;
+        if (hasSizes && drinkPickerSize === "S" && item.priceS != null) basePrice = item.priceS;
+        if (hasSizes && drinkPickerSize === "XL" && item.priceXL != null) basePrice = item.priceXL;
+        const total = basePrice + drinkPickerAddons.reduce((s, a) => s + a.priceTHB, 0) + drinkPickerOptions.reduce((s, o) => s + o.priceTHB, 0);
+
+        return (
+          <Modal onClose={closeDrinkPicker} title={item.nameTh}>
+            <p className="text-xs text-gray-400 -mt-2 mb-3">{item.nameEn}</p>
+
+            {hasSizes && (
+              <div className="mb-4">
+                <p className="text-sm font-semibold text-navy mb-2">เลือกขนาด</p>
+                <div className="flex gap-3">
+                  {item.priceS != null && (
+                    <button type="button" onClick={() => setDrinkPickerSize("S")}
+                      className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${drinkPickerSize === "S" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      S — ฿{item.priceS}
+                    </button>
+                  )}
+                  {item.priceXL != null && (
+                    <button type="button" onClick={() => setDrinkPickerSize("XL")}
+                      className={`flex-1 py-3 rounded-xl border-2 font-bold text-sm transition-all ${drinkPickerSize === "XL" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      XL — ฿{item.priceXL}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {item.addonGroups.map((group) => (
+              <div key={group.id} className="mb-4">
+                <p className="text-sm font-semibold text-navy mb-2">{group.nameTh}</p>
+                <div className="space-y-2">
+                  {group.items.filter((gi) => gi.isActive).map((addonItem) => {
+                    const selected = drinkPickerAddons.some((a) => a.id === addonItem.id);
+                    return (
+                      <button key={addonItem.id} type="button"
+                        onClick={() => setDrinkPickerAddons((prev) => selected ? prev.filter((a) => a.id !== addonItem.id) : [...prev, { id: addonItem.id, groupId: group.id, nameTh: addonItem.nameTh, priceTHB: addonItem.priceTHB }])}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${selected ? "border-orange bg-orange/10" : "border-sand"}`}>
+                        <span className={`text-sm font-medium flex items-center gap-1.5 ${selected ? "text-orange" : "text-navy"}`}>
+                          {selected && <span>✓</span>}{addonItem.nameTh}
+                        </span>
+                        <span className="text-sm text-gray-500">+฿{addonItem.priceTHB}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {item.optionGroups.map((group) => {
+              const selected = drinkPickerOptions.find((o) => o.groupId === group.id);
+              return (
+                <div key={group.id} className="mb-4">
+                  <p className="text-sm font-semibold text-navy mb-2 flex items-center gap-2">
+                    {group.nameTh}
+                    {group.isRequired && <span className="text-xs text-orange font-normal">*บังคับ</span>}
+                  </p>
+                  <div className="space-y-2">
+                    {!group.isRequired && (
+                      <button type="button"
+                        onClick={() => setDrinkPickerOptions((prev) => prev.filter((o) => o.groupId !== group.id))}
+                        className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${!selected ? "border-orange bg-orange/10" : "border-sand"}`}>
+                        <span className={`text-sm font-medium ${!selected ? "text-orange" : "text-navy"}`}>{!selected && "✓ "}ไม่ระบุ</span>
+                        <span className="text-sm text-gray-400">ฟรี</span>
+                      </button>
+                    )}
+                    {group.choices.filter((c) => c.isActive).map((choice) => {
+                      const isSelected = selected?.choiceId === choice.id;
+                      return (
+                        <button key={choice.id} type="button"
+                          onClick={() => setDrinkPickerOptions((prev) => [...prev.filter((o) => o.groupId !== group.id), { groupId: group.id, groupName: group.nameTh, choiceId: choice.id, choiceName: choice.nameTh, priceTHB: choice.priceTHB }])}
+                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${isSelected ? "border-orange bg-orange/10" : "border-sand"}`}>
+                          <span className={`text-sm font-medium ${isSelected ? "text-orange" : "text-navy"}`}>{isSelected && "✓ "}{choice.nameTh}</span>
+                          <span className="text-sm text-gray-500">{choice.priceTHB > 0 ? `+฿${choice.priceTHB}` : "ฟรี"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            <div className="flex items-center justify-between pt-3 border-t border-sand mb-3">
+              <span className="text-sm text-gray-500">รวม</span>
+              <span className="font-bold text-orange text-lg">฿{total}</span>
+            </div>
+            <button type="button" onClick={confirmDrinkPicker}
+              className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm">
+              เลือกเครื่องดื่มนี้
+            </button>
+          </Modal>
+        );
+      })()}
 
       {/* Change table */}
       {changeTableBill && (
