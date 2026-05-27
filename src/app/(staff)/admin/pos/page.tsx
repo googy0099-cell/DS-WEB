@@ -233,7 +233,7 @@ export default function AdminTimePage() {
   const [peopleCount, setPeopleCount] = useState(1);
   const [draftBillId, setDraftBillId] = useState<number | null>(null);
   const [players, setPlayers] = useState<PlayerDraft[]>([]);
-  const [payment, setPayment] = useState<{ totalTHB: number; qrDataUrl: string | null } | null>(null);
+  const [payment, setPayment] = useState<{ totalTHB: number; qrDataUrl: string | null; accountName: string; bankName: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
   // per-bill add player / change table
@@ -351,7 +351,7 @@ export default function AdminTimePage() {
     setSaving(false);
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
     const data = await res.json();
-    setPayment({ totalTHB: data.totalTHB, qrDataUrl: data.qrDataUrl });
+    setPayment({ totalTHB: data.totalTHB, qrDataUrl: data.qrDataUrl, accountName: data.accountName ?? "", bankName: data.bankName ?? "" });
     setStep(3);
     load();
   }
@@ -566,8 +566,13 @@ export default function AdminTimePage() {
             {payment.qrDataUrl ? (
               <>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={payment.qrDataUrl} alt="PromptPay QR" className="mx-auto w-56 h-56 rounded-xl" />
-                <p className="text-xs text-gray-400">สแกนเพื่อจ่ายผ่าน PromptPay</p>
+                <img src={payment.qrDataUrl} alt="QR ชำระเงิน" className="mx-auto w-56 h-56 rounded-xl object-contain" />
+                {(payment.accountName || payment.bankName) && (
+                  <div className="bg-sand/40 rounded-xl py-2 px-4 inline-block">
+                    <p className="text-navy font-semibold text-sm">{payment.accountName}</p>
+                    <p className="text-gray-400 text-xs">{payment.bankName}</p>
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-green-600 font-semibold py-6">ไม่มีค่าใช้จ่าย (ฟรี)</p>
