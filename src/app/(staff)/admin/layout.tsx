@@ -6,6 +6,7 @@ import RegisterSW from "@/components/admin/RegisterSW";
 
 const NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
+  { href: "/admin/pos", label: "จัดการเวลา", icon: "⏱️" },
   { href: "/admin/menu", label: "จัดการเมนู", icon: "🍜" },
   { href: "/admin/addon-groups", label: "Set Add-on", icon: "➕" },
   { href: "/admin/option-groups", label: "ตัวเลือก", icon: "🎛️" },
@@ -15,7 +16,6 @@ const NAV = [
   { href: "/admin/payment", label: "ยืนยันชำระ", icon: "💳" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
-  { href: "/admin/pos", label: "POS โต๊ะ", icon: "🍹" },
 ];
 
 const OWNER_NAV = [

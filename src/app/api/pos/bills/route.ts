@@ -1,0 +1,50 @@
+import { NextRequest, NextResponse } from "next/server";
+import db from "@/lib/db";
+import { PREP_SECONDS, remainingSeconds, prepRemaining } from "@/lib/pos-time";
+
+export async function GET() {
+  const bills = await db.bill.findMany({
+    where: { status: "ACTIVE" },
+    include: {
+      table: { select: { number: true } },
+      sessions: {
+        where: { status: "ACTIVE" },
+        include: { user: { select: { id: true, username: true, memberCode: true } } },
+        orderBy: { createdAt: "asc" },
+      },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const now = Date.now();
+  const result = bills.map((b) => ({
+    ...b,
+    prepRemaining: prepRemaining(b.startsAt, now),
+    sessions: b.sessions.map((s) => ({
+      ...s,
+      timeRemaining: remainingSeconds(s.timeRemaining, b.startsAt, s.updatedAt, now),
+    })),
+  }));
+
+  return NextResponse.json(result);
+}
+
+export async function POST(req: NextRequest) {
+  const { name, tableId } = (await req.json()) as { name?: string; tableId?: number };
+
+  if (!name?.trim() || !tableId) {
+    return NextResponse.json({ error: "ต้องระบุชื่อบิลและโต๊ะ" }, { status: 400 });
+  }
+
+  const table = await db.table.findUnique({ where: { id: tableId } });
+  if (!table) return NextResponse.json({ error: "ไม่พบโต๊ะ" }, { status: 400 });
+
+  const startsAt = new Date(Date.now() + PREP_SECONDS * 1000);
+  const bill = await db.bill.create({
+    data: { name: name.trim(), tableId, startsAt },
+  });
+
+  await db.table.update({ where: { id: tableId }, data: { isOccupied: true } });
+
+  return NextResponse.json(bill, { status: 201 });
+}
