@@ -12,15 +12,16 @@ export async function PATCH(req: NextRequest) {
   if (!session?.user || session.user.role !== "OWNER") {
     return NextResponse.json({ error: "เฉพาะ Owner เท่านั้น" }, { status: 403 });
   }
-  const { qrImageUrl, accountName, bankName } = await req.json();
+  const { promptPayId, qrImageUrl, accountName, bankName } = await req.json();
   const config = await db.paymentConfig.upsert({
     where: { id: 1 },
     update: {
+      ...(promptPayId !== undefined ? { promptPayId } : {}),
       ...(qrImageUrl !== undefined ? { qrImageUrl } : {}),
       ...(accountName !== undefined ? { accountName } : {}),
       ...(bankName !== undefined ? { bankName } : {}),
     },
-    create: { id: 1, qrImageUrl, accountName, bankName },
+    create: { id: 1, promptPayId, qrImageUrl, accountName, bankName },
   });
   return NextResponse.json(config);
 }

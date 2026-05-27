@@ -1,8 +1,8 @@
 import generatePayload from "promptpay-qr";
 import QRCode from "qrcode";
 
-export async function generatePromptPayQR(amountTHB: number): Promise<string> {
-  const promptPayId = process.env.PROMPTPAY_ID ?? "";
+export async function generatePromptPayQR(amountTHB: number, id?: string): Promise<string> {
+  const promptPayId = id ?? process.env.PROMPTPAY_ID ?? "";
   const payload = generatePayload(promptPayId, { amount: amountTHB });
   const dataUrl = await QRCode.toDataURL(payload, {
     width: 300,

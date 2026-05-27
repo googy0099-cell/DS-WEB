@@ -56,6 +56,7 @@ export default function AdminSettingsPage() {
       setPromoSaving(false);
     }
   }
+  const [promptPayId, setPromptPayId] = useState("");
   const [accountName, setAccountName] = useState("");
   const [bankName, setBankName] = useState("");
   const [qrFile, setQrFile] = useState<File | null>(null);
@@ -65,6 +66,7 @@ export default function AdminSettingsPage() {
 
   // Sync local state when config loads
   if (config && accountName === "" && config.accountName) {
+    setPromptPayId((config as { promptPayId?: string }).promptPayId ?? "");
     setAccountName(config.accountName);
     setBankName(config.bankName);
   }
@@ -98,7 +100,7 @@ export default function AdminSettingsPage() {
       await fetch("/api/payment-config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountName, bankName, ...(qrImageUrl ? { qrImageUrl } : {}) }),
+        body: JSON.stringify({ promptPayId: promptPayId.trim() || null, accountName, bankName, ...(qrImageUrl ? { qrImageUrl } : {}) }),
       });
       await mutate();
       setQrFile(null);
@@ -201,6 +203,19 @@ export default function AdminSettingsPage() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* PromptPay ID */}
+        <div>
+          <label className="text-sm font-semibold text-navy block mb-1">PromptPay ID</label>
+          <input
+            type="text"
+            value={promptPayId}
+            onChange={(e) => setPromptPayId(e.target.value)}
+            className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm focus:border-orange focus:outline-none"
+            placeholder="เบอร์โทร 10 หลัก หรือเลขบัตรประชาชน 13 หลัก"
+          />
+          <p className="text-xs text-gray-400 mt-1">ใส่แล้ว QR จะฝังยอดเงินอัตโนมัติเมื่อสแกนจ่าย</p>
         </div>
 
         {/* Account Name */}

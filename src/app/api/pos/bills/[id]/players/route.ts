@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { PACKAGES, type PackageKey } from "@/app/api/pos/sessions/route";
+import { generatePromptPayQR } from "@/lib/promptpay";
 
 type PlayerInput = { nameOrCode?: string; packageType: PackageKey; drinkName?: string; drinkPrice?: number; qty?: number };
 
@@ -64,9 +65,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const config = await db.paymentConfig.findUnique({ where: { id: 1 } });
+  const promptPayId = config?.promptPayId ?? process.env.PROMPTPAY_ID ?? "";
+  const qrDataUrl = total > 0 && promptPayId
+    ? await generatePromptPayQR(total, promptPayId)
+    : (config?.qrImageUrl ?? null);
   return NextResponse.json({
     totalTHB: total,
-    qrDataUrl: config?.qrImageUrl ?? null,
+    qrDataUrl,
     accountName: config?.accountName ?? "",
     bankName: config?.bankName ?? "",
   });

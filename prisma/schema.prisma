@@ -205,10 +205,11 @@ model Payment {
 }
 
 model PaymentConfig {
-  id          Int     @id @default(autoincrement())
-  qrImageUrl  String?
-  accountName String  @default("นาย ธนวุฒิ พุ่มมาก")
-  bankName    String  @default("TTB PromptPay")
+  id           Int     @id @default(autoincrement())
+  promptPayId  String?
+  qrImageUrl   String?
+  accountName  String  @default("นาย ธนวุฒิ พุ่มมาก")
+  bankName     String  @default("TTB PromptPay")
 }
 
 model AuditLog {
