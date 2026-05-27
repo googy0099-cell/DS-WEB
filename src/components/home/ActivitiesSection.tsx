@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import db from "@/lib/db";
 
 export default async function ActivitiesSection() {
@@ -23,22 +24,37 @@ export default async function ActivitiesSection() {
 
         <div className="grid md:grid-cols-3 gap-4">
           {activities.map((act) => (
-            <div key={act.id} className="bg-white rounded-2xl p-5 shadow-sm flex flex-col gap-3 hover:-translate-y-1 hover:shadow-lg transition-all duration-200">
-              <div className="flex items-start gap-3">
-                <span className="text-3xl shrink-0">{act.emoji}</span>
-                <div className="flex-1 min-w-0">
+            <Link
+              key={act.id}
+              href={`/activities/${act.id}`}
+              className="bg-white rounded-2xl overflow-hidden shadow-sm flex flex-col hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
+            >
+              {/* Banner image 320×100 */}
+              {act.imageUrl ? (
+                <div className="relative w-full aspect-[16/5] overflow-hidden shrink-0">
+                  <Image src={act.imageUrl} alt={act.title} fill className="object-cover" />
+                </div>
+              ) : (
+                <div className="w-full aspect-[16/5] bg-gradient-to-br from-orange/20 to-sand flex items-center justify-center shrink-0">
+                  <span className="text-4xl">{act.emoji}</span>
+                </div>
+              )}
+
+              <div className="p-4 flex flex-col gap-2 flex-1">
+                <div className="flex items-center gap-2">
+                  {act.imageUrl && <span className="text-xl shrink-0">{act.emoji}</span>}
                   <span className="text-xs bg-orange/10 text-orange px-2 py-0.5 rounded-full font-medium">
                     {act.tag}
                   </span>
-                  <h3 className="font-bold text-navy mt-1.5 text-sm leading-tight">{act.title}</h3>
                 </div>
+                <h3 className="font-bold text-navy text-sm leading-tight">{act.title}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-orange font-semibold">
+                  <span>📅</span>
+                  <span>{act.date}</span>
+                </div>
+                <p className="text-gray-500 text-sm leading-relaxed flex-1 line-clamp-2">{act.desc}</p>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-orange font-semibold">
-                <span>📅</span>
-                <span>{act.date}</span>
-              </div>
-              <p className="text-gray-500 text-sm leading-relaxed flex-1">{act.desc}</p>
-            </div>
+            </Link>
           ))}
         </div>
 
@@ -48,23 +64,6 @@ export default async function ActivitiesSection() {
             className="inline-block bg-navy text-cream font-bold px-6 py-3 rounded-xl text-sm hover:bg-navy/90 transition-colors"
           >
             ดูกิจกรรมทั้งหมด →
-          </Link>
-        </div>
-      </div>
-
-      {/* Mini game CTA */}
-      <div className="max-w-5xl mx-auto mt-12">
-        <div className="bg-navy rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-          <div className="text-5xl shrink-0">🎲</div>
-          <div className="flex-1">
-            <h3 className="text-cream font-bold text-lg mb-1">รอเพื่อนอยู่? เล่นมินิเกมได้เลย!</h3>
-            <p className="text-cream/70 text-sm">สุ่มดวง · แข่งความเร็ว · ทายใจ — เล่นฟรีไม่มีเงื่อนไข</p>
-          </div>
-          <Link
-            href="/play"
-            className="shrink-0 bg-orange text-white font-bold px-6 py-3 rounded-xl text-sm hover:bg-orange/90 transition-colors"
-          >
-            เล่นเลย →
           </Link>
         </div>
       </div>

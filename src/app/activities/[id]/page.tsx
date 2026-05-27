@@ -7,6 +7,81 @@ import db from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+type Block =
+  | { type: "heading"; value: string }
+  | { type: "text"; value: string }
+  | { type: "image"; url: string; caption?: string }
+  | { type: "button"; url: string; label: string }
+  | { type: "highlight"; value: string; color: "orange" | "green" | "blue" }
+  | { type: "divider" };
+
+function parseBlocks(content: string | null): Block[] | null {
+  if (!content) return null;
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) return parsed as Block[];
+  } catch {}
+  return null;
+}
+
+const highlightColors = {
+  orange: "bg-orange/10 border-orange/30 text-orange-900",
+  green: "bg-green-50 border-green-200 text-green-900",
+  blue: "bg-blue-50 border-blue-200 text-blue-900",
+};
+
+function RenderBlocks({ blocks }: { blocks: Block[] }) {
+  return (
+    <div className="space-y-5">
+      {blocks.map((block, i) => {
+        if (block.type === "heading") {
+          return <h2 key={i} className="text-2xl font-bold text-navy leading-snug">{block.value}</h2>;
+        }
+        if (block.type === "text") {
+          return <p key={i} className="text-gray-600 leading-relaxed whitespace-pre-line">{block.value}</p>;
+        }
+        if (block.type === "image") {
+          return (
+            <figure key={i} className="rounded-2xl overflow-hidden shadow-sm">
+              <div className="relative w-full aspect-video">
+                <Image src={block.url} alt={block.caption ?? ""} fill className="object-cover" />
+              </div>
+              {block.caption && (
+                <figcaption className="text-center text-xs text-gray-400 py-2 bg-white">{block.caption}</figcaption>
+              )}
+            </figure>
+          );
+        }
+        if (block.type === "button") {
+          return (
+            <div key={i}>
+              <a
+                href={block.url}
+                target={block.url.startsWith("http") ? "_blank" : "_self"}
+                rel="noopener noreferrer"
+                className="inline-block bg-orange text-white font-bold px-6 py-3 rounded-xl hover:bg-orange/90 transition-colors"
+              >
+                {block.label}
+              </a>
+            </div>
+          );
+        }
+        if (block.type === "highlight") {
+          return (
+            <div key={i} className={`border-l-4 rounded-xl p-4 ${highlightColors[block.color ?? "orange"]}`}>
+              <p className="text-sm leading-relaxed whitespace-pre-line">{block.value}</p>
+            </div>
+          );
+        }
+        if (block.type === "divider") {
+          return <hr key={i} className="border-sand" />;
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
 export default async function ActivityDetailPage({
   params,
 }: {
@@ -18,29 +93,29 @@ export default async function ActivityDetailPage({
   });
   if (!act) notFound();
 
+  const blocks = parseBlocks(act.content);
+
   return (
     <>
       <Navbar />
       <div className="pt-16 min-h-screen bg-cream">
-        {/* Cover image */}
+        {/* Banner image 320×100 aspect displayed full-width */}
         {act.imageUrl ? (
-          <div className="relative w-full aspect-[2/1] max-h-72 overflow-hidden bg-sand">
+          <div className="relative w-full aspect-[16/5] max-h-56 overflow-hidden bg-sand">
             <Image src={act.imageUrl} alt={act.title} fill className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-navy/60 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-navy/50 to-transparent" />
           </div>
         ) : (
-          <div className="w-full h-40 bg-navy flex items-center justify-center">
+          <div className="w-full h-32 bg-navy flex items-center justify-center">
             <span className="text-6xl">{act.emoji}</span>
           </div>
         )}
 
         <div className="max-w-2xl mx-auto px-4 py-8 space-y-5">
-          {/* Back */}
           <Link href="/activities" className="text-sm text-navy/50 hover:text-navy flex items-center gap-1">
             ← กิจกรรมทั้งหมด
           </Link>
 
-          {/* Header */}
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="text-xs bg-orange/10 text-orange px-2.5 py-1 rounded-full font-semibold">
@@ -53,24 +128,23 @@ export default async function ActivityDetailPage({
             <p className="text-orange font-semibold text-sm mt-2">{act.date}</p>
           </div>
 
-          {/* Short desc */}
           {act.desc && (
             <p className="text-gray-600 text-base leading-relaxed border-l-4 border-orange/30 pl-4">
               {act.desc}
             </p>
           )}
 
-          {/* Long content */}
-          {act.content && (
+          {/* Blocks or plain text */}
+          {blocks ? (
+            <RenderBlocks blocks={blocks} />
+          ) : act.content ? (
             <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">
-                {act.content}
-              </p>
+              <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{act.content}</p>
             </div>
-          )}
+          ) : null}
 
-          {/* Link button */}
-          {act.link && (
+          {/* Legacy link button (for old activities without blocks) */}
+          {!blocks && act.link && (
             <a
               href={act.link}
               target={act.link.startsWith("http") ? "_blank" : "_self"}
@@ -81,10 +155,7 @@ export default async function ActivityDetailPage({
             </a>
           )}
 
-          <Link
-            href="/activities"
-            className="inline-block text-navy/50 text-sm hover:text-navy"
-          >
+          <Link href="/activities" className="inline-block text-navy/50 text-sm hover:text-navy">
             ← ดูกิจกรรมทั้งหมด
           </Link>
         </div>

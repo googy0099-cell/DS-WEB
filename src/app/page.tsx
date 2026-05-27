@@ -6,6 +6,7 @@ import GallerySection from "@/components/home/GallerySection";
 import MenuSection from "@/components/home/MenuSection";
 import GamesSection from "@/components/home/GamesSection";
 import WerewolfSection from "@/components/home/WerewolfSection";
+import MiniGamesSection from "@/components/home/MiniGamesSection";
 import ActivitiesSection from "@/components/home/ActivitiesSection";
 import ContactSection from "@/components/home/ContactSection";
 
@@ -20,6 +21,7 @@ export default function HomePage() {
         <MenuSection />
         <GamesSection />
         <WerewolfSection />
+        <MiniGamesSection />
         <ActivitiesSection />
         <ContactSection />
         <Footer />
