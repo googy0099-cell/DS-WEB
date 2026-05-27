@@ -55,7 +55,7 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop nav */}
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden lg:flex items-center gap-1">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}
@@ -111,7 +111,7 @@ export default function Navbar() {
           ) : (
             <Link
               href="/login"
-              className="text-cream/80 hover:text-cream text-sm font-medium px-3 py-2 transition-colors hidden md:block"
+              className="text-cream/80 hover:text-cream text-sm font-medium px-3 py-2 transition-colors hidden lg:block"
             >
               เข้าสู่ระบบ
             </Link>
@@ -119,7 +119,7 @@ export default function Navbar() {
 
           {/* Hamburger */}
           <button
-            className="md:hidden text-cream p-2"
+            className="lg:hidden text-cream p-2"
             onClick={() => setMobileOpen((v) => !v)}
             aria-label="toggle menu"
           >
@@ -132,7 +132,7 @@ export default function Navbar() {
 
       {/* Mobile dropdown */}
       {mobileOpen && (
-        <div className="md:hidden bg-navy border-t border-cream/10 px-4 pb-6">
+        <div className="lg:hidden bg-navy border-t border-cream/10 px-4 pb-6">
           {NAV_ITEMS.map((item) => (
             <Link
               key={item.href}

@@ -30,7 +30,8 @@ export default function Footer() {
           {/* Hours + address */}
           <div className="text-center md:text-left space-y-3">
             <p className="font-bold text-cream text-sm uppercase tracking-wider">เวลาเปิดทำการ</p>
-            <p className="text-cream/60 text-sm">15:00 – 23:00 น. ทุกวัน</p>
+            <p className="text-cream/60 text-sm">15:00 – 23:00 น. ทุกวัน จ - ศ</p>
+            <p className="text-cream/60 text-sm">13:00 – 23:00 น. ทุกวัน ส - อา</p>
             <p className="text-cream/50 text-xs leading-relaxed">
               10/30-31 ถ.เจริญประดิษฐ์<br />
               ต.สะบารัง อ.เมือง ปัตตานี 94000

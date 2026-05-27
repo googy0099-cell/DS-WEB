@@ -84,7 +84,7 @@ export default function AboutSection() {
 
         {/* Image */}
         <div className="flex justify-center">
-          <div className="relative w-72 h-72 md:w-96 md:h-96 rounded-3xl bg-sand overflow-hidden shadow-2xl ring-4 ring-sand/60">
+          <div className="relative w-72 h-72 md:w-96 md:h-96 rounded-3xl bg-sand overflow-hidden shadow-2xl ring-4 ring-white/60">
             {aboutImg ? (
               <Image src={aboutImg} alt="เกี่ยวกับร้าน" fill className="object-cover" />
             ) : (
