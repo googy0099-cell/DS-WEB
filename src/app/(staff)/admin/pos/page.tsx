@@ -155,53 +155,27 @@ function SessionCard({
 }
 
 // ---- QR Modal ----
-function QRModal({ tableNumber, onClose }: { tableNumber: number; onClose: () => void }) {
+function QRModal({ tableNumber, tableId, onClose }: { tableNumber: number; tableId: number; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [count, setCount] = useState(2);
-  const [copied, setCopied] = useState(false);
-
-  const url = typeof window !== "undefined"
-    ? `${window.location.origin}/table/${tableNumber}/${String(count).padStart(2, "0")}`
-    : `/table/${tableNumber}/${String(count).padStart(2, "0")}`;
+  const url = typeof window !== "undefined" ? `${window.location.origin}/pos/${tableId}` : `/pos/${tableId}`;
 
   useEffect(() => {
     if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, url, { width: 210, margin: 2 });
+      QRCode.toCanvas(canvasRef.current, url, { width: 220, margin: 2 });
     }
   }, [url]);
 
-  function copy() {
-    navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-bold text-navy text-lg text-center">QR โต๊ะ {tableNumber}</h3>
-
-        {/* Count selector */}
-        <div>
-          <p className="text-xs font-semibold text-navy mb-2">จำนวนคน</p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setCount((c) => Math.max(1, c - 1))}
-              className="w-9 h-9 bg-sand rounded-xl font-bold text-navy text-lg flex items-center justify-center"
-            >−</button>
-            <span className="flex-1 text-center font-bold text-navy text-xl">{count} คน</span>
-            <button
-              onClick={() => setCount((c) => Math.min(20, c + 1))}
-              className="w-9 h-9 bg-sand rounded-xl font-bold text-navy text-lg flex items-center justify-center"
-            >+</button>
-          </div>
-        </div>
-
-        <canvas ref={canvasRef} className="mx-auto rounded-xl block" />
-        <p className="text-[11px] text-gray-400 break-all text-center">{url}</p>
-
-        <button onClick={copy} className="w-full bg-navy text-white font-semibold py-2.5 rounded-xl text-sm">
-          {copied ? "✅ คัดลอกแล้ว!" : "📋 คัดลอกลิงก์"}
+      <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-navy text-lg">โต๊ะ {tableNumber}</h3>
+        <canvas ref={canvasRef} className="mx-auto rounded-xl" />
+        <p className="text-xs text-gray-400 break-all">{url}</p>
+        <button
+          onClick={() => { navigator.clipboard.writeText(url); }}
+          className="w-full bg-navy text-white font-semibold py-2.5 rounded-xl text-sm"
+        >
+          📋 คัดลอกลิงก์
         </button>
         <button onClick={onClose} className="w-full border border-sand text-gray-500 font-semibold py-2.5 rounded-xl text-sm">
           ปิด
@@ -374,7 +348,7 @@ export default function AdminPosPage() {
 
       {/* QR Modal */}
       {qrTable && (
-        <QRModal tableNumber={qrTable.number} onClose={() => setQrTable(null)} />
+        <QRModal tableNumber={qrTable.number} tableId={qrTable.id} onClose={() => setQrTable(null)} />
       )}
 
       {/* Add Player Modal */}
