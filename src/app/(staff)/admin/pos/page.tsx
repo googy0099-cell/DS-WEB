@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import QRCode from "qrcode";
 
 type OrderItem = {
   id: number;
@@ -153,6 +154,37 @@ function SessionCard({
   );
 }
 
+// ---- QR Modal ----
+function QRModal({ tableNumber, tableId, onClose }: { tableNumber: number; tableId: number; onClose: () => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/pos/${tableId}` : `/pos/${tableId}`;
+
+  useEffect(() => {
+    if (canvasRef.current) {
+      QRCode.toCanvas(canvasRef.current, url, { width: 220, margin: 2 });
+    }
+  }, [url]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-navy text-lg">โต๊ะ {tableNumber}</h3>
+        <canvas ref={canvasRef} className="mx-auto rounded-xl" />
+        <p className="text-xs text-gray-400 break-all">{url}</p>
+        <button
+          onClick={() => { navigator.clipboard.writeText(url); }}
+          className="w-full bg-navy text-white font-semibold py-2.5 rounded-xl text-sm"
+        >
+          📋 คัดลอกลิงก์
+        </button>
+        <button onClick={onClose} className="w-full border border-sand text-gray-500 font-semibold py-2.5 rounded-xl text-sm">
+          ปิด
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---- Main Page ----
 export default function AdminPosPage() {
   const [tables, setTables] = useState<TableData[]>([]);
@@ -161,6 +193,7 @@ export default function AdminPosPage() {
   const [newNickname, setNewNickname] = useState("");
   const [newPackage, setNewPackage] = useState<"A" | "B" | "C">("A");
   const [saving, setSaving] = useState(false);
+  const [qrTable, setQrTable] = useState<{ id: number; number: number } | null>(null);
   const [alert, setAlert] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -259,12 +292,20 @@ export default function AdminPosPage() {
               <h2 className="text-white font-bold text-lg">โต๊ะ {table.number}</h2>
               <p className="text-white/50 text-xs">{table.playerSessions.length} ผู้เล่น</p>
             </div>
-            <button
-              onClick={() => setAddPlayerModal({ tableId: table.id })}
-              className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
-            >
-              + เพิ่มผู้เล่น
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setQrTable({ id: table.id, number: table.number })}
+                className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+              >
+                QR
+              </button>
+              <button
+                onClick={() => setAddPlayerModal({ tableId: table.id })}
+                className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+              >
+                + เพิ่มผู้เล่น
+              </button>
+            </div>
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -286,16 +327,28 @@ export default function AdminPosPage() {
           <p className="text-gray-400 text-sm font-semibold mb-3">โต๊ะว่าง ({freeTables.length})</p>
           <div className="flex flex-wrap gap-3">
             {freeTables.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setAddPlayerModal({ tableId: t.id })}
-                className="bg-white border-2 border-dashed border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-5 py-3 rounded-2xl text-sm transition-colors"
-              >
-                + โต๊ะ {t.number}
-              </button>
+              <div key={t.id} className="flex gap-2">
+                <button
+                  onClick={() => setAddPlayerModal({ tableId: t.id })}
+                  className="bg-white border-2 border-dashed border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-5 py-3 rounded-2xl text-sm transition-colors"
+                >
+                  + โต๊ะ {t.number}
+                </button>
+                <button
+                  onClick={() => setQrTable({ id: t.id, number: t.number })}
+                  className="bg-white border-2 border-gray-200 hover:border-orange text-gray-400 hover:text-orange font-semibold px-3 py-3 rounded-2xl text-sm transition-colors"
+                >
+                  QR
+                </button>
+              </div>
             ))}
           </div>
         </div>
+      )}
+
+      {/* QR Modal */}
+      {qrTable && (
+        <QRModal tableNumber={qrTable.number} tableId={qrTable.id} onClose={() => setQrTable(null)} />
       )}
 
       {/* Add Player Modal */}
