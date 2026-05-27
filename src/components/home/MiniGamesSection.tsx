@@ -41,27 +41,29 @@ export default function MiniGamesSection() {
           <p className="text-white/60 text-sm max-w-sm mx-auto">รอเพื่อนอยู่? เล่นฟรีทันที ไม่ต้องดาวน์โหลด</p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-5 mb-8">
+        <div className="grid grid-cols-3 gap-3 md:gap-5 mb-8">
           {GAMES.map((g) => (
             <Link
               key={g.name}
               href="/play"
-              className="group relative rounded-2xl p-6 flex flex-col items-center text-center gap-4 hover:-translate-y-2 transition-all duration-300 overflow-hidden"
+              className="group relative rounded-2xl p-3 md:p-6 flex flex-col items-center text-center gap-2 md:gap-4 hover:-translate-y-1 md:hover:-translate-y-2 transition-all duration-300 overflow-hidden"
             >
               {/* Card gradient bg */}
               <div className={`absolute inset-0 bg-gradient-to-br ${g.from} ${g.to} opacity-90 group-hover:opacity-100 transition-opacity`} />
-              <div className={`absolute inset-0 shadow-2xl ${g.shadow}`} />
 
               {/* Content */}
               <div className="relative z-10">
-                <div className="text-6xl mb-3 drop-shadow-lg group-hover:scale-110 transition-transform duration-300 inline-block">
+                <div className="text-3xl md:text-6xl mb-1 md:mb-3 drop-shadow-lg group-hover:scale-110 transition-transform duration-300 inline-block">
                   {g.emoji}
                 </div>
-                <h3 className="font-bold text-white text-lg mb-1.5">{g.name}</h3>
-                <p className="text-white/80 text-sm leading-relaxed">{g.desc}</p>
+                <h3 className="font-bold text-white text-xs md:text-lg leading-tight">{g.name}</h3>
+                <p className="hidden md:block text-white/80 text-sm leading-relaxed mt-1.5">{g.desc}</p>
               </div>
 
-              <span className="relative z-10 mt-1 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
+              <span className="relative z-10 hidden md:inline-block bg-white/20 hover:bg-white/30 text-white text-sm font-semibold px-5 py-2 rounded-xl transition-colors">
+                เล่นเลย →
+              </span>
+              <span className="relative z-10 md:hidden text-white/90 text-xs font-semibold">
                 เล่นเลย →
               </span>
             </Link>
