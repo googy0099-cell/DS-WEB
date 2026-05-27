@@ -66,15 +66,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
       where: { id: s.id },
       data: { currentStep: "🗳️ โหวต", dayNumber: newDay },
     });
+    // Vampire victims bitten last night die as the vote opens.
+    const vampVictims = s.playerRoles.filter((p) => p.status === "vamp_marked");
+    if (vampVictims.length) {
+      await db.werewolfSessionPlayer.updateMany({
+        where: { sessionId: s.id, userId: { in: vampVictims.map((v) => v.userId) } },
+        data: { status: "dead" },
+      });
+    }
+    const freshPlayers = await db.werewolfSessionPlayer.findMany({ where: { sessionId: s.id } });
     const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
-    for (const p of s.playerRoles) {
+    for (const p of freshPlayers) {
       fbPlayers[String(p.userId)] = { status: p.status, hasActed: false, hasVoted: false, voteCount: 0 };
     }
     await patchWerewolfFb(code, {
       currentStep: "🗳️ โหวต",
+      timeOfDay: "vote",
       dayNumber: newDay,
       voteDecision: null,
-    });
+    } as never);
     await patchWerewolfPlayersFb(code, fbPlayers);
     return NextResponse.json({ ok: true, result: "vote_opened" });
   }
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (noCount >= majority) {
     // Skip vote → night
     await db.werewolfSession.update({ where: { id: s.id }, data: { currentStep: "🌙 กลางคืน" } });
-    await patchWerewolfFb(code, { currentStep: "🌙 กลางคืน", voteDecision: null });
+    await patchWerewolfFb(code, { currentStep: "🌙 กลางคืน", timeOfDay: "night", voteDecision: null } as never);
     return NextResponse.json({ ok: true, result: "vote_skipped" });
   }
 

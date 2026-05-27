@@ -26,6 +26,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   if (!room?.session) return NextResponse.json({ error: "ไม่พบ session" }, { status: 404 });
   const s = room.session;
 
+  // Guard against double-scoring: if this session was already ended/scored, do not award again.
+  if (s.phase === "ENDED" || s.gameId) {
+    return NextResponse.json({ error: "เกมนี้บันทึกคะแนนไปแล้ว", alreadyScored: true }, { status: 409 });
+  }
+
   const playerCount = s.playerCount || s.playerRoles.length;
   const results = s.playerRoles.map((sp) => {
     const isWin = sp.team === winTeam;

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
-import { wolfRoles, vampireRoles } from "@/lib/werewolf-roles";
 import { patchWerewolfFb, patchWerewolfPlayersFb } from "@/lib/firebase-rtdb";
 
 async function requireGM() {
@@ -31,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const room = await db.werewolfRoom.findUnique({
     where: { code },
     include: {
-      players: { select: { userId: true, seatName: true } },
+      players: { select: { userId: true, seatName: true, seatOrder: true } },
       session: {
         include: {
           playerRoles: {
@@ -49,41 +48,135 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
 
   const nightActions = s.nightActions.filter((a) => a.night === s.nightNumber);
 
-  const killActorIds = new Set(
-    s.playerRoles
-      .filter((sp) => sp.team === "wolf" || wolfRoles.includes(sp.role) || vampireRoles.includes(sp.role) || sp.team === "indy")
-      .map((sp) => sp.userId)
-  );
-
   const killTargetIds = new Set<number>();
   const protectedIds = new Set<number>();
 
+  // actionType is derived from the actor's role at record time (online phone or GM-recorded
+  // offline pointing), so trust it directly — offline actors have no playerRoles row.
   for (const action of nightActions) {
     if (!action.targetUserId) continue;
-    if (action.actionType === "kill" && killActorIds.has(action.actorUserId)) killTargetIds.add(action.targetUserId);
+    if (action.actionType === "kill") killTargetIds.add(action.targetUserId);
     if (action.actionType === "protect") protectedIds.add(action.targetUserId);
   }
 
-  // Wolf pack consensus — take majority kill target
+  // Wolf pack consensus — take majority kill target. Online wolves have a playerRoles row;
+  // offline (negative actorUserId) kill actions can't be team-verified, so include them too.
   const wolfActions = nightActions.filter((a) => {
+    if (a.actionType !== "kill" || !a.targetUserId) return false;
     const actor = s.playerRoles.find((sp) => sp.userId === a.actorUserId);
-    return actor?.team === "wolf" && a.actionType === "kill" && a.targetUserId;
+    if (actor) return actor.team === "wolf";
+    return a.actorUserId < 0; // offline canvas token
   });
+  let wolfKillTarget: number | null = null;
   if (wolfActions.length > 0) {
     const tally: Record<number, number> = {};
     wolfActions.forEach((a) => { tally[a.targetUserId!] = (tally[a.targetUserId!] ?? 0) + 1; });
-    const wolfKillTarget = Number(Object.entries(tally).sort((x, y) => y[1] - x[1])[0][0]);
+    wolfKillTarget = Number(Object.entries(tally).sort((x, y) => y[1] - x[1])[0][0]);
     wolfActions.forEach((a) => killTargetIds.delete(a.targetUserId!));
     killTargetIds.add(wolfKillTarget);
   }
 
-  const finalKills = [...killTargetIds].filter((id) => !protectedIds.has(id));
+  // Diseased (ผู้ป่วยติดเชื้อ): if a Diseased was eaten last night, the wolves are sick and cannot
+  // kill this night. The flag is stored in Firebase between nights.
+  let wolvesBlocked = false;
+  let lovers: number[] = [];
+  try {
+    const fr = await fetch(`${process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL}/werewolf/sessions/${code}/flags/wolvesBlocked.json`);
+    if (fr.ok) wolvesBlocked = (await fr.json()) === true;
+    const lr = await fetch(`${process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL}/werewolf/sessions/${code}/lovers.json`);
+    if (lr.ok) { const v = await lr.json(); if (Array.isArray(v)) lovers = v; }
+  } catch {}
+  if (wolvesBlocked && wolfKillTarget !== null) {
+    killTargetIds.delete(wolfKillTarget);
+    wolfKillTarget = null;
+  }
 
-  await Promise.all(
-    finalKills.map((userId) =>
-      db.werewolfSessionPlayer.updateMany({ where: { sessionId: s.id, userId }, data: { status: "dead" } })
-    )
+  // Cursed (ผู้ต้องคำสาป): if the WOLVES' kill target is Cursed and not protected, they do not
+  // die — they convert to a Werewolf. Other killers (serial killer, vampire) still kill them.
+  const cursedConversions: number[] = [];
+  if (wolfKillTarget !== null && !protectedIds.has(wolfKillTarget)) {
+    const target = s.playerRoles.find((sp) => sp.userId === wolfKillTarget);
+    if (target && target.role.includes("ผู้ต้องคำสาป") && target.status !== "dead") {
+      cursedConversions.push(wolfKillTarget);
+      killTargetIds.delete(wolfKillTarget);
+    }
+  }
+
+  // Tough Guy (จอมอึด): a wolf bite doesn't kill immediately — they're "wounded" and die the
+  // following night. Stored via the free-text status field (no schema change).
+  const toughGuyWounds: number[] = [];
+  if (wolfKillTarget !== null && !protectedIds.has(wolfKillTarget) && !cursedConversions.includes(wolfKillTarget)) {
+    const t = s.playerRoles.find((sp) => sp.userId === wolfKillTarget);
+    if (t && t.role.includes("จอมอึด") && t.status === "alive") {
+      toughGuyWounds.push(wolfKillTarget);
+      killTargetIds.delete(wolfKillTarget);
+    }
+  }
+
+  // Delayed deaths: anyone wounded on a previous night now succumbs (Tough Guy's second night).
+  const delayedDeaths = s.playerRoles.filter((sp) => sp.status === "wounded").map((sp) => sp.userId);
+
+  // Vampire (แวมไพร์): the bite does not kill at night — the victim dies when the next vote opens.
+  // Pull vampire targets out of tonight's kills and mark them instead.
+  const vampActions = nightActions.filter((a) => {
+    if (a.actionType !== "kill" || !a.targetUserId) return false;
+    return s.playerRoles.find((sp) => sp.userId === a.actorUserId)?.team === "vampire";
+  });
+  const vampTargets = new Set(vampActions.map((a) => a.targetUserId!));
+  vampTargets.forEach((id) => killTargetIds.delete(id));
+
+  const directKills = [...killTargetIds].filter((id) => !protectedIds.has(id));
+  let finalKills = [...new Set([...directKills, ...delayedDeaths])];
+
+  // Mark vampire victims who aren't already dying — they perish at the next vote opening.
+  const vampMarks = [...vampTargets].filter(
+    (id) => !finalKills.includes(id) && !protectedIds.has(id) && s.playerRoles.find((p) => p.userId === id)?.status === "alive"
   );
+
+  // Bomber (มือระเบิดพลีชีพ): when killed, the players seated on both sides also die in the blast.
+  // Uses the real seat order; only online (seated) players are chained.
+  const seatList = [...(room.players ?? [])].sort((a, b) => a.seatOrder - b.seatOrder);
+  const bomberExtra: number[] = [];
+  for (const uid of finalKills) {
+    const r = s.playerRoles.find((p) => p.userId === uid);
+    if (r && r.role.includes("มือระเบิดพลีชีพ") && seatList.length > 1) {
+      const idx = seatList.findIndex((p) => p.userId === uid);
+      if (idx >= 0) {
+        const left = seatList[(idx - 1 + seatList.length) % seatList.length];
+        const right = seatList[(idx + 1) % seatList.length];
+        for (const n of [left, right]) if (n && n.userId !== uid) bomberExtra.push(n.userId);
+      }
+    }
+  }
+  finalKills = [...new Set([...finalKills, ...bomberExtra])];
+
+  // Cupid (กามเทพ): if one lover dies, the other dies of heartbreak.
+  if (lovers.length === 2) {
+    const alreadyDead = new Set(s.playerRoles.filter((p) => p.status === "dead").map((p) => p.userId));
+    const deadAfter = new Set([...alreadyDead, ...finalKills]);
+    const [a, b] = lovers;
+    if (deadAfter.has(a) && !deadAfter.has(b)) finalKills.push(b);
+    else if (deadAfter.has(b) && !deadAfter.has(a)) finalKills.push(a);
+    finalKills = [...new Set(finalKills)];
+  }
+
+  await Promise.all([
+    ...finalKills.map((userId) =>
+      db.werewolfSessionPlayer.updateMany({ where: { sessionId: s.id, userId }, data: { status: "dead" } })
+    ),
+    ...toughGuyWounds.map((userId) =>
+      db.werewolfSessionPlayer.updateMany({ where: { sessionId: s.id, userId }, data: { status: "wounded" } })
+    ),
+    ...vampMarks.map((userId) =>
+      db.werewolfSessionPlayer.updateMany({ where: { sessionId: s.id, userId }, data: { status: "vamp_marked" } })
+    ),
+    ...cursedConversions.map((userId) =>
+      db.werewolfSessionPlayer.updateMany({
+        where: { sessionId: s.id, userId },
+        data: { team: "wolf", role: "หมาป่า (Werewolf)" },
+      })
+    ),
+  ]);
 
   const newNight = s.nightNumber + 1;
   await db.werewolfSession.update({
@@ -108,17 +201,40 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   };
 
   const killedNames = finalKills.map(getPlayerName).join(", ");
+  const cursedNames = cursedConversions.map(getPlayerName).join(", ");
+  // Hunter (นายพราน): if one died tonight, the GM is prompted to fire its last shot.
+  const hunters = finalKills
+    .filter((id) => s.playerRoles.find((p) => p.userId === id)?.role.includes("นายพราน"))
+    .map((id) => ({ userId: id, name: getPlayerName(id) }));
+  // Public announcement never reveals the Cursed conversion (it would expose them as a wolf).
   const announcement = finalKills.length
     ? `🌙 คืนที่ ${s.nightNumber}: ${killedNames} ถูกกำจัด`
     : `🌙 คืนที่ ${s.nightNumber}: ไม่มีผู้เสียชีวิต`;
 
+  // Set the Diseased flag for next night if the wolves' victim this night was Diseased.
+  const diseasedKilledByWolf =
+    wolfKillTarget !== null &&
+    finalKills.includes(wolfKillTarget) &&
+    !!s.playerRoles.find((p) => p.userId === wolfKillTarget)?.role.includes("ผู้ป่วยติดเชื้อ");
+
   await patchWerewolfFb(code, {
     currentStep: "☀️ กลางวัน",
+    timeOfDay: "day",
     nightNumber: newNight,
     announcement,
+    "flags/wolvesBlocked": diseasedKilledByWolf,
     ...(winTeam ? { winTeam } : {}),
   } as never);
   await patchWerewolfPlayersFb(code, fbPlayerUpdates);
 
-  return NextResponse.json({ ok: true, killed: finalKills, protected: [...protectedIds], killedNames, winTeam: winTeam ?? null });
+  return NextResponse.json({
+    ok: true,
+    killed: finalKills,
+    protected: [...protectedIds],
+    killedNames,
+    cursed: cursedConversions,
+    cursedNames, // GM-only: Cursed players who turned into wolves this night
+    hunters, // dead Hunters → GM fires their last shot
+    winTeam: winTeam ?? null,
+  });
 }

@@ -48,12 +48,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
 
   if (dayVotes.length === 0) {
     await db.werewolfSession.update({ where: { id: s.id }, data: { currentStep: "🌙 กลางคืน" } });
-    await patchWerewolfFb(code, { currentStep: "🌙 กลางคืน" });
+    await patchWerewolfFb(code, { currentStep: "🌙 กลางคืน", timeOfDay: "night" } as never);
     return NextResponse.json({ ok: true, eliminated: null, tie: false, reason: "no_votes" });
   }
 
+  // Mayor (นายกเทศมนตรี): his vote always counts as 2.
   const tally: Record<number, number> = {};
-  for (const vote of dayVotes) tally[vote.targetUserId] = (tally[vote.targetUserId] ?? 0) + 1;
+  for (const vote of dayVotes) {
+    const voter = s.playerRoles.find((p) => p.userId === vote.voterUserId);
+    const weight = voter && voter.role.includes("นายกเทศมนตรี") ? 2 : 1;
+    tally[vote.targetUserId] = (tally[vote.targetUserId] ?? 0) + weight;
+  }
 
   const sorted = Object.entries(tally).sort((a, b) => b[1] - a[1]);
   const topCount = sorted[0][1];
@@ -61,15 +66,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   const tie = topCandidates.length > 1;
   let eliminatedUserId: number | null = null;
 
+  let princeSaved = false;
   if (!tie) {
     eliminatedUserId = Number(topCandidates[0][0]);
-    await db.werewolfSessionPlayer.updateMany({
-      where: { sessionId: s.id, userId: eliminatedUserId },
-      data: { status: "dead" },
-    });
+    const elimRole = s.playerRoles.find((p) => p.userId === eliminatedUserId);
+    // Prince (เจ้าชาย): reveals his role and is NOT executed by the village vote.
+    if (elimRole && elimRole.role.includes("เจ้าชาย")) {
+      princeSaved = true;
+      eliminatedUserId = null;
+    } else {
+      await db.werewolfSessionPlayer.updateMany({
+        where: { sessionId: s.id, userId: eliminatedUserId },
+        data: { status: "dead" },
+      });
+    }
   }
 
   await db.werewolfSession.update({ where: { id: s.id }, data: { currentStep: "🌙 กลางคืน" } });
+
+  // Cupid (กามเทพ): an executed lover drags their partner to the grave.
+  let loverDiedUserId: number | null = null;
+  if (eliminatedUserId !== null) {
+    try {
+      const lr = await fetch(`${process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL}/werewolf/sessions/${code}/lovers.json`);
+      if (lr.ok) {
+        const lovers = await lr.json();
+        if (Array.isArray(lovers) && lovers.length === 2 && lovers.includes(eliminatedUserId)) {
+          const partner = lovers[0] === eliminatedUserId ? lovers[1] : lovers[0];
+          const partnerRow = s.playerRoles.find((p) => p.userId === partner);
+          if (partnerRow && partnerRow.status !== "dead") {
+            loverDiedUserId = partner;
+            await db.werewolfSessionPlayer.updateMany({ where: { sessionId: s.id, userId: partner }, data: { status: "dead" } });
+          }
+        }
+      }
+    } catch {}
+  }
 
   const updatedPlayers = await db.werewolfSessionPlayer.findMany({ where: { sessionId: s.id } });
   const winTeam = checkWinCondition(updatedPlayers);
@@ -83,8 +115,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   };
   let announcement: string;
   if (tie) announcement = "☀️ ผลโหวต: คะแนนเท่ากัน — ไม่มีการประหาร";
-  else if (eliminatedUserId) announcement = `☀️ ผลโหวต: ${getPlayerName(eliminatedUserId)} ถูกประหาร`;
-  else announcement = "☀️ ผลโหวต: ไม่มีการประหาร";
+  else if (princeSaved) announcement = "👑 เจ้าชายเผยตัว! รอดจากการประหาร — ไม่มีใครถูกกำจัด";
+  else if (eliminatedUserId) {
+    announcement = `☀️ ผลโหวต: ${getPlayerName(eliminatedUserId)} ถูกประหาร`;
+    if (loverDiedUserId !== null) announcement += ` · 💔 ${getPlayerName(loverDiedUserId)} ตรอมใจตายตาม`;
+  } else announcement = "☀️ ผลโหวต: ไม่มีการประหาร";
 
   // Push to Firebase — reset hasActed for the new night; use flat paths to preserve offline player entries
   const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
@@ -93,11 +128,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
   }
   await patchWerewolfFb(code, {
     currentStep: "🌙 กลางคืน",
+    timeOfDay: "night",
     announcement,
     ...(winTeam ? { winTeam } : {}),
   } as never);
   await patchWerewolfPlayersFb(code, fbPlayers);
 
   const eliminatedName = eliminatedUserId ? getPlayerName(eliminatedUserId) : null;
-  return NextResponse.json({ ok: true, eliminated: eliminatedUserId, eliminatedName, tie, tally, winTeam: winTeam ?? null });
+  // Hunter (นายพราน) executed by vote → GM fires its last shot.
+  const elimRole2 = eliminatedUserId ? s.playerRoles.find((p) => p.userId === eliminatedUserId) : null;
+  const hunters = elimRole2 && elimRole2.role.includes("นายพราน")
+    ? [{ userId: eliminatedUserId as number, name: eliminatedName as string }]
+    : [];
+  return NextResponse.json({ ok: true, eliminated: eliminatedUserId, eliminatedName, tie, tally, hunters, winTeam: winTeam ?? null });
 }

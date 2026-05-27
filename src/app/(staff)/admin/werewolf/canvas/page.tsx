@@ -89,24 +89,22 @@ function CanvasInner() {
   }, [roomCode, mode]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
-      <a
-        href={roomCode ? `/admin/werewolf/rooms/${roomCode}` : "/admin/werewolf"}
-        className="absolute top-3 left-3 z-10 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg border border-white/20 hover:bg-black/80 transition-colors"
-      >
-        ← กลับ
-      </a>
-
-      {roomCode && (
-        <div className="absolute top-3 right-3 z-10 bg-black/60 text-white text-xs px-3 py-1.5 rounded-lg border border-white/20">
-          🔗 ห้อง {roomCode}
-        </div>
-      )}
-
+    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+      <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-gray-950 border-b border-gray-800">
+        <a
+          href={roomCode ? `/admin/werewolf/rooms/${roomCode}` : "/admin/werewolf"}
+          className="bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg border border-gray-600 active:bg-gray-700"
+        >
+          ← กลับ
+        </a>
+        {roomCode && (
+          <span className="text-gray-400 text-xs">🔗 ห้อง {roomCode}</span>
+        )}
+      </div>
       <iframe
         ref={iframeRef}
         src="/werewolf-gm-canvas.html"
-        className="w-full h-full border-0"
+        className="flex-1 w-full border-0"
         allow="autoplay"
         title="Werewolf GM Canvas"
         onLoad={onIframeLoad}

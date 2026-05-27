@@ -40,10 +40,10 @@
         .player-token { position: absolute; width: 75px; height: 75px; border-radius: 50%; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 3px solid #555; cursor: grab; user-select: none; touch-action: none; transition: transform 0.1s; pointer-events: auto; background-color: #1f2937; }
         .player-token:active { cursor: grabbing; transform: scale(0.95); }
         
-        #trash-bin { position: absolute; bottom: 120px; right: 20px; width: 65px; height: 65px; background-color: rgba(220, 38, 38, 0.8); border: 2px dashed #fff; border-radius: 15px; display: flex; justify-content: center; align-items: center; font-size: 26px; z-index: 10; transition: all 0.2s; pointer-events: auto; }
+        #trash-bin { position: absolute; top: 45%; right: 14px; width: 60px; height: 60px; background-color: rgba(220, 38, 38, 0.8); border: 2px dashed #fff; border-radius: 15px; display: flex; justify-content: center; align-items: center; font-size: 24px; z-index: 10; transition: background-color 0.2s, transform 0.2s; pointer-events: auto; }
         .trash-active { background-color: rgba(255, 0, 0, 1) !important; transform: scale(1.1); }
-        
-        #zoom-controls { position: absolute; bottom: 120px; left: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
+
+        #zoom-controls { position: absolute; top: 38%; left: 14px; display: flex; flex-direction: column; gap: 8px; z-index: 10; }
         .zoom-btn { width: 45px; height: 45px; border-radius: 50%; background-color: #1f2937; border: 2px solid #4b5563; color: white; font-size: 24px; font-weight: bold; display: flex; justify-content: center; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
         .zoom-btn:active { background-color: #374151; transform: scale(0.95); }
 
@@ -80,10 +80,7 @@
 
     <header id="game-header" class="w-full shrink-0 px-2 py-2 flex flex-col justify-center bg-gray-900 border-b border-gray-700 z-20 gap-2 shadow-md">
         <div class="grid grid-cols-3 gap-1.5 w-full max-w-lg mx-auto">
-            <button onclick="openRoleDealModal()" class="bg-orange-600 border border-orange-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-orange-700">🎲 บทบาท</button>
-            <button onclick="startRollCall()" class="bg-purple-700 border border-purple-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-purple-800">📣 แนะนำตัว</button>
-            <button onclick="startNight()" class="bg-indigo-700 border border-indigo-400 text-white py-1.5 rounded text-sm font-bold shadow-[0_0_8px_rgba(99,102,241,0.8)] active:bg-indigo-800">🌙 กลางคืน</button>
-            <button onclick="startNewDay()" class="bg-yellow-600 border border-yellow-400 text-white py-1.5 rounded text-sm font-bold active:bg-yellow-700 shadow-md">🌞 ช่วงเช้า</button>
+            <button onclick="openGameControl()" class="bg-emerald-600 border border-emerald-400 text-white py-1.5 rounded text-sm font-bold shadow-[0_0_8px_rgba(16,185,129,0.7)] active:bg-emerald-700">🎮 การดำเนินเกม</button>
             <button onclick="toggleTimerWidget()" class="bg-blue-700 border border-blue-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-blue-800">⏱️ จับเวลา</button>
             <button onclick="openSettingsMenu()" class="bg-gray-700 border border-gray-400 text-white py-1.5 rounded text-sm font-bold shadow-md active:bg-gray-600 flex items-center justify-center gap-1">⚙️ ตั้งค่า</button>
         </div>
@@ -138,29 +135,71 @@
                     <button onclick="adjustTimer(30)" class="bg-gray-700 active:bg-gray-600 text-white py-1 rounded text-xs font-bold border border-gray-500">+30 วิ</button>
                 </div>
                 <div class="flex space-x-2 w-full">
-                    <button id="btn-timer-toggle" onclick="toggleTimerAction()" class="bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold w-2/3 shadow-md border border-green-400">▶ เริ่ม</button>
-                    <button onclick="resetTimer()" class="bg-red-700 active:bg-red-800 text-white py-2 rounded font-bold w-1/3 shadow-md border border-red-500">🔄</button>
+                    <button id="btn-timer-toggle" onclick="toggleTimerAction()" class="bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold flex-1 shadow-md border border-green-400">▶ เริ่ม</button>
+                    <button onclick="resetTimer()" class="bg-red-700 active:bg-red-800 text-white py-2 rounded font-bold w-12 shadow-md border border-red-500">🔄</button>
                 </div>
+                <button onclick="skipTimer()" class="mt-2 w-full bg-indigo-700 active:bg-indigo-800 text-white py-2 rounded font-bold text-sm shadow-md border border-indigo-400">⏭️ ข้ามเวลา — ไปต่อเลย</button>
             </div>
         </div>
 
         <div id="night-guide" class="absolute bottom-[120px] left-1/2 transform -translate-x-1/2 bg-indigo-900 border-2 border-indigo-400 rounded-xl shadow-2xl z-40 hidden flex-col items-center w-11/12 max-w-md p-3 pointer-events-auto">
             <div id="night-guide-title" class="text-sm text-indigo-300 mb-1 font-bold">🌙 ระบบผู้คุมเกม (ลำดับกลางคืน)</div>
             <div id="night-text" class="text-base sm:text-lg font-bold text-center mb-2 text-yellow-300 w-full min-h-[50px] flex items-center justify-center leading-tight px-2">ทุกคนหลับตา</div>
-            <!-- Night mark legend -->
-            <div id="night-mark-legend" class="hidden w-full bg-indigo-800/60 rounded-lg px-2 py-1.5 mb-2 text-xs text-indigo-200 flex-wrap gap-x-3 gap-y-1 justify-center">
+            <!-- Night mark legend — tap a player to record the current role's target -->
+            <div id="night-mark-legend" class="w-full bg-indigo-800/60 rounded-lg px-2 py-1.5 mb-2 text-xs text-indigo-200 flex flex-wrap gap-x-3 gap-y-1 justify-center">
                 <span>🎯 เป้าหมาย</span><span>🛡️ ป้องกัน</span><span>🔮 ตรวจสอบ</span><span>💊 รักษา</span><span>☠️ วางยา</span><span>🐾 หมาป่า</span><span>🎵 ขลุ่ย</span>
-                <span class="text-indigo-300 mt-1 w-full text-center">(แตะผู้เล่นซ้ำๆ เพื่อเปลี่ยน)</span>
+                <span class="text-indigo-300 mt-1 w-full text-center">แตะผู้เล่นเพื่อบันทึกเป้าหมายของบทบาทในช่วงนี้</span>
             </div>
             <div class="flex space-x-2 w-full justify-between mb-2">
                 <button onclick="prevNightStep()" class="bg-gray-700 text-white px-4 py-2 rounded font-bold text-sm shadow-md">&lt; ย้อน</button>
-                <button onclick="endNight()" class="bg-red-800 text-white px-4 py-2 rounded font-bold text-sm shadow-md">✖ ปิดระบบ</button>
+                <button onclick="clearAllNightMarks()" class="bg-gray-800 text-gray-300 px-3 py-2 rounded font-bold text-sm shadow-md border border-gray-600">🗑️ ล้าง Mark</button>
+                <button onclick="endNight()" class="bg-red-800 text-white px-4 py-2 rounded font-bold text-sm shadow-md">✖ ปิด</button>
                 <button onclick="nextNightStep()" class="bg-indigo-600 text-white px-5 py-2 rounded font-bold text-sm shadow-md border border-indigo-400">ถัดไป &gt;</button>
             </div>
-            <div class="flex gap-2 w-full">
-                <button id="btn-mark-mode" onclick="toggleNightMarkMode()" class="flex-1 bg-gray-700 text-white py-1.5 rounded text-xs font-bold border border-gray-500">✏️ Mark Mode: OFF</button>
-                <button onclick="clearAllNightMarks()" class="bg-gray-800 text-gray-300 py-1.5 px-3 rounded text-xs font-bold border border-gray-600">🗑️ ล้าง Mark</button>
+        </div>
+    </div>
+
+    <!-- Game Control Modal — groups the whole game flow in one popup (#7) -->
+    <div id="gameControlModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
+        <div class="bg-gray-900 border-2 border-emerald-700 p-5 rounded-3xl w-full max-w-sm">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold text-white">🎮 การดำเนินเกม</h2>
+                <button onclick="closeGameControl()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
             </div>
+            <div class="flex flex-col gap-2">
+                <button onclick="closeGameControl(); openRoleDealModal();" class="bg-orange-600 border border-orange-400 text-white py-3 rounded-xl text-sm font-bold shadow-md active:bg-orange-700 text-left px-4">🎲 บทบาท — แจกไพ่</button>
+                <button onclick="closeGameControl(); startRollCall();" class="bg-purple-700 border border-purple-400 text-white py-3 rounded-xl text-sm font-bold shadow-md active:bg-purple-800 text-left px-4">📣 แนะนำตัว (คืนแรก)</button>
+                <button onclick="closeGameControl(); startNight();" class="bg-indigo-700 border border-indigo-400 text-white py-3 rounded-xl text-sm font-bold shadow-[0_0_8px_rgba(99,102,241,0.8)] active:bg-indigo-800 text-left px-4">🌙 กลางคืน — เริ่มลำดับกลางคืน</button>
+                <button onclick="closeGameControl(); startNewDay();" class="bg-yellow-600 border border-yellow-400 text-white py-3 rounded-xl text-sm font-bold active:bg-yellow-700 shadow-md text-left px-4">🌞 ช่วงเช้า — ปลดโล่ + อภิปราย</button>
+                <button onclick="closeGameControl(); startVotePhase();" class="bg-amber-700 border border-amber-500 text-white py-3 rounded-xl text-sm font-bold active:bg-amber-800 shadow-md text-left px-4">🗳️ โหวต — เปิดให้โหวตประหาร</button>
+                <button onclick="closeGameControl(); openLoversModal();" class="bg-pink-700 border border-pink-500 text-white py-3 rounded-xl text-sm font-bold active:bg-pink-800 shadow-md text-left px-4">💘 ตั้งคู่รัก (กามเทพ)</button>
+                <div class="border-t border-gray-700 my-1"></div>
+                <button onclick="closeGameControl(); openGCFromControl();" class="bg-gray-800 border border-gray-500 text-white py-3 rounded-xl text-sm font-bold active:bg-gray-700 text-left px-4">📊 ดูสถานะเกม + ประมวลผล</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cupid lovers Modal (#10) -->
+    <div id="loversModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-[60]">
+        <div class="bg-gray-900 border-2 border-pink-700 p-5 rounded-3xl w-full max-w-sm">
+            <h2 class="text-xl font-bold text-white mb-1">💘 จับคู่รัก (กามเทพ)</h2>
+            <p class="text-pink-300 text-sm mb-3">เลือกผู้เล่น 2 คน — ถ้าคนหนึ่งตาย อีกคนจะตายตาม</p>
+            <div id="lovers-targets" class="flex flex-col gap-2 max-h-[45vh] overflow-y-auto"></div>
+            <p id="lovers-msg" class="text-xs text-center mt-2 hidden"></p>
+            <div class="flex gap-2 mt-4">
+                <button onclick="closeLoversModal()" class="flex-1 bg-gray-700 text-white font-bold py-2.5 rounded-xl text-sm active:bg-gray-600">ยกเลิก</button>
+                <button id="lovers-save" onclick="saveLovers()" class="flex-1 bg-pink-600 text-white font-bold py-2.5 rounded-xl text-sm active:bg-pink-700 disabled:opacity-40" disabled>💘 ยืนยันคู่รัก</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hunter last-shot Modal (#10) -->
+    <div id="hunterModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-[60]">
+        <div class="bg-gray-900 border-2 border-red-700 p-5 rounded-3xl w-full max-w-sm">
+            <h2 class="text-xl font-bold text-white mb-1">🔫 นายพรานลั่นไก</h2>
+            <p id="hunter-sub" class="text-red-300 text-sm mb-4">นายพรานตาย — เลือกผู้เล่นที่จะถูกลากไปด้วย 1 คน</p>
+            <div id="hunter-targets" class="flex flex-col gap-2 max-h-[50vh] overflow-y-auto"></div>
+            <button onclick="closeHunterModal()" class="mt-4 w-full bg-gray-700 text-white font-bold py-2.5 rounded-xl text-sm active:bg-gray-600">ข้าม (ไม่ยิง)</button>
         </div>
     </div>
 
@@ -250,6 +289,19 @@
         </div>
     </div>
 
+    <!-- Morning Checklist Modal (step 10 — what happened overnight) -->
+    <div id="morningChecklistModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-[58]">
+        <div class="bg-gray-900 border-2 border-yellow-500 p-5 rounded-3xl w-full max-w-sm max-h-[88vh] overflow-y-auto shadow-2xl">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-lg font-bold text-yellow-400">🌅 สรุปเหตุการณ์กลางคืน</h2>
+                <button onclick="closeMorningChecklist()" class="text-gray-400 text-3xl font-bold leading-none">&times;</button>
+            </div>
+            <p class="text-xs text-gray-400 mb-3">สรุปสำหรับ GM — ประกาศให้ผู้เล่นเฉพาะส่วนที่จำเป็น (ข้อมูลส่องบทบาทเป็นความลับ)</p>
+            <div id="morningChecklistBody" class="space-y-2 mb-4"></div>
+            <button onclick="closeMorningChecklist()" class="w-full bg-yellow-500 text-black py-3 rounded-xl font-bold shadow-lg active:bg-yellow-400">รับทราบ — เข้าช่วงกลางวัน</button>
+        </div>
+    </div>
+
     <!-- Edit Player Modal -->
     <div id="editModal" class="fixed inset-0 bg-black bg-opacity-80 modal-bg hidden flex justify-center items-center p-4 z-50">
         <div class="bg-gray-900 border-2 border-gray-700 p-5 rounded-3xl w-full max-w-sm max-h-[90vh] overflow-y-auto">
@@ -284,6 +336,16 @@
                 </div>
             </div>
 
+            <!-- Offline player → link to a real member by customer code (for scoring) -->
+            <div id="memberLinkSection" class="mb-4 hidden">
+                <label class="block text-xs text-gray-400 mb-1">🪪 รหัสลูกค้า (ผู้เล่นออฟไลน์ที่เป็นสมาชิก — เพื่อรับคะแนน)</label>
+                <div class="flex items-center gap-2 w-full">
+                    <input type="text" id="memberCode" placeholder="เช่น DS00123" class="flex-1 min-w-0 p-2 rounded-lg bg-gray-800 border border-gray-600 text-white font-bold focus:outline-none focus:border-yellow-400 text-sm uppercase" autocomplete="off">
+                    <button id="memberLinkBtn" onclick="linkMemberCode()" class="shrink-0 bg-green-700 border border-green-500 text-white px-3 h-[38px] rounded-lg text-sm font-bold active:bg-green-800">ผูก</button>
+                </div>
+                <p id="memberLinkStatus" class="text-xs mt-1 text-gray-400"></p>
+            </div>
+
             <div class="grid grid-cols-2 gap-3 mb-4">
                 <button onclick="setStatus('alive')" class="bg-gray-800 border border-green-500 text-green-400 py-3 rounded-lg font-bold active:bg-green-900 shadow-md">🟢 มีชีวิต</button>
                 <button onclick="setStatus('protected')" class="bg-gray-800 border border-cyan-400 text-cyan-400 py-3 rounded-lg font-bold active:bg-cyan-900 shadow-md">🛡️ ถูกปกป้อง</button>
@@ -315,7 +377,6 @@
         let isTableLocked = false;
         let players = [];
         let currentIndex = null;
-        let nightMarkMode = false; // night marking mode on/off
         
         let zoomLevel = 1;
         let panX = 0;
@@ -381,6 +442,8 @@
         };
         let nightSteps = [];
         let currentNightStepIndex = 0;
+        let _stepTargeted = {}; // night step index → true once the GM has recorded a target for it
+        let nightActionsLog = []; // this night's recorded actions → morning checklist (step 10)
 
         // === SESSION CONNECTION ===
         let connectedRoomCode = null;
@@ -401,6 +464,7 @@
         let nightActionPollId = null;
         let lastSeenNightActionTs = {}; // actorUserId → last seen timestamp
         let rollCallMode = false;
+        let _loversUids = []; // Cupid's two lovers (uids) — if one dies the other dies too
 
         const roleDescriptions = {
             'เขี้ยวยาว (Dire Wolf)': 'ในคืนแรกได้ตื่นมาพร้อมมนุษย์หมาป่า แต่จะไม่ได้ตื่นเพราะมนุษย์หมาป่าในคืนถัดไป หากยังมีมนุษย์หมาป่าตัวอื่นอยู่ในเกม',
@@ -491,6 +555,7 @@
         // === SYSTEM: AUTO SAVE ===
         var _serverLayoutTimer = null;
         var _lastOwnSaveNonce = null;
+        var _ownSaveNonces = []; // recent nonces we sent — skip their echoes so our own saves never bounce back
         var _layoutEsRef = null;
         var _initialLoadComplete = false; // Guards against syncRoomPlayers() clobbering server layout before initial load
 
@@ -506,7 +571,8 @@
                 tableColor: document.getElementById('tableColorPicker').value,
                 penColor: penColorPicker.value,
                 timerSeconds: timerSeconds,
-                favoriteRoles: favoriteRoles
+                favoriteRoles: favoriteRoles,
+                loversUids: _loversUids
             };
             // Use room-specific key when connected to a session
             var storageKey = connectedRoomCode ? 'werewolfGMState_' + connectedRoomCode : 'werewolfGMState';
@@ -528,6 +594,9 @@
                 if (_serverLayoutTimer) clearTimeout(_serverLayoutTimer);
                 _serverLayoutTimer = setTimeout(function() {
                     _serverLayoutTimer = null;
+                    var sentNonce = _lastOwnSaveNonce;
+                    _ownSaveNonces.push(sentNonce);
+                    if (_ownSaveNonces.length > 10) _ownSaveNonces.shift();
                     fetch('/api/werewolf/rooms/' + connectedRoomCode + '/canvas-layout', {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
@@ -615,6 +684,9 @@
         // Apply a layout received from another GM in real-time — mirror EVERYTHING (incl. pan/zoom + drawing).
         function applyRemoteLayout(layout) {
             if (!layout || typeof layout !== 'object') return;
+            // Never overwrite players while the GM is mid-drag or editing a token — that's what
+            // caused tokens to snap back. The GM's own save will propagate the final position.
+            if (isDraggingToken || (typeof currentIndex !== 'undefined' && currentIndex !== null)) return;
             var changed = false;
 
             if (Array.isArray(layout.players)) {
@@ -671,8 +743,9 @@
                     var msg = JSON.parse(raw);
                     var layout = msg.data;
                     if (!layout || typeof layout !== 'object') return;
-                    // Skip if this is our own save (identified by nonce)
-                    if (layout._saveNonce && layout._saveNonce === _lastOwnSaveNonce) return;
+                    // Skip echoes of any of our own recent saves (not just the latest) so a
+                    // fast drag never bounces back when a slightly-older echo arrives.
+                    if (layout._saveNonce && _ownSaveNonces.indexOf(layout._saveNonce) !== -1) return;
                     applyRemoteLayout(layout);
                 } catch(_e) {}
             }
@@ -693,6 +766,7 @@
             if (savedState) {
                 const state = JSON.parse(savedState);
                 players = state.players || [];
+                _loversUids = Array.isArray(state.loversUids) ? state.loversUids : [];
                 tableState = state.tableState || { x: 1500 - 130, y: 1500 - 130, w: 260, h: 260, shape: 'square' };
                 zoomLevel = state.zoomLevel || 1;
                 panX = state.panX || -(3000 - window.innerWidth) / 2;
@@ -1164,6 +1238,35 @@
             saveGameState();
         }
 
+        // Start a fixed-length countdown and show the widget — used for the guided phase timers
+        // (2-min opening discussion before night 1, 4-min day discussion).
+        function startPhaseTimer(seconds) {
+            if (timerInterval) clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerSeconds = seconds;
+            isTimerVisible = true;
+            document.getElementById('timer-widget').style.display = 'flex';
+            updateTimerDisplay();
+            toggleTimerAction(); // isTimerRunning is false → this starts the countdown
+            saveGameState();
+        }
+
+        // GM can end the countdown early — the timer never blocks moving to the next phase (#8).
+        function skipTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            timerSeconds = 0;
+            stopSiren();
+            updateTimerDisplay();
+            var btnToggle = document.getElementById('btn-timer-toggle');
+            btnToggle.innerText = '▶ เริ่ม';
+            btnToggle.className = 'bg-green-600 active:bg-green-700 text-white py-2 rounded font-bold flex-1 shadow-md border border-green-400';
+            isTimerVisible = false;
+            document.getElementById('timer-widget').style.display = 'none';
+            closeTimeoutAlert();
+            saveGameState();
+        }
+
         function showTimeoutAlert() { document.getElementById('timeoutModal').classList.remove('hidden'); }
         function closeTimeoutAlert() { document.getElementById('timeoutModal').classList.add('hidden'); stopSiren(); }
 
@@ -1447,7 +1550,9 @@
                 // Night mark badge
                 const NIGHT_MARKS = { target:'🎯', guard:'🛡️', check:'🔮', save:'💊', poison:'☠️', wolf_pick:'🐾', piper:'🎵' };
                 let nightMarkBadge = '';
-                if (p.nightMark && NIGHT_MARKS[p.nightMark]) {
+                // Skip the mark badge when the status icon (💀/🛡️/🔥/🦇) already shows the outcome,
+                // so a guarded/killed token doesn't display two redundant badges.
+                if (p.nightMark && NIGHT_MARKS[p.nightMark] && !statusIcon) {
                     const markColors = { target:'bg-red-600', guard:'bg-cyan-600', check:'bg-purple-600', save:'bg-green-600', poison:'bg-gray-800', wolf_pick:'bg-red-800', piper:'bg-yellow-600' };
                     nightMarkBadge = `<div class="absolute -bottom-2 left-1/2 -translate-x-1/2 ${markColors[p.nightMark] || 'bg-gray-700'} rounded-full px-1.5 py-0.5 text-sm z-30 shadow-lg border border-white/20">${NIGHT_MARKS[p.nightMark]}</div>`;
                 }
@@ -1563,12 +1668,34 @@
                         trashBin.classList.remove('trash-active'); players.splice(index, 1); renderTokens(); saveGameState(); return;
                     }
                     if (!isDragging) {
-                        if (nightMarkMode) {
-                            // Auto-select mark based on current night step
-                            const autoMark = getMarkForCurrentStep();
-                            players[index].nightMark = (players[index].nightMark === autoMark) ? null : autoMark;
-                            updateStatusForMark(players[index], players[index].nightMark);
-                            renderTokens();
+                        if (isNightMarkingActive()) {
+                            var step = nightSteps[currentNightStepIndex] || '';
+                            // Decoy call (role already out of the game) → no target is recorded
+                            if (step.indexOf('[เรียกหลอก]') === 0) { showNightActionToast('🎭 เรียกหลอก — ไม่บันทึกเป้าหมาย'); }
+                            else {
+                                // Tap records the current role's target (basic night function — no mode toggle)
+                                var autoMark = getMarkForCurrentStep();
+                                var wasOn = (players[index].nightMark === autoMark);
+                                players[index].nightMark = wasOn ? null : autoMark;
+                                updateStatusForMark(players[index], players[index].nightMark);
+                                // Maintain the morning log (one entry per step+target); toggling off removes it
+                                var _stepText = nightSteps[currentNightStepIndex] || '';
+                                nightActionsLog = nightActionsLog.filter(function(en) {
+                                    return !(en.stepIndex === currentNightStepIndex && en.targetName === players[index].name);
+                                });
+                                if (!wasOn) {
+                                    nightActionsLog.push({ stepIndex: currentNightStepIndex, step: _stepText, mark: autoMark, targetName: players[index].name });
+                                }
+                                // Mark this step as targeted so the GM can advance (step 8 gating)
+                                _stepTargeted[currentNightStepIndex] = players.some(function(pp) { return pp.nightMark === autoMark; });
+                                renderTokens(); saveGameState();
+                            }
+                        } else if (players[index].nightMark) {
+                            // Outside the night guide (e.g. during the day) a tap removes a lingering
+                            // mark instead of opening the editor, so the GM can clear marks anytime (#4).
+                            players[index].nightMark = null;
+                            updateStatusForMark(players[index], null);
+                            renderTokens(); saveGameState();
                         } else {
                             openModal(index);
                         }
@@ -1580,13 +1707,68 @@
 
         function openModal(index) {
             currentIndex = index;
-            document.getElementById('playerName').value = players[index].name;
+            const p = players[index];
+            document.getElementById('playerName').value = p.name;
             const selectRole = document.getElementById('playerRole');
-            selectRole.value = players[index].role;
-            updateStarUI(); 
-            document.getElementById('playerGender').value = players[index].gender || "";
+            selectRole.value = p.role;
+            updateStarUI();
+            document.getElementById('playerGender').value = p.gender || "";
+            updateMemberLinkUI(p);
             document.getElementById('editModal').classList.remove('hidden');
         }
+
+        // Team from role (mirrors server getTeam) for the GM panel grid colors
+        function canvasGetTeam(role) {
+            if (!role || role === 'ไม่ระบุ') return '';
+            if (vampireRoles.includes(role)) return 'vampire';
+            if (wolfRoles.includes(role)) return 'wolf';
+            if (indyRoles.includes(role)) return 'indy';
+            if (villagerRoles.includes(role)) return 'village';
+            return '';
+        }
+
+        function updateMemberLinkUI(p) {
+            var sec = document.getElementById('memberLinkSection');
+            if (!connectedRoomCode || !isOfflineToken(p)) { sec.classList.add('hidden'); return; }
+            sec.classList.remove('hidden');
+            document.getElementById('memberCode').value = p.memberCode || '';
+            var st = document.getElementById('memberLinkStatus');
+            if (p.memberUserId) {
+                st.textContent = '✅ ผูกกับสมาชิก: ' + (p.memberName || ('User ' + p.memberUserId)) + ' (จะได้รับคะแนนตอนจบเกม)';
+                st.className = 'text-xs mt-1 text-green-400';
+            } else {
+                st.textContent = 'ใส่รหัสลูกค้าเพื่อให้ผู้เล่นออฟไลน์คนนี้ได้รับคะแนน';
+                st.className = 'text-xs mt-1 text-gray-400';
+            }
+        }
+
+        async function linkMemberCode() {
+            if (currentIndex === null || !connectedRoomCode) return;
+            var p = players[currentIndex];
+            var code = (document.getElementById('memberCode').value || '').trim().toUpperCase();
+            var st = document.getElementById('memberLinkStatus');
+            if (!code) { st.textContent = 'กรุณาใส่รหัสลูกค้า'; st.className = 'text-xs mt-1 text-yellow-400'; return; }
+            var btn = document.getElementById('memberLinkBtn');
+            btn.disabled = true; btn.textContent = '...';
+            try {
+                var res = await fetch('/api/werewolf/sessions/' + connectedRoomCode + '/link-member', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ memberCode: code, role: p.role, status: p.status })
+                });
+                var data = await res.json();
+                if (!res.ok) {
+                    st.textContent = '⚠️ ' + (data.error || 'ผูกไม่สำเร็จ'); st.className = 'text-xs mt-1 text-red-400';
+                } else {
+                    p.memberCode = data.memberCode; p.memberUserId = data.userId; p.memberName = data.name;
+                    st.textContent = '✅ ผูกกับสมาชิก: ' + data.name; st.className = 'text-xs mt-1 text-green-400';
+                    saveGameState();
+                }
+            } catch(e) {
+                st.textContent = '⚠️ เกิดข้อผิดพลาด — ตรวจสอบการเชื่อมต่อ'; st.className = 'text-xs mt-1 text-red-400';
+            }
+            btn.disabled = false; btn.textContent = 'ผูก';
+        }
+
         function closeModal() { document.getElementById('editModal').classList.add('hidden'); currentIndex = null; }
 
         // === ROLE ALERT SYSTEM (NEW) ===
@@ -1735,21 +1917,65 @@
                 saveGameState();
                 // Sync role to the player's phone if they're a logged-in player
                 if (connectedRoomCode && p.uid != null && p.role && p.role !== 'ไม่ระบุ') {
+                    // Map canvas statuses to the player-facing status: only "dead" matters to phones.
+                    var phoneStatus = (p.status === 'dead' || p.status === 'burned' || p.status === 'vampire') ? 'dead' : 'alive';
                     fetch('/api/werewolf/sessions/' + connectedRoomCode + '/player-role', {
                         method: 'PATCH',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ userId: p.uid, role: p.role })
+                        body: JSON.stringify({ userId: p.uid, role: p.role, status: phoneStatus })
                     }).catch(function(){});
                 }
+                // Keep a linked offline member's session row (role/status) in sync for scoring
+                if (connectedRoomCode && p.memberUserId && p.memberCode) {
+                    fetch('/api/werewolf/sessions/' + connectedRoomCode + '/link-member', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ memberCode: p.memberCode, role: p.role, status: p.status })
+                    }).catch(function(){});
+                }
+                // applyLoverDeath(p); // disabled — GM records every death manually (GM-manual mode)
                 checkGameEnd();
             }
         }
 
+        // Cupid (กามเทพ): when one lover dies, the other dies of heartbreak — runs in the manual flow.
+        function applyLoverDeath(deadPlayer) {
+            if (_loversUids.length !== 2 || deadPlayer.uid == null) return;
+            var deadStatuses = { dead: 1, burned: 1, vampire: 1 };
+            if (!deadStatuses[deadPlayer.status]) return;
+            if (_loversUids.indexOf(deadPlayer.uid) === -1) return;
+            var partnerUid = _loversUids[0] === deadPlayer.uid ? _loversUids[1] : _loversUids[0];
+            var partner = players.find(function(pp) { return pp.uid == partnerUid; });
+            if (!partner || deadStatuses[partner.status]) return;
+            partner.status = 'dead';
+            renderTokens();
+            showRoleAlert('💔', 'คู่รักตรอมใจ!', '"' + (partner.name || '') + '" เป็นคู่รักของ "' + (deadPlayer.name || '') + '" จึงตรอมใจตายตามทันที');
+            if (connectedRoomCode && partner.uid != null && partner.role && partner.role !== 'ไม่ระบุ') {
+                fetch('/api/werewolf/sessions/' + connectedRoomCode + '/player-role', {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: partner.uid, role: partner.role, status: 'dead' })
+                }).catch(function(){});
+            }
+            if (connectedRoomCode && partner.memberUserId && partner.memberCode) {
+                fetch('/api/werewolf/sessions/' + connectedRoomCode + '/link-member', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ memberCode: partner.memberCode, role: partner.role, status: 'dead' })
+                }).catch(function(){});
+            }
+            saveGameState();
+        }
+
         // === 4. ปุ่มควบคุมเกมหลัก ===
         function startNewDay() {
-            players.forEach(p => { if (p.status === 'protected') p.status = 'alive'; });
-            renderTokens(); 
-            endNight(); 
+            // Day begins: drop the protective shield and clear every night mark so last night's
+            // 🎯/🛡️/🔮 badges don't linger on the board during the day (issue #4).
+            players.forEach(p => {
+                if (p.status === 'protected') p.status = 'alive';
+                p.nightMark = null;
+            });
+            renderTokens();
+            endNight();
+            startPhaseTimer(240); // 4-minute day discussion (step 12)
             saveGameState();
         }
 
@@ -1760,9 +1986,12 @@
                     p.status = 'alive';
                     p.gender = '';
                     p.nightMark = null;
+                    p.memberUserId = null;
+                    p.memberName = null;
                 });
                 _gameEndDetected = false;
                 _pendingWinTeam = null;
+                _loversUids = [];
                 renderTokens();
                 endNight();
                 saveGameState();
@@ -1787,6 +2016,7 @@
         // === ROLL CALL / RECOGNITION PHASE (first night — players open eyes to meet teammates) ===
         function startRollCall() {
             rollCallMode = true;
+            _stepTargeted = {};
             let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
 
             // Roll call = recognition only, no abilities performed
@@ -1812,12 +2042,15 @@
             nightSteps.push('✅ จบการแนะนำตัว — กด 🌙 กลางคืน เพื่อเริ่มเล่น');
 
             currentNightStepIndex = 0;
+            closeGC(); // night guide and game-control panel never show at once
             document.getElementById('night-guide').classList.remove('hidden');
             updateNightUI();
         }
 
         function startNight() {
             rollCallMode = false;
+            _stepTargeted = {}; // reset per-step target tracking for the new night
+            nightActionsLog = []; // reset the morning summary log
             // Clear night marks and GM action notifications from previous night
             players.forEach(function(p) { p.nightMark = null; });
             lastSeenNightActionTs = {};
@@ -1826,6 +2059,13 @@
             if (connectedRoomCode && connectedFbUrl) {
                 fetch(connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/gmNightActions.json', {
                     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'null'
+                }).catch(function() {});
+            }
+            // New night: clear the stale announcement and re-enable every player's action on their phone.
+            if (connectedRoomCode) {
+                fetch('/api/werewolf/sessions/' + connectedRoomCode, {
+                    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resetActions: true })
                 }).catch(function() {});
             }
             let aliveRolesSet = new Set(players.filter(p => p.status === 'alive' || p.status === 'protected').map(p => p.role));
@@ -1856,6 +2096,7 @@
             nightSteps.push('☀️ เช้าแล้ว! ลืมตาทุกคน\n(กดปุ่ม "🌞 เช้า" ด้านบนเพื่อปลดโล่)');
 
             currentNightStepIndex = 0;
+            closeGC(); // night guide and game-control panel never show at once
             document.getElementById('night-guide').classList.remove('hidden');
             updateNightUI();
         }
@@ -1868,7 +2109,7 @@
                 fetch('/api/werewolf/sessions/' + connectedRoomCode, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ currentStep: stepText, phase: 'PLAYING' })
+                    body: JSON.stringify({ currentStep: stepText, phase: 'PLAYING', timeOfDay: rollCallMode ? 'intro' : 'night' })
                 }).catch(function() {});
             }
             try {
@@ -1882,7 +2123,92 @@
                 }
             } catch(e) {}
         }
-        function nextNightStep() { if (currentNightStepIndex < nightSteps.length - 1) { currentNightStepIndex++; updateNightUI(); } else { endNight(); } }
+        // A night step needs a target if its instruction asks the role to choose/point at someone.
+        // Decoy calls ([เรียกหลอก]) never need a target.
+        function stepNeedsTarget(step) {
+            if (!step) return false;
+            if (step.indexOf('[เรียกหลอก]') === 0) return false;
+            // "...หรือไม่?" = optional action (witch/huntress/leprechaun) → don't force a target
+            if (/หรือไม่\?/.test(step)) return false;
+            return /เลือก|ชี้|กัด|จับคู่|สะกด|ส่อง/.test(step);
+        }
+
+        function nextNightStep() {
+            var step = nightSteps[currentNightStepIndex] || '';
+            // Strict order (step 8): can't advance until this role's target is recorded
+            if (!rollCallMode && stepNeedsTarget(step) && !_stepTargeted[currentNightStepIndex]) {
+                showNightActionToast('⚠️ ยังไม่ได้เลือกเป้าหมายของบทบาทนี้ — แตะผู้เล่นเพื่อบันทึกก่อนไปต่อ');
+                return;
+            }
+            if (currentNightStepIndex < nightSteps.length - 1) {
+                currentNightStepIndex++;
+                updateNightUI();
+            } else if (rollCallMode) {
+                // End of introduction → 2-minute opening discussion before the first night (step 6)
+                rollCallMode = false;
+                document.getElementById('night-guide').classList.add('hidden');
+                startPhaseTimer(120);
+            } else {
+                endNight();
+                showMorningChecklist(); // step 10 — summarise the night before day discussion
+            }
+        }
+
+        // Human-readable label for a recorded night action, based on the step (role) it belongs to.
+        function morningActionLabel(step) {
+            if (/ฝูงหมาป่า|ฆาตกร|แมรี่/.test(step)) return '🐺 หมาป่า/ฆาตกร เลือกฆ่า';
+            if (/บอดี้การ์ด|นักบวช/.test(step)) return '🛡️ ปกป้อง';
+            if (/แม่มด/.test(step)) return '⚗️ แม่มดใช้ยา (ชุบ/พิษ)';
+            if (/แม่หมอ/.test(step)) return '🧹 แม่หมอไล่ออกจากหมู่บ้าน — ห้ามพูด/โหวตวันนี้';
+            if (/จอมเวทย์/.test(step)) return '🤫 จอมเวทย์สั่งห้ามพูดวันนี้';
+            if (/ผู้ใช้คาถา/.test(step)) return '🔇 ผู้ใช้คาถาห้ามส่งเสียงวันนี้';
+            if (/ซอมบี้/.test(step)) return '🧟 ซอมบี้สั่งห้ามโหวตพรุ่งนี้';
+            if (/นักสะกดจิต/.test(step)) return '💫 นักสะกดจิตชี้';
+            if (/นักเป่าขลุ่ย/.test(step)) return '🎵 นักเป่าขลุ่ยสะกดจิต';
+            if (/เทพพยากรณ์|ญาณทิพย์|เทพผู้รู้แจ้ง|นักสืบ|นางปีศาจ/.test(step)) return '🔮 ส่องบทบาท (แจ้งเป็นการลับ)';
+            if (/แวมไพร์/.test(step)) return '🧛 แวมไพร์กัด';
+            if (/เจ้าลัทธิ/.test(step)) return '🕯️ เจ้าลัทธิชวนเข้าลัทธิ';
+            if (/อันธพาล/.test(step)) return '🔗 อันธพาลเลือกเป้า';
+            if (/ภูตเลปริคอน/.test(step)) return '🍀 เลปริคอนเบี่ยงเบนเป้า';
+            if (/กามเทพ/.test(step)) return '💘 กามเทพจับคู่รัก';
+            return '🎯 เลือกเป้าหมาย';
+        }
+
+        function showMorningChecklist() {
+            var deadSet = { dead: 1, burned: 1, vampire: 1 };
+            var rows = '';
+
+            // 1) Deaths overnight
+            var dead = players.filter(function(p) { return p.status === 'dead'; });
+            if (dead.length) {
+                rows += '<div class="bg-red-900/40 border border-red-600 rounded-lg px-3 py-2 text-sm text-red-200 font-bold">💀 เสียชีวิตคืนนี้: ' + dead.map(function(d){ return d.name; }).join(', ') + '</div>';
+            } else {
+                rows += '<div class="bg-green-900/30 border border-green-600 rounded-lg px-3 py-2 text-sm text-green-200 font-bold">🌤️ ไม่มีผู้เสียชีวิตคืนนี้</div>';
+            }
+
+            // 2) Death-triggered reminders (hunter shoots before dying)
+            dead.forEach(function(d) {
+                if (/นายพราน|พรานหญิง/.test(d.role)) {
+                    rows += '<div class="bg-yellow-900/40 border border-yellow-600 rounded-lg px-3 py-2 text-sm text-yellow-200 font-bold">🏹 ' + d.name + ' (พราน) ต้องยิงผู้เล่น 1 คนก่อนตาย</div>';
+                }
+            });
+
+            // 3) Actions recorded during the night (silence / banish / protect / etc.)
+            if (nightActionsLog.length) {
+                nightActionsLog.forEach(function(en) {
+                    rows += '<div class="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-100 flex justify-between gap-2"><span>' + morningActionLabel(en.step) + '</span><span class="font-bold text-yellow-300 shrink-0">' + en.targetName + '</span></div>';
+                });
+            } else if (!dead.length) {
+                rows += '<div class="text-xs text-gray-500 text-center py-1">ไม่มีการกระทำที่ต้องประกาศ</div>';
+            }
+
+            document.getElementById('morningChecklistBody').innerHTML = rows;
+            document.getElementById('morningChecklistModal').classList.remove('hidden');
+        }
+
+        function closeMorningChecklist() {
+            document.getElementById('morningChecklistModal').classList.add('hidden');
+        }
 
         function getMarkForCurrentStep() {
             var step = nightSteps[currentNightStepIndex] || '';
@@ -1894,23 +2220,13 @@
             return 'target';
         }
         function prevNightStep() { if (currentNightStepIndex > 0) { currentNightStepIndex--; updateNightUI(); } }
-        function endNight() { document.getElementById('night-guide').classList.add('hidden'); if (nightMarkMode) toggleNightMarkMode(); if (!isTimerVisible) toggleTimerWidget(); }
+        function endNight() { document.getElementById('night-guide').classList.add('hidden'); if (!isTimerVisible) toggleTimerWidget(); }
 
-        function toggleNightMarkMode() {
-            nightMarkMode = !nightMarkMode;
-            var btn = document.getElementById('btn-mark-mode');
-            var legend = document.getElementById('night-mark-legend');
-            if (nightMarkMode) {
-                btn.textContent = '✏️ Mark Mode: ON';
-                btn.className = 'flex-1 bg-yellow-500 text-black py-1.5 rounded text-xs font-bold border border-yellow-300';
-                legend.classList.remove('hidden');
-                legend.classList.add('flex');
-            } else {
-                btn.textContent = '✏️ Mark Mode: OFF';
-                btn.className = 'flex-1 bg-gray-700 text-white py-1.5 rounded text-xs font-bold border border-gray-500';
-                legend.classList.add('hidden');
-                legend.classList.remove('flex');
-            }
+        // Tapping a token records the current role's target — active whenever the night guide is
+        // open and we're past role recognition (roll call). No separate mode toggle.
+        function isNightMarkingActive() {
+            var guide = document.getElementById('night-guide');
+            return guide && !guide.classList.contains('hidden') && !rollCallMode;
         }
 
         function clearAllNightMarks() {
@@ -1987,6 +2303,7 @@
             var panel = document.getElementById('gc-panel');
             if (panel.style.display === 'none' || !panel.style.display) {
                 panel.style.display = 'block';
+                document.getElementById('night-guide').classList.add('hidden'); // avoid overlapping the night guide
                 document.getElementById('btn-gc').classList.add('tool-active');
                 document.getElementById('btn-gc').classList.remove('text-white');
                 fetchGCData();
@@ -2006,12 +2323,106 @@
             document.getElementById('btn-gc').classList.add('text-white');
         }
 
+        // === GAME CONTROL POPUP (groups the flow buttons — #7) ===
+        function openGameControl() { document.getElementById('gameControlModal').classList.remove('hidden'); }
+        function closeGameControl() { document.getElementById('gameControlModal').classList.add('hidden'); }
+
+        // Open the voting phase: ask players whether to execute (proper flow after discussion — #6).
+        function startVotePhase() {
+            gcAskVote();
+            showNightActionToast('🗳️ เปิดให้ผู้เล่นโหวตว่าจะประหารหรือไม่');
+        }
+
+        // Show the status/processing panel from the Game Control popup.
+        function openGCFromControl() {
+            var panel = document.getElementById('gc-panel');
+            if (panel.style.display === 'none' || !panel.style.display) toggleGC();
+        }
+
+        // === HUNTER LAST SHOT (#10) ===
+        function showHunterModal(hunters) {
+            var sub = document.getElementById('hunter-sub');
+            sub.textContent = (hunters.map(function(h){ return h.name; }).join(', ')) + ' (นายพราน) ตาย — เลือกคนที่ถูกลากไปด้วย 1 คน';
+            var box = document.getElementById('hunter-targets');
+            // Offer every living player except the dead hunters themselves.
+            var hunterIds = {};
+            hunters.forEach(function(h){ hunterIds[h.userId] = 1; });
+            var deadSet = { dead: 1, burned: 1, vampire: 1 };
+            box.innerHTML = players.filter(function(p){
+                return p.uid != null && !deadSet[p.status] && !hunterIds[p.uid];
+            }).map(function(p){
+                return '<button onclick="hunterShoot(' + p.uid + ')" class="w-full bg-red-800 border border-red-500 text-white py-3 rounded-xl font-bold text-sm active:bg-red-700 text-left px-4">🎯 ' + (p.name || ('Player ' + p.uid)) + '</button>';
+            }).join('') || '<p class="text-gray-400 text-sm text-center">ไม่มีเป้าหมายที่ยังมีชีวิต</p>';
+            document.getElementById('hunterModal').classList.remove('hidden');
+        }
+        function closeHunterModal() { document.getElementById('hunterModal').classList.add('hidden'); }
+        async function hunterShoot(targetUid) {
+            if (!connectedRoomCode) return;
+            try {
+                var res = await fetch('/api/werewolf/sessions/' + connectedRoomCode + '/hunter-shot', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ targetUserId: targetUid })
+                });
+                var data = await res.json();
+                if (res.ok) {
+                    var tok = players.find(function(p){ return p.uid == targetUid; });
+                    if (tok) { tok.status = 'dead'; renderTokens(); saveGameState(); }
+                    showNightActionToast('🔫 นายพรานยิง ' + (data.targetName || '') + (data.winTeam ? ' · 🏆 ' + data.winTeam + ' ชนะ!' : ''));
+                }
+            } catch(e) {}
+            closeHunterModal();
+            setTimeout(fetchGCData, 600);
+        }
+
+        // === CUPID LOVERS (#10) ===
+        var _selectedLovers = [];
+        function openLoversModal() {
+            _selectedLovers = [];
+            var box = document.getElementById('lovers-targets');
+            var deadSet = { dead: 1, burned: 1, vampire: 1 };
+            box.innerHTML = players.filter(function(p){ return p.uid != null && !deadSet[p.status]; }).map(function(p){
+                return '<button data-uid="' + p.uid + '" onclick="toggleLover(' + p.uid + ', this)" class="lover-opt w-full bg-gray-800 border border-gray-600 text-white py-3 rounded-xl font-bold text-sm active:bg-gray-700 text-left px-4">' + (p.name || ('Player ' + p.uid)) + '</button>';
+            }).join('') || '<p class="text-gray-400 text-sm text-center">ไม่มีผู้เล่น</p>';
+            document.getElementById('lovers-msg').classList.add('hidden');
+            document.getElementById('lovers-save').disabled = true;
+            document.getElementById('loversModal').classList.remove('hidden');
+        }
+        function closeLoversModal() { document.getElementById('loversModal').classList.add('hidden'); }
+        function toggleLover(uid, btn) {
+            var i = _selectedLovers.indexOf(uid);
+            if (i >= 0) { _selectedLovers.splice(i, 1); btn.classList.remove('bg-pink-600','border-pink-400'); btn.classList.add('bg-gray-800','border-gray-600'); }
+            else {
+                if (_selectedLovers.length >= 2) return;
+                _selectedLovers.push(uid); btn.classList.add('bg-pink-600','border-pink-400'); btn.classList.remove('bg-gray-800','border-gray-600');
+            }
+            document.getElementById('lovers-save').disabled = (_selectedLovers.length !== 2);
+        }
+        async function saveLovers() {
+            if (_selectedLovers.length !== 2 || !connectedRoomCode) return;
+            var msg = document.getElementById('lovers-msg');
+            try {
+                var res = await fetch('/api/werewolf/sessions/' + connectedRoomCode + '/lovers', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userIds: _selectedLovers })
+                });
+                if (res.ok) { _loversUids = _selectedLovers.slice(); saveGameState(); showNightActionToast('💘 ตั้งคู่รักแล้ว'); closeLoversModal(); }
+                else { var d = await res.json().catch(function(){return{};}); msg.textContent = d.error || 'ผิดพลาด'; msg.classList.remove('hidden'); }
+            } catch(e) { msg.textContent = 'เชื่อมต่อไม่ได้'; msg.classList.remove('hidden'); }
+        }
+
         async function fetchGCData() {
             if (!connectedRoomCode) return;
             try {
                 var res = await fetch('/api/werewolf/sessions/' + connectedRoomCode);
                 if (!res.ok) return;
                 gcData = await res.json();
+                // voteDecision (yes/no tally) lives only in Firebase — pull it for the decision box
+                if (connectedFbUrl && gcData && gcData.currentStep && gcData.currentStep.includes('❓')) {
+                    try {
+                        var vdRes = await fetch(connectedFbUrl + '/werewolf/sessions/' + connectedRoomCode + '/voteDecision.json');
+                        if (vdRes.ok) { var vd = await vdRes.json(); if (vd) gcData.voteDecision = vd; }
+                    } catch(_e) {}
+                }
                 renderGCPanel();
             } catch(e) {}
         }
@@ -2025,41 +2436,57 @@
             // Step badge
             document.getElementById('gc-step-badge').textContent = currentStep || gcData.phase || '';
 
-            // Determine phase
+            // Determine phase from the canonical server step markers.
+            // Night-guide instruction texts (incl. the "☀️ เช้าแล้ว" morning reminder) are NOT
+            // the real day phase — only resolve-night sets "☀️ กลางวัน". So match it exactly,
+            // otherwise the Resolve-Night button vanishes before the GM resolves the night.
             var isVoting = currentStep && currentStep.includes('🗳️');
-            var isDay = currentStep && currentStep.startsWith('☀️');
+            var isDay = currentStep === '☀️ กลางวัน';
 
-            // Player grid
-            var grid = document.getElementById('gc-players');
-            grid.innerHTML = playerRoles.map(function(p) {
-                var isDead = p.status === 'dead';
+            // Player grid — render from the actual board tokens so offline players show too.
+            // Overlay server progress (hasActed/hasVoted/voteCount) for DB-backed players.
+            var prByUid = {};
+            playerRoles.forEach(function(pr) { prByUid[pr.userId] = pr; });
+            var deadSet = { dead: 1, burned: 1, vampire: 1 };
+            var rows = players.map(function(t) {
+                var pr = (t.uid != null) ? prByUid[t.uid] : null;
+                var team = canvasGetTeam(t.role);
+                var isDead = !!deadSet[t.status];
                 var teamBorder = isDead ? 'border-gray-700' :
-                    p.team === 'wolf' ? 'border-red-700' :
-                    p.team === 'village' ? 'border-blue-600' :
-                    p.team === 'vampire' ? 'border-purple-600' : 'border-green-600';
+                    team === 'wolf' ? 'border-red-700' :
+                    team === 'village' ? 'border-blue-600' :
+                    team === 'vampire' ? 'border-purple-600' :
+                    team === 'indy' ? 'border-green-600' : 'border-gray-600';
                 var opClass = isDead ? 'opacity-40' : '';
+                var hasActed = pr ? pr.hasActed : (t.nightMark != null);
+                var hasVoted = pr ? pr.hasVoted : false;
+                var voteCount = pr ? pr.voteCount : 0;
                 var ind = '';
                 if (!isDead) {
                     if (isVoting) {
-                        ind = p.hasVoted
-                            ? '<span class="text-green-400 text-xs shrink-0">✓' + (p.voteCount > 0 ? '(' + p.voteCount + ')' : '') + '</span>'
+                        ind = hasVoted
+                            ? '<span class="text-green-400 text-xs shrink-0">✓' + (voteCount > 0 ? '(' + voteCount + ')' : '') + '</span>'
                             : '<span class="text-gray-500 text-xs shrink-0">…</span>';
                     } else if (!isDay) {
-                        ind = p.hasActed
+                        ind = hasActed
                             ? '<span class="text-green-400 text-xs shrink-0">✓</span>'
                             : '<span class="text-gray-500 text-xs shrink-0">…</span>';
                     }
                 }
-                return '<div class="flex items-center gap-1 px-2 py-1 rounded-lg border text-xs bg-gray-800 ' + teamBorder + ' ' + opClass + '">' +
-                    '<span class="shrink-0 text-xs">' + (isDead ? '💀' : '●') + '</span>' +
-                    '<span class="font-bold truncate flex-1 text-white">' + (p.seatName || 'User ' + p.userId) + '</span>' +
-                    ind + '</div>';
-            }).join('');
+                return { isDead: isDead, hasActed: hasActed, hasVoted: hasVoted,
+                    html: '<div class="flex items-center gap-1 px-2 py-1 rounded-lg border text-xs bg-gray-800 ' + teamBorder + ' ' + opClass + '">' +
+                        '<span class="shrink-0 text-xs">' + (isDead ? '💀' : '●') + '</span>' +
+                        '<span class="font-bold truncate flex-1 text-white">' + (t.name || ('Player ' + (t.uid != null ? t.uid : '?'))) + '</span>' +
+                        ind + '</div>' };
+            });
+            var grid = document.getElementById('gc-players');
+            grid.innerHTML = rows.map(function(r) { return r.html; }).join('');
 
             // Stats
-            var alive = playerRoles.filter(function(p) { return p.status !== 'dead'; });
-            var acted = alive.filter(function(p) { return p.hasActed; }).length;
-            var voted = alive.filter(function(p) { return p.hasVoted; }).length;
+            var aliveRows = rows.filter(function(r) { return !r.isDead; });
+            var alive = aliveRows;
+            var acted = aliveRows.filter(function(r) { return r.hasActed; }).length;
+            var voted = aliveRows.filter(function(r) { return r.hasVoted; }).length;
             var statsHtml = '<span>👤 มีชีวิต: <b class="text-white">' + alive.length + '</b></span>';
             if (isVoting) {
                 statsHtml += '<span>🗳️ Vote: <b class="text-white">' + voted + '/' + alive.length + '</b></span>';
@@ -2121,6 +2548,10 @@
                     msg = (data.killed && data.killed.length)
                         ? '💀 ตายแล้ว: ' + data.killedNames + (data.winTeam ? ' · 🏆 ' + data.winTeam + ' ชนะ!' : '')
                         : '😮 ไม่มีผู้เสียชีวิต' + (data.winTeam ? ' · 🏆 ' + data.winTeam + ' ชนะ!' : '');
+                    // Cursed (ผู้ต้องคำสาป) survived the wolves and secretly became a wolf — GM-only.
+                    if (data.cursedNames) {
+                        showRoleAlert('🐺', 'ผู้ต้องคำสาปกลายเป็นหมาป่า!', data.cursedNames + ' ถูกหมาป่าเลือก แต่ไม่ตาย — กลายเป็นหมาป่าแทน (อย่าประกาศให้ผู้เล่นรู้)');
+                    }
                 } else if (endpoint === 'open-vote') {
                     msg = '🗳️ เปิดโหวตวันที่ ' + data.dayNumber + ' แล้ว';
                 } else if (endpoint === 'resolve-vote') {
@@ -2129,6 +2560,8 @@
                         : 'ไม่มีการโหวต';
                 }
                 if (msg) { msgEl.textContent = msg; msgEl.classList.remove('hidden'); }
+                // Hunter died → prompt the GM to fire its last shot (#10)
+                if (data.hunters && data.hunters.length) { showHunterModal(data.hunters); }
                 setTimeout(fetchGCData, 800);
             } catch(e) {
                 msgEl.textContent = 'เกิดข้อผิดพลาด — ตรวจสอบการเชื่อมต่อ';
@@ -2326,16 +2759,6 @@
             }
         }
 
-        function applyNightActionMark(targetUid, actionType) {
-            var tok = players.find(function(p) { return p.uid == targetUid; });
-            if (!tok) return;
-            var markMap = { kill: 'wolf_pick', protect: 'guard', check: 'check', piper: 'piper', save: 'save', poison: 'poison' };
-            tok.nightMark = markMap[actionType] || 'target';
-            updateStatusForMark(tok, tok.nightMark);
-            renderTokens();
-            saveGameState();
-        }
-
         function startNightActionListener() {
             if (!connectedRoomCode || !connectedFbUrl) return;
             if (nightActionPollId) clearInterval(nightActionPollId);
@@ -2359,8 +2782,23 @@
                         var actorName = actorTok ? actorTok.name : 'Player ' + actorIdStr;
                         var targetName = targetTok ? targetTok.name : (targetUid != null ? 'Player ' + targetUid : '—');
                         var actionLabel = { kill: '⚔️ เลือกฆ่า', protect: '🛡️ ปกป้อง', check: '🔍 ส่อง', piper: '🎶 สะกดจิต', save: '💊 ชุบ', poison: '☠️ วางยา' }[entry.actionType] || '🎯 เลือก';
+                        // Auto-record the player's submitted target on the board so the GM does NOT
+                        // have to re-tap it, and the step gating (issue #2) is satisfied automatically.
+                        if (targetTok && isNightMarkingActive()) {
+                            var step = nightSteps[currentNightStepIndex] || '';
+                            if (step.indexOf('[เรียกหลอก]') !== 0) {
+                                var autoMark = getMarkForCurrentStep();
+                                targetTok.nightMark = autoMark;
+                                updateStatusForMark(targetTok, autoMark);
+                                nightActionsLog = nightActionsLog.filter(function(en) {
+                                    return !(en.stepIndex === currentNightStepIndex && en.targetName === targetTok.name);
+                                });
+                                nightActionsLog.push({ stepIndex: currentNightStepIndex, step: step, mark: autoMark, targetName: targetTok.name });
+                                _stepTargeted[currentNightStepIndex] = true;
+                                renderTokens(); saveGameState();
+                            }
+                        }
                         showNightActionToast(actorName + ' ' + actionLabel + ' ' + targetName);
-                        if (targetUid != null) applyNightActionMark(targetUid, entry.actionType);
                     });
                 } catch(e) {}
             }, 2000);
@@ -2368,6 +2806,9 @@
 
         async function syncRoomPlayers() {
             if (!connectedRoomCode) return;
+            // Once the game is running the roster is locked (no new joins). Re-merging here can
+            // drop/recreate online tokens on a transient players response and wipe dealt roles.
+            if (connectedPhase === 'PLAYING') return;
             var roomPlayers;
             try {
                 var res = await fetch('/api/werewolf/rooms/' + connectedRoomCode + '/players');
@@ -2578,7 +3019,8 @@
 
         // === POST-GAME RESET ===
         function clearAllRoles() {
-            players.forEach(function(p) { p.role = 'ไม่ระบุ'; p.status = 'alive'; p.nightMark = null; });
+            players.forEach(function(p) { p.role = 'ไม่ระบุ'; p.status = 'alive'; p.nightMark = null; p.memberUserId = null; p.memberName = null; });
+            _loversUids = [];
             renderTokens(); saveGameState();
             // Reset the session so all player phones return to the standby screen
             if (connectedRoomCode) {

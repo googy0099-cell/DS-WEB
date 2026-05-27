@@ -1,39 +1,28 @@
 "use client";
 
-import { use, useEffect, useState, useRef, useCallback } from "react";
+import { use, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
-import { roleDescriptions } from "@/lib/werewolf-roles";
+import { roleDescriptions, stepToRoles } from "@/lib/werewolf-roles";
 
 const FB_URL = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL ?? "";
 
 interface RoomInfo { code: string; isOpen: boolean; playerCount: number; gmName: string }
 interface AlivePlayer { userId: number; name: string }
 
-// Full per-player state from /me (polled every 3s as Firebase fallback)
+// Secret per-player data from /me. Only role/team/status — everything else is real-time via Firebase.
 interface MyInfo {
-  role: string;
-  team: string;
-  status: string;
-  phase: string;
-  currentStep: string | null;
-  isMyTurn: boolean;
-  canAct: boolean;
-  canVote: boolean;
-  hasActed: boolean;
-  hasVoted: boolean;
-  winTeam: string | null;
-  isWin: boolean | null;
-  alivePlayers: AlivePlayer[];
-  nightNumber: number;
-  dayNumber: number;
+  role: string | null;
+  team: string | null;
+  status: string | null;
 }
 
 // Live game state from Firebase
 interface FbState {
   phase: string;
   currentStep: string | null;
+  timeOfDay?: "intro" | "night" | "day" | "vote" | null;
   nightNumber: number;
   dayNumber: number;
   winTeam: string | null;
@@ -93,27 +82,30 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     if (session?.user?.firstName) setSeatName(session.user.firstName);
   }, [session]);
 
-  // ── Fetch full game state from /me ────────────────────────────────────
+  // ── Fetch secret role/team from /me (only when needed) ────────────────
   const fetchMyInfo = useCallback(() => {
     fetch(`/api/werewolf/sessions/${code}/me`)
       .then((r) => r.json())
-      .then((data) => {
-        if (data.role) setMyInfo(data as MyInfo);
-      })
+      .then((data) => setMyInfo(data as MyInfo))
       .catch(() => {});
   }, [code]);
 
-  // ── Poll /me every 3s — primary source of truth (Firebase is enhancement only) ──
+  // ── Fetch role once on join ───────────────────────────────────────────
   useEffect(() => {
-    if (!joined || !session?.user) return;
-    fetchMyInfo();
-    const id = setInterval(fetchMyInfo, 3000);
-    return () => clearInterval(id);
+    if (joined && session?.user) fetchMyInfo();
   }, [joined, session, fetchMyInfo]);
 
-  // ── Firebase EventSource — speeds up updates when working ───────────
+  // ── Firebase EventSource — real-time source of truth ──────────────────
   useEffect(() => {
     if (!joined || !session?.user || !FB_URL) return;
+
+    // Re-fetch the secret role only when GM deals/re-deals (phase=SETUP) or on a
+    // phase transition. During PLAYING the role never changes, so /me is never hit.
+    function maybeRefetchRole(newPhase: string | undefined) {
+      if (!newPhase) return;
+      if (newPhase === "SETUP" || newPhase !== prevPhaseRef.current) fetchMyInfo();
+      prevPhaseRef.current = newPhase;
+    }
 
     function connect() {
       if (esRef.current) esRef.current.close();
@@ -123,7 +115,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
       function applyPut(raw: string) {
         try {
           const { data } = JSON.parse(raw) as { path: string; data: FbState | null };
-          if (data) { setFb(data); fetchMyInfo(); }
+          if (data) { setFb(data); maybeRefetchRole(data.phase); }
         } catch {}
       }
 
@@ -131,7 +123,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
         try {
           const { data } = JSON.parse(raw) as { path: string; data: Partial<FbState> };
           setFb((prev) => (prev ? { ...prev, ...data } : null));
-          fetchMyInfo();
+          if (data.phase !== undefined) maybeRefetchRole(data.phase);
         } catch {}
       }
 
@@ -144,23 +136,31 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     return () => { esRef.current?.close(); esRef.current = null; };
   }, [joined, session, code, fetchMyInfo]);
 
-  // Reset target/action message when night or day number changes
+  // Reset target/action message when night or day number changes (from Firebase).
+  // Also re-fetch role: a night may change it (Cursed → wolf, Doppelganger swap, etc.).
   useEffect(() => {
-    if (!myInfo) return;
-    if (myInfo.nightNumber !== prevNightRef.current || myInfo.dayNumber !== prevDayRef.current) {
+    if (!fb) return;
+    if (fb.nightNumber !== prevNightRef.current || fb.dayNumber !== prevDayRef.current) {
       setSelectedTarget(null);
       setActionMsg("");
       setVoteDecisionSent(false);
-      prevNightRef.current = myInfo.nightNumber;
-      prevDayRef.current = myInfo.dayNumber;
+      prevNightRef.current = fb.nightNumber;
+      prevDayRef.current = fb.dayNumber;
+      fetchMyInfo();
     }
-  }, [myInfo]);
+  }, [fb?.nightNumber, fb?.dayNumber, fb, fetchMyInfo]);
 
   // Reset voteDecisionSent when step leaves vote-decision phase
   useEffect(() => {
-    const step = fb?.currentStep ?? myInfo?.currentStep ?? null;
-    if (!step?.includes("❓")) setVoteDecisionSent(false);
-  }, [fb?.currentStep, myInfo?.currentStep]);
+    if (!fb?.currentStep?.includes("❓")) setVoteDecisionSent(false);
+  }, [fb?.currentStep]);
+
+  // Clear any stale selection/message whenever the step changes, so a new night/role call
+  // (e.g. night 2) always starts with a fresh target picker instead of last night's state (#9).
+  useEffect(() => {
+    setSelectedTarget(null);
+    setActionMsg("");
+  }, [fb?.currentStep]);
 
   // ── Join ─────────────────────────────────────────────────────────────
   async function handleJoin(e: React.FormEvent) {
@@ -230,44 +230,76 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
     });
   }
 
-  // ── Derived state — prefer myInfo (polled) over Firebase ─────────────
+  // ── Derived state — Firebase is the real-time source; /me supplies secret role/team ──
   const myUserId = session?.user?.id ? Number(session.user.id) : null;
   const myUidStr = myUserId ? String(myUserId) : null;
 
-  // Use Firebase when available (faster), fall back to /me poll data
-  const phase       = fb?.phase       ?? myInfo?.phase       ?? "SETUP";
-  const currentStep = fb?.currentStep ?? myInfo?.currentStep ?? null;
-  const winTeam     = fb?.winTeam     ?? myInfo?.winTeam     ?? null;
+  const role = myInfo?.role ?? null;
+  const team = myInfo?.team ?? null;
+
+  const phase       = fb?.phase       ?? "SETUP";
+  const currentStep = fb?.currentStep ?? null;
+  const winTeam     = fb?.winTeam     ?? null;
   const myStatus    = myUidStr ? (fb?.players[myUidStr]?.status ?? myInfo?.status ?? "alive") : "alive";
-  const hasActed    = myUidStr ? (fb?.players[myUidStr]?.hasActed ?? myInfo?.hasActed ?? false) : false;
-  const hasVoted    = myUidStr ? (fb?.players[myUidStr]?.hasVoted ?? myInfo?.hasVoted ?? false) : false;
+  const hasActed    = myUidStr ? (fb?.players[myUidStr]?.hasActed ?? false) : false;
+  const hasVoted    = myUidStr ? (fb?.players[myUidStr]?.hasVoted ?? false) : false;
   const isDead      = myStatus === "dead";
 
-  const canAct = myInfo?.canAct ?? false;
-  const canVote = myInfo?.canVote ?? false;
-  const isWin  = myInfo?.isWin  ?? null;
+  // isMyTurn computed client-side from the live step + cached role (stepToRoles is pure data)
+  const isMyTurn = useMemo(() => {
+    if (phase !== "PLAYING" || !currentStep || !role || isDead) return false;
+    for (const [stepKey, roles] of Object.entries(stepToRoles)) {
+      if (currentStep.includes(stepKey) || roles.some((r) => currentStep.includes(r.split(" (")[0]))) {
+        if (roles.includes(role)) return true;
+      }
+    }
+    return false;
+  }, [phase, currentStep, role, isDead]);
+
+  // Time of day: prefer the explicit flag from the canvas; fall back to step text.
+  const timeOfDay: "intro" | "night" | "day" | "vote" =
+    fb?.timeOfDay ??
+    (currentStep?.startsWith("☀️") ? "day"
+      : currentStep?.includes("🗳️") ? "vote"
+      : currentStep?.includes("แนะนำตัว") ? "intro"
+      : "night");
+
+  // GM-manual mode: the GM controls and records everything on the canvas. Player phones are a
+  // passive view (role + alive/dead + flow status) with no action/vote buttons. Flip to false to
+  // re-enable phone-driven actions/voting.
+  const GM_MANUAL_MODE = true;
+
+  const isVotingPhase = currentStep?.includes("🗳️") ?? false;
+  const canAct  = !GM_MANUAL_MODE && isMyTurn && !hasActed && !isDead;
+  const canVote = !GM_MANUAL_MODE && isVotingPhase && !hasVoted && !isDead;
+  const isWin   = phase === "ENDED" && winTeam && team ? team === winTeam : null;
   const announcement = fb?.announcement ?? null;
   const voteDecision = fb?.voteDecision ?? null;
   const isVoteDecisionPhase = currentStep?.includes("❓") ?? false;
   const myVoteDecisionCast = myUidStr ? (voteDecision?.voters?.[myUidStr] !== undefined) : false;
 
-  // Alive players: Firebase preferred (has names), fall back to /me data.
-  // Always exclude self so the voting / action list never shows the player themselves.
+  // Alive players from Firebase (has names). Exclude self so the list never shows the player.
   const alivePlayers: AlivePlayer[] = fb
     ? Object.entries(fb.players)
         .filter(([uid, p]) => p.status !== "dead" && uid !== myUidStr)
         .map(([uid]) => ({ userId: Number(uid), name: fb.playerNames[uid] ?? `User ${uid}` }))
-    : (myInfo?.alivePlayers ?? []).filter((p) => p.userId !== myUserId);
-
-  const role = myInfo?.role ?? null;
-  const team = myInfo?.team ?? null;
+    : [];
   const teamStyle = TEAM_STYLES[team ?? "village"] ?? TEAM_STYLES.village;
   const thaiRole = role?.split(" (")[0] ?? "";
   const engRole  = role?.match(/\(([^)]+)\)/)?.[1] ?? "";
+  const myName   = (myUidStr && fb?.playerNames?.[myUidStr]) || seatName || session?.user?.firstName || "";
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex flex-col items-center justify-center p-6">
+
+      {/* Own name chip — always visible while joined so each player sees who they are */}
+      {joined && myName && (
+        <div className="fixed top-3 left-3 z-50 bg-gray-800/90 border border-gray-600 rounded-full px-3 py-1.5 shadow-lg">
+          <span className="text-[10px] text-gray-400">คุณคือ </span>
+          <span className="text-sm font-bold text-yellow-400">{myName}</span>
+        </div>
+      )}
 
       {/* Role card — bottom center (tap to hide/show) */}
       {joined && role && (
@@ -434,7 +466,7 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
               )}
               <p className="text-gray-500 text-sm">เกมจบแล้ว ขอบคุณที่เล่น!</p>
             </div>
-          ) : isDead ? null : isVoteDecisionPhase && !isDead ? (
+          ) : isDead ? null : isVoteDecisionPhase && !isDead && !GM_MANUAL_MODE ? (
             /* ── Vote Decision (YES/NO on execution) ── */
             <div className="text-center">
               <p className="text-5xl mb-3">🗳️</p>
@@ -529,10 +561,12 @@ export default function JoinRoomPage({ params }: { params: Promise<{ code: strin
                 </>
               )}
             </div>
-          ) : currentStep?.startsWith("☀️") ? (
+          ) : timeOfDay === "day" ? (
             <div><p className="text-5xl mb-4">☀️</p><h2 className="text-white text-xl font-bold">กลางวัน</h2><p className="text-gray-400 text-sm mt-2">อภิปรายกัน!</p></div>
-          ) : currentStep?.includes("🗳️") ? (
-            <div><p className="text-5xl mb-4">✅</p><h2 className="text-white text-xl font-bold mb-2">โหวตแล้ว</h2><p className="text-gray-400 text-sm">รอผลการโหวต...</p></div>
+          ) : timeOfDay === "vote" ? (
+            <div><p className="text-5xl mb-4">🗳️</p><h2 className="text-white text-xl font-bold mb-2">ช่วงโหวต</h2><p className="text-gray-400 text-sm">โหวตตามที่ GM กำหนด</p></div>
+          ) : timeOfDay === "intro" ? (
+            <div><p className="text-5xl mb-4">📣</p><h2 className="text-white text-xl font-bold">เริ่มเกม</h2><p className="text-gray-400 text-sm mt-2">รอ GM แนะนำตัว...</p></div>
           ) : (
             <div><p className="text-5xl mb-4">🌙</p><h2 className="text-white text-xl font-bold">หลับตา...</h2><p className="text-gray-500 text-sm mt-2">รอให้ GM เรียกบทบาทของคุณ</p></div>
           )}

@@ -14,7 +14,10 @@ export async function POST(
 
   if (!seatName?.trim()) return NextResponse.json({ error: "กรุณาใส่ชื่อที่นั่ง" }, { status: 400 });
 
-  const room = await db.werewolfRoom.findUnique({ where: { code } });
+  const room = await db.werewolfRoom.findUnique({
+    where: { code },
+    include: { session: { select: { phase: true } } },
+  });
   if (!room) return NextResponse.json({ error: "ไม่พบห้องนี้" }, { status: 404 });
   if (!room.isOpen) return NextResponse.json({ error: "ห้องนี้ปิดแล้ว" }, { status: 400 });
 
@@ -22,6 +25,11 @@ export async function POST(
     where: { roomId_userId: { roomId: room.id, userId: Number(session.user.id) } },
   });
   if (existing) return NextResponse.json({ error: "คุณ join ห้องนี้แล้ว", alreadyJoined: true }, { status: 409 });
+
+  // Game in progress → the room is locked to new players; only the GM controls the game.
+  if (room.session && room.session.phase !== "ENDED") {
+    return NextResponse.json({ error: "เกมกำลังดำเนินอยู่ — ไม่สามารถเข้าร่วมเป็นผู้เล่นได้" }, { status: 403 });
+  }
 
   const player = await db.werewolfRoomPlayer.create({
     data: { roomId: room.id, userId: Number(session.user.id), seatName: seatName.trim() },

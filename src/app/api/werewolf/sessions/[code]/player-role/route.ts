@@ -14,7 +14,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
   const { code } = await params;
   if (!(await requireGM())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { userId, role } = await req.json() as { userId: number; role: string };
+  const { userId, role, status } = await req.json() as { userId: number; role: string; status?: string };
   if (!userId || typeof role !== "string") {
     return NextResponse.json({ error: "ต้องระบุ userId และ role" }, { status: 400 });
   }
@@ -25,12 +25,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ co
   const team = getTeam(role);
   await db.werewolfSessionPlayer.updateMany({
     where: { sessionId: room.session.id, userId },
-    data: { role, team },
+    data: { role, team, ...(typeof status === "string" ? { status } : {}) },
   });
 
-  // Touch Firebase so the affected player's listener re-fetches /me immediately.
-  // (Roles are private — they flow via /me, not the shared Firebase node.)
-  await patchWerewolfFb(code, { rolesUpdatedAt: Date.now() } as never);
+  // Touch Firebase so the affected player's listener re-fetches /me immediately, and push the
+  // status onto the shared node so the player's phone reflects a GM-marked death right away.
+  const fbPatch: Record<string, unknown> = { rolesUpdatedAt: Date.now() };
+  if (typeof status === "string") fbPatch[`players/${userId}/status`] = status;
+  await patchWerewolfFb(code, fbPatch as never);
 
   return NextResponse.json({ ok: true });
 }

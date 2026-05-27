@@ -29,12 +29,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ cod
     data: { currentStep: "🗳️ โหวต", dayNumber: newDay },
   });
 
+  // Vampire (แวมไพร์): victims bitten last night die now that the vote opens.
+  const vampVictims = s.playerRoles.filter((p) => p.status === "vamp_marked");
+  if (vampVictims.length) {
+    await db.werewolfSessionPlayer.updateMany({
+      where: { sessionId: s.id, userId: { in: vampVictims.map((v) => v.userId) } },
+      data: { status: "dead" },
+    });
+  }
+
+  const freshPlayers = await db.werewolfSessionPlayer.findMany({ where: { sessionId: s.id } });
   // Reset hasVoted + voteCount for new round; use flat paths to preserve offline player entries
   const fbPlayers: Record<string, { status: string; hasActed: boolean; hasVoted: boolean; voteCount: number }> = {};
-  for (const sp of s.playerRoles) {
+  for (const sp of freshPlayers) {
     fbPlayers[String(sp.userId)] = { status: sp.status, hasActed: false, hasVoted: false, voteCount: 0 };
   }
-  await patchWerewolfFb(code, { currentStep: "🗳️ โหวต", dayNumber: newDay });
+  await patchWerewolfFb(code, { currentStep: "🗳️ โหวต", timeOfDay: "vote", dayNumber: newDay } as never);
   await patchWerewolfPlayersFb(code, fbPlayers);
 
   return NextResponse.json({ ok: true, dayNumber: newDay });
