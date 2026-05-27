@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/payment", label: "ยืนยันชำระ", icon: "💳" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
+  { href: "/admin/pos", label: "POS โต๊ะ", icon: "🍹" },
 ];
 
 const OWNER_NAV = [

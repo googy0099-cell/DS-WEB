@@ -38,10 +38,25 @@ model User {
 }
 
 model Table {
-  id         Int     @id @default(autoincrement())
-  number     Int     @unique
-  isOccupied Boolean @default(false)
-  orders     Order[]
+  id             Int             @id @default(autoincrement())
+  number         Int             @unique
+  isOccupied     Boolean         @default(false)
+  orders         Order[]
+  playerSessions PlayerSession[]
+}
+
+model PlayerSession {
+  id            Int      @id @default(autoincrement())
+  tableId       Int
+  table         Table    @relation(fields: [tableId], references: [id])
+  nickname      String
+  packageType   String
+  packagePrice  Int      @default(0)
+  timeRemaining Int
+  status        String   @default("ACTIVE")
+  orders        Order[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model MenuItem {
@@ -125,21 +140,23 @@ model MenuItemOptionGroup {
 }
 
 model Order {
-  id          Int         @id @default(autoincrement())
-  orderName   String      @default("")
-  userId      Int?
-  user        User?       @relation("CustomerOrders", fields: [userId], references: [id])
-  handledById Int?
-  handledBy   User?       @relation("StaffOrders", fields: [handledById], references: [id])
-  tableId     Int?
-  table       Table?      @relation(fields: [tableId], references: [id])
-  status      String      @default("PENDING")
-  totalTHB    Int
-  note        String?
-  items       OrderItem[]
-  payment     Payment?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id              Int            @id @default(autoincrement())
+  orderName       String         @default("")
+  userId          Int?
+  user            User?          @relation("CustomerOrders", fields: [userId], references: [id])
+  handledById     Int?
+  handledBy       User?          @relation("StaffOrders", fields: [handledById], references: [id])
+  tableId         Int?
+  table           Table?         @relation(fields: [tableId], references: [id])
+  playerSessionId Int?
+  playerSession   PlayerSession? @relation(fields: [playerSessionId], references: [id])
+  status          String         @default("PENDING")
+  totalTHB        Int
+  note            String?
+  items           OrderItem[]
+  payment         Payment?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 }
 
 model OrderItem {
