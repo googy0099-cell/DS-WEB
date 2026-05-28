@@ -74,41 +74,42 @@ export default function WerewolfSection() {
               return (
                 <div
                   key={entry.userId}
-                  className={`shrink-0 w-44 rounded-2xl border bg-white/5 backdrop-blur-sm flex flex-col items-center overflow-hidden pb-4 ${MEDAL_STYLES[i].border} ${MEDAL_STYLES[i].glow}`}
+                  className={`shrink-0 w-44 rounded-2xl border overflow-hidden flex flex-col ${MEDAL_STYLES[i].border} ${MEDAL_STYLES[i].glow}`}
                 >
-                  {/* Avatar */}
-                  <div className="mt-5 mb-3">
+                  {/* Avatar — full bleed */}
+                  <div className="relative w-full aspect-square bg-white/5">
                     {av ? (
                       <Image
                         src={av}
                         alt={entry.name}
-                        width={64}
-                        height={64}
-                        className="rounded-full object-cover w-16 h-16 border-2 border-white/20"
+                        fill
+                        className="object-cover"
                       />
                     ) : (
-                      <div className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-2xl border-2 border-white/20">
+                      <div className="w-full h-full flex items-center justify-center text-orange font-bold text-5xl bg-orange/10">
                         {entry.name[0]?.toUpperCase()}
                       </div>
                     )}
                   </div>
 
-                  {/* Medal + Name on same row */}
-                  <div className="flex items-center gap-1.5 px-3 mb-2">
-                    <span className="text-xl shrink-0">{MEDALS[i]}</span>
-                    <p className="font-bold text-white text-sm leading-tight truncate">
-                      {entry.name}
-                    </p>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="flex gap-1 flex-wrap justify-center px-2">
-                    <span className="text-xs bg-white/10 text-white/70 px-2 py-0.5 rounded-full">
-                      {entry.total} เกม
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${MEDAL_STYLES[i].badge}`}>
-                      {entry.winRate}% win
-                    </span>
+                  {/* Info bar */}
+                  <div className="bg-black/60 backdrop-blur-sm px-3 py-2.5 flex flex-col gap-1.5">
+                    {/* Medal + Name */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg shrink-0">{MEDALS[i]}</span>
+                      <p className="font-bold text-white text-sm leading-tight truncate">
+                        {entry.name}
+                      </p>
+                    </div>
+                    {/* Stats */}
+                    <div className="flex gap-1 flex-wrap">
+                      <span className="text-xs bg-white/10 text-white/70 px-2 py-0.5 rounded-full">
+                        {entry.total} เกม
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${MEDAL_STYLES[i].badge}`}>
+                        {entry.winRate}% win
+                      </span>
+                    </div>
                   </div>
                 </div>
               );
