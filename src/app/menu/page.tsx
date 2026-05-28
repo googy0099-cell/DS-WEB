@@ -24,30 +24,29 @@ const DRINK_CATS = ["#milktea", "#coffee", "#soda"];
 
 const GAME_PACKAGES = [
   {
-    emoji: "⏱️",
     title: "2 ชั่วโมง",
     price: "49",
-    desc: "เล่นได้ 2 ชม. ไม่รวมเครื่องดื่ม",
+    desc: "จ่าย 1 ได้อีก 1 *ไม่รวมเครื่องดื่ม",
     tag: "ยอดนิยม",
     tagColor: "bg-orange text-white",
     gradient: "from-orange/10 to-amber-50",
     border: "border-orange/30",
   },
   {
-    emoji: "🥤",
-    title: "1 ชั่วโมงฟรี",
+
+    title: "ซื้อเครื่องดื่ม 1 แก้ว",
     price: "0",
-    desc: "สั่งเครื่องดื่ม 1 แก้ว ได้เล่นฟรี 1 ชม.",
-    tag: "ฟรี!",
+    desc: "เฉพาะเครื่องดื่มที่ร่วมรายการเท่านั้น",
+    tag: "ฟรี 1 ชั่วโมง!",
     tagColor: "bg-green-500 text-white",
     gradient: "from-green-50 to-emerald-50",
     border: "border-green-300",
   },
   {
-    emoji: "🌟",
-    title: "เล่นทั้งวัน",
+
+    title: "เล่นทั้งวัน + น้ำ size xl ฟรี",
     price: "120",
-    desc: "ไม่จำกัดเวลา + ฟรีเครื่องดื่ม 1 แก้ว",
+    desc: "เฉพาะเครื่องดื่มที่ร่วมรายการเท่านั้น",
     tag: "เหมาวัน",
     tagColor: "bg-purple-500 text-white",
     gradient: "from-purple-50 to-indigo-50",
@@ -207,10 +206,9 @@ export default function MenuPage() {
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {GAME_PACKAGES.map((pkg) => (
-                <a
+                <div
                   key={pkg.title}
-                  href={DRINK_CATS[GAME_PACKAGES.indexOf(pkg) % DRINK_CATS.length]}
-                  className={`block bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5 hover:scale-[1.02] transition-transform`}
+                  className={`bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5`}
                 >
                   <div className="flex items-start justify-between mb-3">
                     <span className="text-3xl">{pkg.emoji}</span>
@@ -221,14 +219,14 @@ export default function MenuPage() {
                     {pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}
                   </p>
                   <p className="text-gray-500 text-xs mt-2 leading-snug">{pkg.desc}</p>
-                  <p className="text-orange text-xs font-semibold mt-3">
-                    ดูเมนูเครื่องดื่ม →
-                  </p>
-                </a>
+                </div>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mt-3 text-center">
-              * เครื่องดื่มที่นับเวลา: Coffee · Milk &amp; Tea · Soda Zaa
+            <p className="text-xs text-gray-400 mt-5 text-center">
+              * ประเภทเครื่องดื่มที่ร่วมรายการ: Coffee · Milk &amp; Tea · Soda Zaa
+            </p>
+            <p className="text-xl text-Black font-bold text-center mt-3 text-center">
+              * หากต้องการต่อเวลาโปรดเรียกพนักงานได้เลยค่ะ
             </p>
           </section>
 
