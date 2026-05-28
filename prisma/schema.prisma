@@ -23,6 +23,7 @@ model User {
   avatarUrl     String?
   visitCount    Int        @default(0)
   points        Int        @default(0)
+  dicePoints    Int        @default(0)
   playMinutes   Int        @default(0)
   totalSpentTHB Int        @default(0)
   role          String     @default("USER")

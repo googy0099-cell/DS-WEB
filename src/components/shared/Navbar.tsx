@@ -67,14 +67,14 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Mobile center: member code + username (logged in customers only) */}
+        {/* Mobile center: member code + username — tap to go to profile */}
         {session?.user && (
-          <div className="flex-1 flex lg:hidden justify-center px-2 min-w-0">
+          <Link href="/profile" className="flex-1 flex lg:hidden justify-center px-2 min-w-0">
             <div className="text-center leading-tight">
               <p className={`font-bold text-sm tracking-widest ${scrolled ? "text-white" : "text-orange"}`}>{session.user.memberCode}</p>
               <p className={`text-xs truncate ${scrolled ? "text-white/80" : "text-cream/60"}`}>@{session.user.username}</p>
             </div>
-          </div>
+          </Link>
         )}
 
         {/* Right side */}
@@ -96,7 +96,7 @@ export default function Navbar() {
                   <Link
                     href="/profile"
                     onClick={() => setUserDropOpen(false)}
-                    className="block px-4 py-3 text-sm text-navy hover:bg-sand"
+                    className="hidden lg:block px-4 py-3 text-sm text-navy hover:bg-sand"
                   >
                     👤 โปรไฟล์ ({session.user.memberCode})
                   </Link>
@@ -155,9 +155,6 @@ export default function Navbar() {
           ))}
           {session?.user ? (
             <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
-              <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-3 text-cream/80 text-base font-medium">
-                👤 โปรไฟล์ ({session.user.memberCode})
-              </Link>
               <button onClick={() => signOut({ callbackUrl: "/" })} className="text-red-400 text-base font-medium py-3">
                 ออกจากระบบ
               </button>

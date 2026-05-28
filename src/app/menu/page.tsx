@@ -72,7 +72,7 @@ export default function MenuPage() {
       .catch(() => setLoading(false));
   }, []);
 
-  const availableItems = items.filter((i) => i.isAvailable);
+  const availableItems = items.filter((i) => i.isAvailable && i.category !== "gametime");
 
   function openPicker(item: MenuItemType) {
     setPickerItem(item);
@@ -185,7 +185,7 @@ export default function MenuPage() {
 
         <div className="sticky top-16 z-10 bg-cream border-b border-sand flex overflow-x-auto no-scrollbar">
           {CATEGORIES.filter(
-            (cat) => cat.id === "gametime" || loading || availableItems.some((i) => i.category === cat.id)
+            (cat) => cat.id !== "gametime" && (loading || availableItems.some((i) => i.category === cat.id))
           ).map((cat) => (
             <a
               key={cat.id}

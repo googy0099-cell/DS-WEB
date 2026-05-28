@@ -30,12 +30,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Credit played time (purchased - remaining) to linked member
     if (session.userId && body.status === "PAID") {
       const usedSeconds = session.timeRemaining - current;
-      if (usedSeconds > 0) {
-        await db.user.update({
-          where: { id: session.userId },
-          data: { playMinutes: { increment: Math.round(usedSeconds / 60) } },
-        });
-      }
+      const diceEarned = Math.floor(session.packagePrice / 49);
+      await db.user.update({
+        where: { id: session.userId },
+        data: {
+          ...(usedSeconds > 0 ? { playMinutes: { increment: Math.round(usedSeconds / 60) } } : {}),
+          ...(diceEarned > 0 ? { dicePoints: { increment: diceEarned } } : {}),
+        },
+      });
     }
 
     // Free table if no other active session/bill on it
