@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 interface RankEntry {
@@ -9,6 +10,14 @@ interface RankEntry {
   total: number;
   wins: number;
   winRate: number;
+  avatarUrl: string | null;
+  googleId: string | null;
+}
+
+function entryAvatar(e: RankEntry) {
+  if (e.avatarUrl) return e.avatarUrl;
+  if (e.googleId) return `https://lh3.googleusercontent.com/a/${e.googleId}=s96-c`;
+  return null;
 }
 
 const MEDALS = ["🥇", "🥈", "🥉"];
@@ -60,19 +69,40 @@ export default function WerewolfSection() {
               <p className="text-white/40 text-sm">ยังไม่มีข้อมูลการเล่น — มาเป็นคนแรกกัน!</p>
             </div>
           ) : (
-            top3.map((entry, i) => (
-              <div
-                key={entry.userId}
-                className={`shrink-0 w-44 rounded-2xl border bg-white/5 backdrop-blur-sm flex flex-col overflow-hidden ${MEDAL_STYLES[i].border} ${MEDAL_STYLES[i].glow}`}
-              >
-                <div className="flex items-center justify-center py-6 text-5xl">
-                  {MEDALS[i]}
-                </div>
-                <div className="px-3 pb-4 flex flex-col gap-2">
-                  <p className="font-bold text-white text-sm leading-tight truncate text-center">
-                    {entry.name}
-                  </p>
-                  <div className="flex gap-1 flex-wrap justify-center">
+            top3.map((entry, i) => {
+              const av = entryAvatar(entry);
+              return (
+                <div
+                  key={entry.userId}
+                  className={`shrink-0 w-44 rounded-2xl border bg-white/5 backdrop-blur-sm flex flex-col items-center overflow-hidden pb-4 ${MEDAL_STYLES[i].border} ${MEDAL_STYLES[i].glow}`}
+                >
+                  {/* Avatar */}
+                  <div className="mt-5 mb-3">
+                    {av ? (
+                      <Image
+                        src={av}
+                        alt={entry.name}
+                        width={64}
+                        height={64}
+                        className="rounded-full object-cover w-16 h-16 border-2 border-white/20"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-2xl border-2 border-white/20">
+                        {entry.name[0]?.toUpperCase()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Medal + Name on same row */}
+                  <div className="flex items-center gap-1.5 px-3 mb-2">
+                    <span className="text-xl shrink-0">{MEDALS[i]}</span>
+                    <p className="font-bold text-white text-sm leading-tight truncate">
+                      {entry.name}
+                    </p>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="flex gap-1 flex-wrap justify-center px-2">
                     <span className="text-xs bg-white/10 text-white/70 px-2 py-0.5 rounded-full">
                       {entry.total} เกม
                     </span>
@@ -81,8 +111,8 @@ export default function WerewolfSection() {
                     </span>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
