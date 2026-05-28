@@ -20,7 +20,6 @@ const CATEGORIES = [
   { id: "dessert", label: "ของหวาน", icon: "🍮" },
 ];
 
-const DRINK_CATS = ["#milktea", "#coffee", "#soda"];
 
 const GAME_PACKAGES = [
   {
@@ -211,7 +210,6 @@ export default function MenuPage() {
                   className={`bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5`}
                 >
                   <div className="flex items-start justify-between mb-3">
-                    <span className="text-3xl">{pkg.emoji}</span>
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pkg.tagColor}`}>{pkg.tag}</span>
                   </div>
                   <p className="font-bold text-navy text-lg leading-tight">{pkg.title}</p>
