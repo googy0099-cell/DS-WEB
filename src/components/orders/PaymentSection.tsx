@@ -23,6 +23,8 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [config, setConfig] = useState<PaymentConfig | null>(null);
+  const [dynamicQr, setDynamicQr] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,6 +33,24 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
       .then(setConfig)
       .catch(() => {});
   }, []);
+
+  async function openQR() {
+    setStep("qr");
+    if (dynamicQr) return;
+    setQrLoading(true);
+    try {
+      const res = await fetch("/api/payment/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDynamicQr(data.qrDataUrl);
+      }
+    } catch {}
+    setQrLoading(false);
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -77,7 +97,7 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
       <div className="space-y-3">
         <p className="text-sm font-semibold text-navy text-center mb-1">เลือกวิธีชำระเงิน</p>
         <button
-          onClick={() => setStep("qr")}
+          onClick={openQR}
           className="w-full flex items-center gap-4 bg-blue-50 border-2 border-blue-200 hover:border-blue-400 rounded-2xl p-4 transition-all text-left"
         >
           <div className="w-12 h-12 rounded-xl bg-blue-100 flex items-center justify-center text-2xl shrink-0">
@@ -114,46 +134,51 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
         <div className="text-center mb-4">
           <p className="text-sm text-gray-500 mb-1">สแกนเพื่อชำระ</p>
           <p className="text-2xl font-bold text-orange mb-4">฿{totalTHB}</p>
-          {(config?.qrImageUrl ?? "/promptpay-qr.png") && (
-            <div className="w-56 h-56 mx-auto rounded-2xl overflow-hidden shadow-md bg-white flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={config?.qrImageUrl ?? "/promptpay-qr.png"}
-                alt="PromptPay QR"
-                className="w-full h-full object-contain"
-              />
-            </div>
-          )}
+
+          <div className="w-56 h-56 mx-auto rounded-2xl overflow-hidden shadow-md bg-white flex items-center justify-center">
+            {qrLoading ? (
+              <p className="text-sm text-gray-400">กำลังโหลด QR...</p>
+            ) : dynamicQr ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={dynamicQr} alt="PromptPay QR" className="w-full h-full object-contain" />
+            ) : config?.qrImageUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={config.qrImageUrl} alt="PromptPay QR" className="w-full h-full object-contain" />
+            ) : null}
+          </div>
+
           <p className="text-sm font-semibold text-navy mt-3">
             {config?.accountName ?? "นาย ธนวุฒิ พุ่มมาก"}
           </p>
           <p className="text-xs text-gray-400">{config?.bankName ?? "TTB PromptPay"}</p>
-          <button
-            onClick={async () => {
-              const url = config?.qrImageUrl ?? "/promptpay-qr.png";
-              try {
-                const res = await fetch(url);
-                const blob = await res.blob();
-                const file = new File([blob], "promptpay-qr.png", { type: blob.type || "image/png" });
-                if (navigator.canShare?.({ files: [file] })) {
-                  await navigator.share({ files: [file], title: "QR PromptPay Dice Shop" });
-                  return;
-                }
-              } catch {}
-              // fallback blob download
-              try {
-                const res = await fetch(url);
-                const blob = await res.blob();
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = "promptpay-qr.png";
-                a.click();
-              } catch {}
-            }}
-            className="inline-flex items-center gap-1.5 mt-3 text-xs text-orange font-semibold border border-orange/30 bg-orange/5 px-3 py-1.5 rounded-full hover:bg-orange/15 transition-colors"
-          >
-            ⬇ บันทึก QR ลงเครื่อง
-          </button>
+
+          {(dynamicQr || config?.qrImageUrl) && (
+            <button
+              onClick={async () => {
+                const url = dynamicQr ?? config?.qrImageUrl ?? "";
+                try {
+                  const res = await fetch(url);
+                  const blob = await res.blob();
+                  const file = new File([blob], "promptpay-qr.png", { type: blob.type || "image/png" });
+                  if (navigator.canShare?.({ files: [file] })) {
+                    await navigator.share({ files: [file], title: "QR PromptPay Dice Shop" });
+                    return;
+                  }
+                } catch {}
+                try {
+                  const res = await fetch(url);
+                  const blob = await res.blob();
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = "promptpay-qr.png";
+                  a.click();
+                } catch {}
+              }}
+              className="inline-flex items-center gap-1.5 mt-3 text-xs text-orange font-semibold border border-orange/30 bg-orange/5 px-3 py-1.5 rounded-full hover:bg-orange/15 transition-colors"
+            >
+              ⬇ บันทึก QR ลงเครื่อง
+            </button>
+          )}
         </div>
 
         <div className="border-t border-sand pt-4">
