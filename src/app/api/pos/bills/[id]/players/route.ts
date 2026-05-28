@@ -22,6 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const existingCount = await db.playerSession.count({ where: { billId } });
 
   let total = 0;
+  const createdSessions: { id: number; nickname: string }[] = [];
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
     const pkg = PACKAGES[p.packageType];
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const price = pkg.price * qty + drinkCharge;
     const timeSeconds = pkg.timeSeconds * qty;
 
-    await db.playerSession.create({
+    const created = await db.playerSession.create({
       data: {
         tableId: bill.tableId,
         billId,
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         userId,
       },
     });
+    createdSessions.push({ id: created.id, nickname });
     total += price;
   }
 
@@ -71,6 +73,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     : (config?.qrImageUrl ?? null);
   return NextResponse.json({
     totalTHB: total,
+    sessions: createdSessions,
     qrDataUrl,
     accountName: config?.accountName ?? "",
     bankName: config?.bankName ?? "",

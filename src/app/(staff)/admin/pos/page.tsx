@@ -29,6 +29,7 @@ type DrinkItem = MenuItemType;
 type ExtraItem = {
   menuItemId: number; nameTh: string; priceTHB: number; qty: number;
   selectedSize: string | null; selectedAddons: CartSelectedAddon[]; selectedOptions: CartSelectedOption[];
+  assignedPlayerIdx: number | null;
 };
 
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
@@ -272,25 +273,49 @@ function ItemDetailPicker({ item, onClose, onConfirm, confirmLabel }: {
 }
 
 // ---- Extra Items List ----
-function ExtraItemsList({ items, onChange }: { items: ExtraItem[]; onChange: (items: ExtraItem[]) => void }) {
+function ExtraItemsList({ items, onChange, players }: {
+  items: ExtraItem[];
+  onChange: (items: ExtraItem[]) => void;
+  players: { nameOrCode: string; pkg: string }[];
+}) {
   if (items.length === 0) return null;
+  const playerLabels = players.map((p, i) => p.nameOrCode.trim() || `P${i + 1}`);
   return (
     <div className="space-y-2 mt-2">
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2 bg-orange/5 border border-orange/20 rounded-xl px-3 py-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-navy truncate">{item.nameTh}</p>
-            <p className="text-[10px] text-gray-400">฿{item.priceTHB} × {item.qty} = ฿{item.priceTHB * item.qty}</p>
+        <div key={i} className="bg-orange/5 border border-orange/20 rounded-xl px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-navy truncate">{item.nameTh}</p>
+              <p className="text-[10px] text-gray-400">฿{item.priceTHB} × {item.qty} = ฿{item.priceTHB * item.qty}</p>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button type="button" onClick={() => onChange(items.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}
+                className="w-6 h-6 rounded-full bg-sand text-navy font-bold text-sm flex items-center justify-center">−</button>
+              <span className="text-xs font-bold text-navy w-4 text-center">{item.qty}</span>
+              <button type="button" onClick={() => onChange(items.map((x, j) => j === i ? { ...x, qty: x.qty + 1 } : x))}
+                className="w-6 h-6 rounded-full bg-sand text-navy font-bold text-sm flex items-center justify-center">+</button>
+              <button type="button" onClick={() => onChange(items.filter((_, j) => j !== i))}
+                className="w-6 h-6 rounded-full bg-red-100 text-red-500 font-bold text-sm flex items-center justify-center ml-1">×</button>
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <button type="button" onClick={() => onChange(items.map((x, j) => j === i ? { ...x, qty: Math.max(1, x.qty - 1) } : x))}
-              className="w-6 h-6 rounded-full bg-sand text-navy font-bold text-sm flex items-center justify-center">−</button>
-            <span className="text-xs font-bold text-navy w-4 text-center">{item.qty}</span>
-            <button type="button" onClick={() => onChange(items.map((x, j) => j === i ? { ...x, qty: x.qty + 1 } : x))}
-              className="w-6 h-6 rounded-full bg-sand text-navy font-bold text-sm flex items-center justify-center">+</button>
-            <button type="button" onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="w-6 h-6 rounded-full bg-red-100 text-red-500 font-bold text-sm flex items-center justify-center ml-1">×</button>
-          </div>
+          {players.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              <span className="text-[10px] text-gray-400 shrink-0">🎲 แต้มให้:</span>
+              <button type="button"
+                onClick={() => onChange(items.map((x, j) => j === i ? { ...x, assignedPlayerIdx: null } : x))}
+                className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${item.assignedPlayerIdx === null ? "bg-gray-200 border-gray-400 text-gray-700 font-bold" : "border-gray-200 text-gray-400 hover:border-gray-400"}`}>
+                ไม่มี
+              </button>
+              {playerLabels.map((label, pi) => (
+                <button key={pi} type="button"
+                  onClick={() => onChange(items.map((x, j) => j === i ? { ...x, assignedPlayerIdx: pi } : x))}
+                  className={`text-[10px] px-2 py-0.5 rounded-full border transition-all ${item.assignedPlayerIdx === pi ? "bg-orange border-orange text-white font-bold" : "border-orange/30 text-orange hover:border-orange"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -342,6 +367,10 @@ export default function AdminTimePage() {
   const [editBill, setEditBill] = useState<Bill | null>(null);
   const [editBillName, setEditBillName] = useState("");
   const [editBillColor, setEditBillColor] = useState("indigo");
+
+  // session IDs from player creation (for dice points attribution)
+  const [playerSessionIds, setPlayerSessionIds] = useState<number[]>([]);
+  const [addBillPlayerSessionIds, setAddBillPlayerSessionIds] = useState<number[]>([]);
 
   // extend time flow
   const [extendSession, setExtendSession] = useState<PlayerSession | null>(null);
@@ -398,13 +427,13 @@ export default function AdminTimePage() {
       setAddPlayers((prev) => prev.map((x, idx) => idx === (pickerCtx as { list: "addPlayers"; idx: number }).idx
         ? { ...x, drinkName: name, drinkPrice: price, drinkMenuItemId: menuItemId } : x));
     } else if (pickerCtx.list === "extraItems") {
-      setExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options }]);
+      setExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options, assignedPlayerIdx: null }]);
     } else if (pickerCtx.list === "extendDrink") {
       setExtendDrinkName(name);
       setExtendDrinkPrice(price);
       setExtendDrinkMenuItemId(menuItemId);
     } else {
-      setAddExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options }]);
+      setAddExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options, assignedPlayerIdx: null }]);
     }
     closePickerAll();
   }
@@ -443,9 +472,29 @@ export default function AdminTimePage() {
       items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: price, qty });
     }
     if ((extendPkg === "A" || extendPkg === "D") && extendDrinkMenuItemId) {
-      items.push({ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 });
+      items.push({ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendPkg === "A" ? extendDrinkPrice : 0, qty: 1 });
     }
     return items;
+  }
+
+  async function patchExtraSpend(items: ExtraItem[], sessionIds: number[]) {
+    const spendByIdx: Record<number, number> = {};
+    for (const item of items) {
+      if (item.assignedPlayerIdx !== null) {
+        spendByIdx[item.assignedPlayerIdx] = (spendByIdx[item.assignedPlayerIdx] ?? 0) + item.priceTHB * item.qty;
+      }
+    }
+    await Promise.all(
+      Object.entries(spendByIdx).map(([idx, spend]) => {
+        const sid = sessionIds[Number(idx)];
+        if (!sid || spend <= 0) return Promise.resolve();
+        return fetch(`/api/pos/sessions/${sid}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ addExtraSpend: spend }),
+        });
+      })
+    );
   }
 
   async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[]) {
@@ -493,6 +542,7 @@ export default function AdminTimePage() {
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
     const data = await res.json();
     setPlayerTotal(data.totalTHB);
+    setPlayerSessionIds((data.sessions ?? []).map((s: { id: number }) => s.id));
     setStep(3);
     load();
   }
@@ -505,6 +555,7 @@ export default function AdminTimePage() {
     if (!draftBillId) return;
     setSaving(true);
     await createOrder("CASH", draftBillId, grandTotal(), players, extraItems);
+    await patchExtraSpend(extraItems, playerSessionIds);
     setSaving(false);
     closeFlow();
   }
@@ -527,6 +578,7 @@ export default function AdminTimePage() {
     fd.append("orderId", String(orderId));
     fd.append("slip", slipFile);
     await fetch("/api/payment/slip", { method: "POST", body: fd });
+    await patchExtraSpend(extraItems, playerSessionIds);
     setSlipUploading(false);
     closeFlow();
   }
@@ -555,6 +607,7 @@ export default function AdminTimePage() {
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
     const data = await res.json();
     setAddBillPlayerTotal(data.totalTHB);
+    setAddBillPlayerSessionIds((data.sessions ?? []).map((s: { id: number }) => s.id));
     setAddBillStep(1);
     load();
   }
@@ -567,6 +620,7 @@ export default function AdminTimePage() {
     if (!addToBill) return;
     setSaving(true);
     await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems);
+    await patchExtraSpend(addExtraItems, addBillPlayerSessionIds);
     setSaving(false);
     closeAddBillFlow();
   }
@@ -589,6 +643,7 @@ export default function AdminTimePage() {
     fd.append("orderId", String(addBillOrderId));
     fd.append("slip", addBillSlipFile);
     await fetch("/api/payment/slip", { method: "POST", body: fd });
+    await patchExtraSpend(addExtraItems, addBillPlayerSessionIds);
     setAddBillSlipUploading(false);
     closeAddBillFlow();
   }
@@ -634,7 +689,7 @@ export default function AdminTimePage() {
   function extendTotal() {
     if (extendPkg === "A") return extendDrinkPrice;
     if (extendPkg === "B") return PACKAGES.B.price * extendQty;
-    if (extendPkg === "D") return PACKAGES.D.price + extendDrinkPrice;
+    if (extendPkg === "D") return PACKAGES.D.price;
     return 0;
   }
 
@@ -712,29 +767,36 @@ export default function AdminTimePage() {
 
   // ---- Player row shared render ----
   function renderPlayerRow(p: PlayerDraft, i: number, isAdd: boolean) {
+    const allPlayers = isAdd ? addPlayers : players;
+    const canDelete = allPlayers.length > 1;
     const set = isAdd
       ? (fn: (x: PlayerDraft) => PlayerDraft) => setAddPlayers((prev) => prev.map((x, idx) => idx === i ? fn(x) : x))
       : (fn: (x: PlayerDraft) => PlayerDraft) => setPlayers((prev) => prev.map((x, idx) => idx === i ? fn(x) : x));
+    const remove = isAdd
+      ? () => setAddPlayers((prev) => prev.filter((_, idx) => idx !== i))
+      : () => setPlayers((prev) => prev.filter((_, idx) => idx !== i));
     const ctxList = isAdd ? "addPlayers" : "players";
     return (
-      <div key={i} className="bg-sand/30 rounded-xl p-3 space-y-2">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-navy text-sm w-16 shrink-0">ผู้เล่น {i + 1}</span>
-          <input value={p.nameOrCode} onChange={(e) => set((x) => ({ ...x, nameOrCode: e.target.value }))}
-            placeholder={`ชื่อ/รหัสลูกค้า (ว่าง = Player ${i + 1})`}
-            className="flex-1 border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+      <SwipeableRow key={i} onDelete={canDelete ? remove : null}>
+        <div className="bg-sand/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-navy text-sm w-16 shrink-0">ผู้เล่น {i + 1}</span>
+            <input value={p.nameOrCode} onChange={(e) => set((x) => ({ ...x, nameOrCode: e.target.value }))}
+              placeholder={`ชื่อ/รหัสลูกค้า (ว่าง = Player ${i + 1})`}
+              className="flex-1 border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+          </div>
+          <PackagePicker value={p.pkg}
+            onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
+            drinkName={p.drinkName} drinkPrice={p.drinkPrice}
+            onOpenDrinkPicker={() => openPickerList({ list: ctxList as "players" | "addPlayers", idx: i })}
+            qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))} />
         </div>
-        <PackagePicker value={p.pkg}
-          onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
-          drinkName={p.drinkName} drinkPrice={p.drinkPrice}
-          onOpenDrinkPicker={() => openPickerList({ list: ctxList as "players" | "addPlayers", idx: i })}
-          qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))} />
-      </div>
+      </SwipeableRow>
     );
   }
 
   // ---- Extra items section ----
-  function renderExtraSection(items: ExtraItem[], onChange: (items: ExtraItem[]) => void, ctxList: "extraItems" | "addExtraItems") {
+  function renderExtraSection(items: ExtraItem[], onChange: (items: ExtraItem[]) => void, ctxList: "extraItems" | "addExtraItems", draftPlayers: PlayerDraft[]) {
     const extraTotal = items.reduce((s, e) => s + e.priceTHB * e.qty, 0);
     return (
       <div className="mt-3 pt-3 border-t border-sand">
@@ -742,7 +804,7 @@ export default function AdminTimePage() {
           <p className="text-xs font-semibold text-navy">สั่งเพิ่ม (นอกโปร)</p>
           {extraTotal > 0 && <span className="text-xs text-orange font-bold">+฿{extraTotal}</span>}
         </div>
-        <ExtraItemsList items={items} onChange={onChange} />
+        <ExtraItemsList items={items} onChange={onChange} players={draftPlayers} />
         <button type="button" onClick={() => openPickerList({ list: ctxList })}
           className="w-full mt-2 border border-dashed border-orange/40 text-orange text-xs font-semibold py-2 rounded-xl hover:bg-orange/5 transition-colors">
           🍜 เพิ่มรายการอาหาร/เครื่องดื่ม
@@ -895,7 +957,7 @@ export default function AdminTimePage() {
               className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">
               + อีกคน
             </button>
-            {renderExtraSection(extraItems, setExtraItems, "extraItems")}
+            {renderExtraSection(extraItems, setExtraItems, "extraItems", players)}
           </div>
           <button onClick={confirmPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
             {saving ? "..." : "ยืนยันผู้เล่น →"}
@@ -927,7 +989,7 @@ export default function AdminTimePage() {
                 {addPlayers.map((p, i) => renderPlayerRow(p, i, true))}
                 <button onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
                   className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">+ อีกคน</button>
-                {renderExtraSection(addExtraItems, setAddExtraItems, "addExtraItems")}
+                {renderExtraSection(addExtraItems, setAddExtraItems, "addExtraItems", addPlayers)}
               </div>
               <button onClick={submitAddPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
                 {saving ? "..." : "ยืนยันผู้เล่น →"}
@@ -1101,6 +1163,52 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
       <div className={`bg-white rounded-3xl p-6 w-full ${wide ? "max-w-2xl" : "max-w-sm"} shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto`}
         onClick={(e) => e.stopPropagation()}>
         <h3 className="font-bold text-navy text-lg">{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDelete: (() => void) | null }) {
+  const [offsetX, setOffsetX] = useState(0);
+  const [swiped, setSwiped] = useState(false);
+  const startXRef = useRef(0);
+  const REVEAL = 68;
+  const THRESHOLD = 40;
+
+  function handleTouchStart(e: React.TouchEvent) {
+    startXRef.current = e.touches[0].clientX;
+  }
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!onDelete) return;
+    const dx = e.touches[0].clientX - startXRef.current;
+    setOffsetX(Math.min(0, Math.max(-REVEAL, dx)));
+  }
+  function handleTouchEnd() {
+    if (!onDelete) return;
+    if (offsetX < -THRESHOLD) { setOffsetX(-REVEAL); setSwiped(true); }
+    else { setOffsetX(0); setSwiped(false); }
+  }
+  function reset() { setOffsetX(0); setSwiped(false); }
+
+  return (
+    <div className="relative rounded-xl overflow-hidden">
+      {onDelete && (
+        <div className="absolute right-0 top-0 bottom-0 w-[68px] bg-red-500 flex items-center justify-center rounded-r-xl">
+          <button type="button" onClick={() => { onDelete(); reset(); }} className="w-full h-full flex flex-col items-center justify-center gap-0.5">
+            <span className="text-xl">🗑️</span>
+            <span className="text-white text-[10px] font-bold">ลบ</span>
+          </button>
+        </div>
+      )}
+      <div
+        style={{ transform: `translateX(${offsetX}px)`, transition: swiped && offsetX === -REVEAL ? "none" : "transform 0.18s ease" }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={offsetX < 0 ? reset : undefined}
+        className="relative"
+      >
         {children}
       </div>
     </div>

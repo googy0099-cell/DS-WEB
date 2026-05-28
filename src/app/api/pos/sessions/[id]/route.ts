@@ -4,7 +4,7 @@ import { remainingSeconds } from "@/lib/pos-time";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await req.json()) as { status?: string; addSeconds?: number; upgradeToAllDay?: boolean };
+  const body = (await req.json()) as { status?: string; addSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number };
 
   const session = await db.playerSession.findUnique({
     where: { id: Number(id) },
@@ -23,6 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ? { packageType: "C", timeRemaining: 86400 }
         : { timeRemaining: body.addSeconds !== undefined ? current + body.addSeconds : current }
       ),
+      ...(body.addExtraSpend && body.addExtraSpend > 0 ? { packagePrice: { increment: body.addExtraSpend } } : {}),
     },
   });
 
