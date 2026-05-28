@@ -35,10 +35,11 @@ const PACKAGES: Record<string, { label: string; price: number; timeSeconds: numb
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
   B: { label: "Package B", price: 49, timeSeconds: 7200, desc: "49฿ — เล่น 2 ชม." },
   C: { label: "Package C", price: 120, timeSeconds: 86400, desc: "120฿ — เหมาวัน + ฟรีเครื่องดื่ม" },
+  D: { label: "Package D", price: 80, timeSeconds: 86400, desc: "80฿ — อัพเกรดเป็นเหมาวัน" },
 };
 const DRINK_CATS = ["coffee", "milktea", "soda"];
 const PKG_KEYS = ["A", "B", "C"] as const;
-type PkgKey = (typeof PKG_KEYS)[number];
+type PkgKey = (typeof PKG_KEYS)[number] | "D";
 
 // ---- Timer Hooks ----
 function useCountdown(initial: number) {
@@ -302,6 +303,7 @@ export default function AdminTimePage() {
   const [tables, setTables] = useState<TableRef[]>([]);
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [allMenuItems, setAllMenuItems] = useState<DrinkItem[]>([]);
+  const [gametimeItems, setGametimeItems] = useState<DrinkItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // new-bill flow: step 0=dashboard, 1=bill, 2=players, 3=method, 4=QR+slip
@@ -373,6 +375,7 @@ export default function AdminTimePage() {
     const menu = Array.isArray(m) ? (m as DrinkItem[]) : [];
     setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category)));
     setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable));
+    setGametimeItems(menu.filter((item) => item.category === "gametime" && item.isAvailable));
     setLoading(false);
   }, []);
 
@@ -410,6 +413,12 @@ export default function AdminTimePage() {
   function buildLineItems(draftPlayers: PlayerDraft[], draftExtra: ExtraItem[]) {
     const items: { menuItemId: number; nameTh: string; unitPriceTHB: number; qty: number; selectedSize?: string; selectedAddons?: string; selectedOptions?: string }[] = [];
     for (const p of draftPlayers) {
+      const gtItem = gametimeItems.find((g) => g.nameEn === `gametime-${p.pkg}`);
+      if (gtItem) {
+        const pkgQty = p.pkg === "B" ? p.qty : 1;
+        const pkgPrice = PACKAGES[p.pkg]?.price ?? 0;
+        items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: pkgPrice, qty: pkgQty });
+      }
       if (p.drinkMenuItemId && (p.pkg === "A" || p.pkg === "C")) {
         items.push({ menuItemId: p.drinkMenuItemId, nameTh: p.drinkName, unitPriceTHB: p.pkg === "A" ? p.drinkPrice : 0, qty: 1 });
       }
@@ -421,6 +430,20 @@ export default function AdminTimePage() {
         ...(e.selectedAddons.length ? { selectedAddons: JSON.stringify(e.selectedAddons) } : {}),
         ...(e.selectedOptions.length ? { selectedOptions: JSON.stringify(e.selectedOptions) } : {}),
       });
+    }
+    return items;
+  }
+
+  function buildExtendLineItems() {
+    const items: { menuItemId: number; nameTh: string; unitPriceTHB: number; qty: number }[] = [];
+    const gtItem = gametimeItems.find((g) => g.nameEn === `gametime-${extendPkg}`);
+    if (gtItem) {
+      const qty = extendPkg === "B" ? extendQty : 1;
+      const price = PACKAGES[extendPkg]?.price ?? 0;
+      items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: price, qty });
+    }
+    if (extendPkg === "A" && extendDrinkMenuItemId) {
+      items.push({ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 });
     }
     return items;
   }
@@ -611,28 +634,34 @@ export default function AdminTimePage() {
   function extendTotal() {
     if (extendPkg === "A") return extendDrinkPrice;
     if (extendPkg === "B") return PACKAGES.B.price * extendQty;
+    if (extendPkg === "D") return PACKAGES.D.price;
     return 0;
   }
 
   async function addExtendTime() {
     if (!extendSession) return;
-    const addSecs = extendPkg === "B" ? PACKAGES.B.timeSeconds * extendQty : PACKAGES.A.timeSeconds;
-    await fetch(`/api/pos/sessions/${extendSession.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ addSeconds: addSecs }),
-    });
+    if (extendPkg === "D") {
+      await fetch(`/api/pos/sessions/${extendSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ upgradeToAllDay: true }),
+      });
+    } else {
+      const addSecs = extendPkg === "B" ? PACKAGES.B.timeSeconds * extendQty : PACKAGES.A.timeSeconds;
+      await fetch(`/api/pos/sessions/${extendSession.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addSeconds: addSecs }),
+      });
+    }
   }
 
   async function chooseExtendCash() {
     if (!extendBill) return;
     setSaving(true);
-    const items = extendPkg === "A" && extendDrinkMenuItemId
-      ? [{ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 }]
-      : [];
     await fetch(`/api/pos/bills/${extendBill.id}/order`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: "CASH", items, totalTHB: extendTotal() }),
+      body: JSON.stringify({ paymentMethod: "CASH", items: buildExtendLineItems(), totalTHB: extendTotal() }),
     });
     await addExtendTime();
     setSaving(false);
@@ -642,12 +671,9 @@ export default function AdminTimePage() {
   async function chooseExtendQR() {
     if (!extendBill) return;
     setSaving(true);
-    const items = extendPkg === "A" && extendDrinkMenuItemId
-      ? [{ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 }]
-      : [];
     const res = await fetch(`/api/pos/bills/${extendBill.id}/order`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: "PROMPTPAY", items, totalTHB: extendTotal() }),
+      body: JSON.stringify({ paymentMethod: "PROMPTPAY", items: buildExtendLineItems(), totalTHB: extendTotal() }),
     });
     setSaving(false);
     if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return; }
@@ -986,7 +1012,7 @@ export default function AdminTimePage() {
         <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
           <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
           <div className="space-y-2">
-            {(["A", "B"] as PkgKey[]).map((key) => (
+            {(["A", "B", "D"] as PkgKey[]).map((key) => (
               <button key={key} onClick={() => { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); }}
                 className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
                 <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
