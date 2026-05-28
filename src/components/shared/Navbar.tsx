@@ -71,8 +71,8 @@ export default function Navbar() {
         {session?.user && (
           <div className="flex-1 flex lg:hidden justify-center px-2 min-w-0">
             <div className="text-center leading-tight">
-              <p className="text-orange font-bold text-sm tracking-widest">{session.user.memberCode}</p>
-              <p className="text-cream/60 text-xs truncate">@{session.user.username}</p>
+              <p className={`font-bold text-sm tracking-widest ${scrolled ? "text-white" : "text-orange"}`}>{session.user.memberCode}</p>
+              <p className={`text-xs truncate ${scrolled ? "text-white/80" : "text-cream/60"}`}>@{session.user.username}</p>
             </div>
           </div>
         )}
