@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   await db.$transaction([
     db.user.update({ where: { id: senderId }, data: { dicePoints: { decrement: amount } } }),
     db.user.update({ where: { id: recipient.id }, data: { dicePoints: { increment: amount } } }),
+    db.notification.create({
+      data: {
+        userId: recipient.id,
+        type: "DICE_RECEIVED",
+        message: `🎲 คุณได้รับ ${amount} ลูกเต๋า จากรหัส ${sender.memberCode}!`,
+      },
+    }),
   ]);
 
   return NextResponse.json({ ok: true, recipientName: recipient.firstName });

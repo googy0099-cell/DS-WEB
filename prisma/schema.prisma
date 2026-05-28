@@ -31,6 +31,7 @@ model User {
   orders              Order[]              @relation("CustomerOrders")
   handledOrders       Order[]              @relation("StaffOrders")
   auditLogs           AuditLog[]
+  notifications          Notification[]
   werewolfRoomsGM        WerewolfRoom[]          @relation("WerewolfRoomsGM")
   werewolfRoomPlayers    WerewolfRoomPlayer[]    @relation("WerewolfRoomPlayers")
   werewolfGamesGM        WerewolfGame[]          @relation("WerewolfGamesGM")
@@ -390,6 +391,16 @@ model WerewolfVote {
   createdAt    DateTime        @default(now())
 
   @@unique([sessionId, day, voterUserId])
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  type      String   @default("INFO")
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model SiteSetting {
