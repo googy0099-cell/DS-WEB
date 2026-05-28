@@ -83,7 +83,7 @@ export default function Navbar() {
             <div ref={userDropRef} className="relative">
               <button
                 onClick={() => setUserDropOpen((v) => !v)}
-                className="flex items-center gap-2 bg-cream/10 hover:bg-cream/20 text-cream text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
+                className="hidden lg:flex items-center gap-2 bg-cream/10 hover:bg-cream/20 text-cream text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
               >
                 <div className="w-6 h-6 rounded-full bg-orange flex items-center justify-center text-white text-xs font-bold">
                   {session.user.firstName?.[0]?.toUpperCase() ?? "U"}
@@ -155,6 +155,9 @@ export default function Navbar() {
           ))}
           {session?.user ? (
             <div className="mt-5 pt-4 border-t border-cream/10 space-y-3">
+              <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-3 text-cream/80 text-base font-medium border-b border-cream/10">
+                👤 โปรไฟล์ ({session.user.memberCode})
+              </Link>
               <button onClick={() => signOut({ callbackUrl: "/" })} className="text-red-400 text-base font-medium py-3">
                 ออกจากระบบ
               </button>
