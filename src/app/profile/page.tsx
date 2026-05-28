@@ -280,13 +280,13 @@ export default function ProfilePage() {
 
           {/* Transfer dice */}
           <div className="bg-white rounded-2xl p-5 shadow-sm">
-            <h2 className="font-bold text-navy mb-3">🎁 โอนลูกเต๋าให้เพื่อน</h2>
+            <h2 className="font-bold text-navy mb-3">🎁 ส่งของขวัญให้เพื่อน</h2>
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-400 block mb-1">รหัสสมาชิก 4 หลัก</label>
                 <input
                   value={transferCode}
-                  onChange={e => setTransferCode(e.target.value.replace(/\D/, "").slice(0, 4))}
+                  onChange={e => setTransferCode(e.target.value.toUpperCase().slice(0, 4))}
                   placeholder="0000"
                   maxLength={4}
                   className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm text-center font-bold tracking-widest focus:border-orange focus:outline-none"
