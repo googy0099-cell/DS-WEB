@@ -442,7 +442,7 @@ export default function AdminTimePage() {
       const price = PACKAGES[extendPkg]?.price ?? 0;
       items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: price, qty });
     }
-    if (extendPkg === "A" && extendDrinkMenuItemId) {
+    if ((extendPkg === "A" || extendPkg === "D") && extendDrinkMenuItemId) {
       items.push({ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 });
     }
     return items;
@@ -634,7 +634,7 @@ export default function AdminTimePage() {
   function extendTotal() {
     if (extendPkg === "A") return extendDrinkPrice;
     if (extendPkg === "B") return PACKAGES.B.price * extendQty;
-    if (extendPkg === "D") return PACKAGES.D.price;
+    if (extendPkg === "D") return PACKAGES.D.price + extendDrinkPrice;
     return 0;
   }
 
@@ -940,7 +940,82 @@ export default function AdminTimePage() {
         </Modal>
       )}
 
-      {/* Item picker — phase 1: list */}
+      {/* Change table */}
+      {changeTableBill && (
+        <Modal onClose={() => setChangeTableBill(null)} title={`เปลี่ยนโต๊ะ — ${changeTableBill.name}`}>
+          <div className="grid grid-cols-3 gap-2">
+            {tables.map((t) => (
+              <button key={t.id} onClick={() => submitChangeTable(t.id)}
+                className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${t.id === changeTableBill.tableId ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-500 hover:border-orange/50"}`}>
+                โต๊ะ {t.number}
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* Extend time modal */}
+      {extendSession && extendStep === 0 && (
+        <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
+          <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
+          <div className="space-y-2">
+            {(["A", "B", "D"] as PkgKey[]).map((key) => (
+              <button key={key} onClick={() => { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); }}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
+                <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
+                <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {(extendPkg === "A" || extendPkg === "D") && (
+            <div>
+              <button onClick={() => openPickerList({ list: "extendDrink" })}
+                className={`w-full border-2 rounded-xl px-4 py-2.5 text-sm text-left transition-colors ${extendDrinkMenuItemId ? "border-orange bg-orange/5 text-navy font-semibold" : "border-dashed border-sand text-gray-400 hover:border-orange hover:text-orange"}`}>
+                {extendDrinkMenuItemId ? `🥤 ${extendDrinkName} (+${extendDrinkPrice}฿)` : `🥤 เลือกเครื่องดื่ม${extendPkg === "A" ? "" : " (ไม่บังคับ)"}`}
+              </button>
+            </div>
+          )}
+
+          {extendPkg === "B" && (
+            <div className="flex items-center gap-3 justify-center">
+              <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
+                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">−</button>
+              <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
+              <button onClick={() => setExtendQty((q) => q + 1)}
+                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
+              <span className="text-sm text-gray-500">= {extendQty * 2} ชม. ({extendQty * PACKAGES.B.price}฿)</span>
+            </div>
+          )}
+
+          <div className="bg-sand/40 rounded-xl p-3 text-center">
+            <p className="text-xs text-gray-500">ยอดรวม</p>
+            <p className="font-bold text-navy text-xl">฿{extendTotal()}</p>
+          </div>
+
+          <button onClick={() => setExtendStep(1)}
+            disabled={extendPkg === "A" && !extendDrinkMenuItemId}
+            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
+            ถัดไป — เลือกวิธีชำระ →
+          </button>
+        </Modal>
+      )}
+
+      {extendSession && extendStep === 1 && (
+        <Modal onClose={closeExtendFlow} title="ชำระเงิน">
+          {renderMethodStep(extendTotal(), chooseExtendCash, chooseExtendQR, () => setExtendStep(0))}
+        </Modal>
+      )}
+
+      {extendSession && extendStep === 2 && extendQr && (
+        <Modal onClose={closeExtendFlow} title="สแกน QR ชำระเงิน">
+          {renderQRStep(extendQr, extendTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
+            (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
+            submitExtendSlip, () => setExtendStep(1))}
+        </Modal>
+      )}
+
+      {/* Item picker — phase 1: list (rendered last so it appears above all other modals) */}
       {pickerCtx && !pickerItem && (
         <Modal onClose={closePickerAll} title={isExtraCtx ? "เลือกรายการ" : "เลือกเครื่องดื่ม"} wide>
           {isExtraCtx ? (
@@ -991,81 +1066,6 @@ export default function AdminTimePage() {
         <ItemDetailPicker item={pickerItem} onClose={closePickerAll}
           onConfirm={onItemDetailConfirm}
           confirmLabel={isExtraCtx ? "เพิ่มรายการนี้" : "เลือกเครื่องดื่มนี้"} />
-      )}
-
-      {/* Change table */}
-      {changeTableBill && (
-        <Modal onClose={() => setChangeTableBill(null)} title={`เปลี่ยนโต๊ะ — ${changeTableBill.name}`}>
-          <div className="grid grid-cols-3 gap-2">
-            {tables.map((t) => (
-              <button key={t.id} onClick={() => submitChangeTable(t.id)}
-                className={`py-3 rounded-xl font-bold text-sm border-2 transition-all ${t.id === changeTableBill.tableId ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-500 hover:border-orange/50"}`}>
-                โต๊ะ {t.number}
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-
-      {/* Extend time modal */}
-      {extendSession && extendStep === 0 && (
-        <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
-          <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
-          <div className="space-y-2">
-            {(["A", "B", "D"] as PkgKey[]).map((key) => (
-              <button key={key} onClick={() => { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); }}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
-                <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
-                <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
-              </button>
-            ))}
-          </div>
-
-          {extendPkg === "A" && (
-            <div>
-              <button onClick={() => openPickerList({ list: "extendDrink" })}
-                className={`w-full border-2 rounded-xl px-4 py-2.5 text-sm text-left transition-colors ${extendDrinkMenuItemId ? "border-orange bg-orange/5 text-navy font-semibold" : "border-dashed border-sand text-gray-400 hover:border-orange hover:text-orange"}`}>
-                {extendDrinkMenuItemId ? `🥤 ${extendDrinkName} (+${extendDrinkPrice}฿)` : "🥤 เลือกเครื่องดื่ม"}
-              </button>
-            </div>
-          )}
-
-          {extendPkg === "B" && (
-            <div className="flex items-center gap-3 justify-center">
-              <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
-                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">−</button>
-              <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
-              <button onClick={() => setExtendQty((q) => q + 1)}
-                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
-              <span className="text-sm text-gray-500">= {extendQty * 2} ชม. ({extendQty * PACKAGES.B.price}฿)</span>
-            </div>
-          )}
-
-          <div className="bg-sand/40 rounded-xl p-3 text-center">
-            <p className="text-xs text-gray-500">ยอดรวม</p>
-            <p className="font-bold text-navy text-xl">฿{extendTotal()}</p>
-          </div>
-
-          <button onClick={() => setExtendStep(1)}
-            disabled={extendPkg === "A" && !extendDrinkMenuItemId}
-            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
-            ถัดไป — เลือกวิธีชำระ →
-          </button>
-        </Modal>
-      )}
-
-      {extendSession && extendStep === 1 && (
-        <Modal onClose={closeExtendFlow} title="ชำระเงิน">
-          {renderMethodStep(extendTotal(), chooseExtendCash, chooseExtendQR, () => setExtendStep(0))}
-        </Modal>
-      )}
-
-      {extendSession && extendStep === 2 && extendQr && (
-        <Modal onClose={closeExtendFlow} title="สแกน QR ชำระเงิน">
-          {renderQRStep(extendQr, extendTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
-            (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
-            submitExtendSlip, () => setExtendStep(1))}
-        </Modal>
       )}
 
       {/* Edit bill name + color modal */}
