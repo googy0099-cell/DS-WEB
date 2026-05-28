@@ -5,13 +5,23 @@ import { remainingSeconds } from "@/lib/pos-time";
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const billId = Number(id);
-  const body = (await req.json()) as { tableId?: number; status?: string };
+  const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string };
 
   const bill = await db.bill.findUnique({
     where: { id: billId },
     include: { sessions: { where: { status: "ACTIVE" } } },
   });
   if (!bill) return NextResponse.json({ error: "ไม่พบบิล" }, { status: 404 });
+
+  // Rename bill
+  if (body.name !== undefined) {
+    await db.bill.update({ where: { id: billId }, data: { name: body.name.trim() } });
+  }
+
+  // Change bill color
+  if (body.color !== undefined) {
+    await db.bill.update({ where: { id: billId }, data: { color: body.color } });
+  }
 
   // Change table → update bill + all its active sessions (table is just a label)
   if (body.tableId !== undefined) {

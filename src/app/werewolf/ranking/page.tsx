@@ -14,6 +14,14 @@ interface RankEntry {
   wins: number;
   losses: number;
   winRate: number;
+  avatarUrl: string | null;
+  googleId: string | null;
+}
+
+function entryAvatar(e: RankEntry) {
+  if (e.avatarUrl) return e.avatarUrl;
+  if (e.googleId) return `https://lh3.googleusercontent.com/a/${e.googleId}=s96-c`;
+  return null;
 }
 
 const PERIODS = [
@@ -106,6 +114,16 @@ export default function WerewolfRankingPublicPage() {
                   <span className="text-gray-500 text-base font-bold">{i + 1}</span>
                 )}
               </span>
+              {(() => {
+                const av = entryAvatar(entry);
+                return av ? (
+                  <Image src={av} alt="" width={36} height={36} className="rounded-full object-cover w-9 h-9 shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm shrink-0">
+                    {entry.name[0]?.toUpperCase()}
+                  </div>
+                );
+              })()}
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-white truncate">{entry.name}</p>
                 <p className="text-xs text-gray-400">

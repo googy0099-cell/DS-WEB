@@ -14,7 +14,7 @@ async function requireOwner() {
 export async function GET() {
   if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   const users = await db.user.findMany({
-    where: { role: { in: ["STAFF", "OWNER"] } },
+    where: { role: { in: ["CASHIER", "STAFF", "OWNER"] } },
     select: { id: true, email: true, username: true, firstName: true, lastName: true, role: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });

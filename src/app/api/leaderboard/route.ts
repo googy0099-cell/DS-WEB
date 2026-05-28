@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
       where: { role: "USER" },
       orderBy: { points: "desc" },
       take: 20,
-      select: { id: true, nickname: true, firstName: true, points: true, totalSpentTHB: true },
+      select: { id: true, nickname: true, firstName: true, points: true, totalSpentTHB: true, avatarUrl: true, googleId: true },
     });
     return NextResponse.json(
       members.map((m) => ({ ...m, nickname: m.nickname || m.firstName }))
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   const userIds = orderGroups.map((g) => g.userId!);
   const users = await db.user.findMany({
     where: { id: { in: userIds }, role: "USER" },
-    select: { id: true, nickname: true, firstName: true, points: true, totalSpentTHB: true },
+    select: { id: true, nickname: true, firstName: true, points: true, totalSpentTHB: true, avatarUrl: true, googleId: true },
   });
 
   const userMap = new Map(users.map((u) => [u.id, u]));
@@ -50,6 +50,8 @@ export async function GET(req: NextRequest) {
         nickname: u.nickname || u.firstName,
         points: u.points,
         totalSpentTHB: g._sum.totalTHB ?? 0,
+        avatarUrl: u.avatarUrl,
+        googleId: u.googleId,
       };
     });
 

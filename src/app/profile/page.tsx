@@ -7,6 +7,16 @@ import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/shared/Navbar";
 
+interface ActiveSession {
+  id: number;
+  nickname: string;
+  packageType: string;
+  tableNumber: number;
+  billName: string | null;
+  prepRemaining: number;
+  timeRemaining: number;
+}
+
 interface UserProfile {
   id: number;
   firstName: string;
@@ -24,6 +34,23 @@ interface UserProfile {
   avatarUrl: string | null;
   createdAt: string;
   orders: { id: number; status: string; totalTHB: number; createdAt: string }[];
+  activeSessions: ActiveSession[];
+}
+
+function fmtTime(secs: number) {
+  if (secs >= 86400) return "ไม่จำกัดเวลา";
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function LiveTimer({ initial }: { initial: number }) {
+  const [secs, setSecs] = useState(initial);
+  useEffect(() => {
+    const t = setInterval(() => setSecs((p) => Math.max(0, p - 1)), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const color = secs >= 86400 ? "text-purple-400" : secs > 600 ? "text-green-400" : secs > 0 ? "text-yellow-400" : "text-red-400";
+  return <span className={`font-mono font-bold text-xl ${color}`}>{fmtTime(secs)}</span>;
 }
 
 export default function ProfilePage() {
@@ -238,6 +265,31 @@ export default function ProfilePage() {
               ))}
             </div>
           </div>
+
+          {/* Active sessions */}
+          {profile.activeSessions.length > 0 && (
+            <div className="bg-navy rounded-2xl p-5 shadow-sm">
+              <h2 className="font-bold text-cream mb-3">⏱️ เวลาเล่นปัจจุบัน</h2>
+              <div className="space-y-3">
+                {profile.activeSessions.map((s) => (
+                  <div key={s.id} className="bg-white/10 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-cream font-semibold text-sm">{s.nickname}</p>
+                      <span className="text-cream/50 text-xs">โต๊ะ {s.tableNumber}</span>
+                    </div>
+                    {s.prepRemaining > 0 ? (
+                      <p className="text-sky-300 text-sm">เตรียมตัว — เริ่มใน <LiveTimer initial={s.prepRemaining} /></p>
+                    ) : (
+                      <div>
+                        <LiveTimer initial={s.timeRemaining} />
+                        <p className="text-cream/40 text-xs mt-0.5">เหลือ</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Recent orders */}
           {profile.orders.length > 0 && (

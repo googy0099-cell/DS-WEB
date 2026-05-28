@@ -10,8 +10,19 @@ type PlayerSession = {
   userId: number | null; user: MemberRef | null;
 };
 type Bill = {
-  id: number; name: string; tableId: number; startsAt: string; prepRemaining: number;
+  id: number; name: string; color: string; tableId: number; startsAt: string; prepRemaining: number;
   table: { number: number }; sessions: PlayerSession[];
+};
+
+const BILL_COLORS: Record<string, { gradient: string; accent: string }> = {
+  indigo:  { gradient: "from-navy to-indigo-900",     accent: "bg-indigo-500" },
+  emerald: { gradient: "from-emerald-800 to-emerald-950", accent: "bg-emerald-500" },
+  rose:    { gradient: "from-rose-800 to-rose-950",    accent: "bg-rose-500" },
+  amber:   { gradient: "from-amber-700 to-amber-900",  accent: "bg-amber-500" },
+  violet:  { gradient: "from-violet-800 to-violet-950", accent: "bg-violet-500" },
+  teal:    { gradient: "from-teal-700 to-teal-900",    accent: "bg-teal-500" },
+  sky:     { gradient: "from-sky-700 to-sky-900",      accent: "bg-sky-500" },
+  pink:    { gradient: "from-pink-700 to-pink-900",    accent: "bg-pink-500" },
 };
 type TableRef = { id: number; number: number };
 type DrinkItem = MenuItemType;
@@ -317,6 +328,11 @@ export default function AdminTimePage() {
   // changeTable flow
   const [changeTableBill, setChangeTableBill] = useState<Bill | null>(null);
 
+  // renameBill / changeColor flow
+  const [editBill, setEditBill] = useState<Bill | null>(null);
+  const [editBillName, setEditBillName] = useState("");
+  const [editBillColor, setEditBillColor] = useState("indigo");
+
   // item picker (drink or extra item) — list then detail
   type PickerCtx = { list: "players"; idx: number } | { list: "addPlayers"; idx: number } | { list: "extraItems" } | { list: "addExtraItems" };
   const [pickerCtx, setPickerCtx] = useState<PickerCtx | null>(null);
@@ -556,6 +572,16 @@ export default function AdminTimePage() {
     setChangeTableBill(null); load();
   }
 
+  async function submitEditBill() {
+    if (!editBill || !editBillName.trim()) return;
+    await fetch(`/api/pos/bills/${editBill.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: editBillName.trim(), color: editBillColor }),
+    });
+    setEditBill(null); load();
+  }
+
   // ---- Player row shared render ----
   function renderPlayerRow(p: PlayerDraft, i: number, isAdd: boolean) {
     const set = isAdd
@@ -686,23 +712,31 @@ export default function AdminTimePage() {
       {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีบิลที่เปิดอยู่ — กด &quot;+ เปิดบิล&quot; เพื่อเริ่ม</p>}
 
       {/* Bills dashboard */}
-      {bills.map((bill) => (
-        <div key={bill.id} className="bg-gradient-to-br from-navy to-indigo-900 rounded-3xl p-5 shadow-xl">
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <div>
-              <h2 className="text-white font-bold text-lg">{bill.name}</h2>
-              <button onClick={() => setChangeTableBill(bill)} className="text-white/60 text-xs hover:text-white underline-offset-2 hover:underline">📍 โต๊ะ {bill.table.number} · เปลี่ยน</button>
+      {bills.map((bill) => {
+        const colorCfg = BILL_COLORS[bill.color] ?? BILL_COLORS.indigo;
+        return (
+          <div key={bill.id} className={`bg-gradient-to-br ${colorCfg.gradient} rounded-3xl p-5 shadow-xl`}>
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+              <div>
+                <button
+                  onClick={() => { setEditBill(bill); setEditBillName(bill.name); setEditBillColor(bill.color); }}
+                  className="text-white font-bold text-lg hover:underline underline-offset-2 text-left"
+                >
+                  {bill.name} ✏️
+                </button>
+                <button onClick={() => setChangeTableBill(bill)} className="block text-white/60 text-xs hover:text-white underline-offset-2 hover:underline">📍 โต๊ะ {bill.table.number} · เปลี่ยน</button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
+                <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
-              <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {bill.sessions.map((s) => <SessionCard key={s.id} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onAddTime={addTime} />)}
             </div>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {bill.sessions.map((s) => <SessionCard key={s.id} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onAddTime={addTime} />)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* Modal 1: Open Bill */}
       {step === 1 && (
@@ -842,6 +876,29 @@ export default function AdminTimePage() {
               </button>
             ))}
           </div>
+        </Modal>
+      )}
+
+      {/* Edit bill name + color modal */}
+      {editBill && (
+        <Modal onClose={() => setEditBill(null)} title="แก้ไขบิล">
+          <Field label="ชื่อบิล">
+            <input autoFocus value={editBillName} onChange={(e) => setEditBillName(e.target.value)}
+              className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm focus:border-orange focus:outline-none" />
+          </Field>
+          <Field label="สีบิล">
+            <div className="grid grid-cols-4 gap-2">
+              {Object.entries(BILL_COLORS).map(([key, cfg]) => (
+                <button key={key} onClick={() => setEditBillColor(key)}
+                  className={`h-10 rounded-xl bg-gradient-to-br ${cfg.gradient} border-2 transition-all ${editBillColor === key ? "border-orange scale-105" : "border-transparent"}`}
+                  title={key} />
+              ))}
+            </div>
+          </Field>
+          <button onClick={submitEditBill} disabled={!editBillName.trim()}
+            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
+            บันทึก
+          </button>
         </Modal>
       )}
     </div>

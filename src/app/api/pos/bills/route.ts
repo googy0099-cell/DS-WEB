@@ -29,8 +29,10 @@ export async function GET() {
   return NextResponse.json(result);
 }
 
+const BILL_COLORS = ["indigo", "emerald", "rose", "amber", "violet", "teal", "sky", "pink"];
+
 export async function POST(req: NextRequest) {
-  const { name, tableId } = (await req.json()) as { name?: string; tableId?: number };
+  const { name, tableId, color } = (await req.json()) as { name?: string; tableId?: number; color?: string };
 
   if (!name?.trim() || !tableId) {
     return NextResponse.json({ error: "ต้องระบุชื่อบิลและโต๊ะ" }, { status: 400 });
@@ -39,9 +41,16 @@ export async function POST(req: NextRequest) {
   const table = await db.table.findUnique({ where: { id: tableId } });
   if (!table) return NextResponse.json({ error: "ไม่พบโต๊ะ" }, { status: 400 });
 
+  // Auto-cycle color based on active bill count if no color provided
+  let billColor = color ?? "indigo";
+  if (!color) {
+    const count = await db.bill.count({ where: { status: "ACTIVE" } });
+    billColor = BILL_COLORS[count % BILL_COLORS.length];
+  }
+
   const startsAt = new Date(Date.now() + PREP_SECONDS * 1000);
   const bill = await db.bill.create({
-    data: { name: name.trim(), tableId, startsAt },
+    data: { name: name.trim(), tableId, startsAt, color: billColor },
   });
 
   await db.table.update({ where: { id: tableId }, data: { isOccupied: true } });

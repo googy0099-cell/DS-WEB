@@ -12,6 +12,14 @@ interface Member {
   nickname: string;
   points: number;
   totalSpentTHB: number;
+  avatarUrl: string | null;
+  googleId: string | null;
+}
+
+function memberAvatar(m: Member) {
+  if (m.avatarUrl) return m.avatarUrl;
+  if (m.googleId) return `https://lh3.googleusercontent.com/a/${m.googleId}=s96-c`;
+  return null;
 }
 
 const TABS = [
@@ -81,6 +89,16 @@ export default function LeaderboardPage() {
               <span className="text-2xl w-8 text-center shrink-0">
                 {MEDALS[i] ?? <span className="text-gray-400 text-base font-bold">{i + 1}</span>}
               </span>
+              {(() => {
+                const av = memberAvatar(member);
+                return av ? (
+                  <Image src={av} alt="" width={36} height={36} className="rounded-full object-cover w-9 h-9 shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm shrink-0">
+                    {member.nickname[0]?.toUpperCase()}
+                  </div>
+                );
+              })()}
               <div className="flex-1 min-w-0">
                 <p className="font-bold text-navy truncate">{member.nickname}</p>
                 <p className="text-xs text-gray-400">ใช้จ่ายรวม ฿{member.totalSpentTHB.toLocaleString("th-TH")}</p>

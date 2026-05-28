@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   const users = await db.user.findMany({
     where: { id: { in: userIds } },
-    select: { id: true, nickname: true, firstName: true },
+    select: { id: true, nickname: true, firstName: true, avatarUrl: true, googleId: true },
   });
   const userMap = new Map(users.map((u) => [u.id, u]));
 
@@ -48,6 +48,8 @@ export async function GET(req: NextRequest) {
         wins: w,
         losses: total - w,
         winRate: total > 0 ? Math.round((w / total) * 100) : 0,
+        avatarUrl: u?.avatarUrl ?? null,
+        googleId: u?.googleId ?? null,
       };
     })
     .sort((a, b) => b.wins - a.wins || b.winRate - a.winRate)

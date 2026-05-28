@@ -67,6 +67,16 @@ export default function Navbar() {
           ))}
         </div>
 
+        {/* Mobile center: member code + username (logged in customers only) */}
+        {session?.user && (
+          <div className="flex-1 flex lg:hidden justify-center px-2 min-w-0">
+            <div className="text-center leading-tight">
+              <p className="text-orange font-bold text-sm tracking-widest">{session.user.memberCode}</p>
+              <p className="text-cream/60 text-xs truncate">@{session.user.username}</p>
+            </div>
+          </div>
+        )}
+
         {/* Right side */}
         <div className="flex items-center gap-2">
           {session?.user ? (
@@ -90,7 +100,7 @@ export default function Navbar() {
                   >
                     👤 โปรไฟล์ ({session.user.memberCode})
                   </Link>
-                  {(session.user.role === "OWNER" || session.user.role === "STAFF") && (
+                  {(session.user.role === "OWNER" || session.user.role === "STAFF" || session.user.role === "CASHIER") && (
                     <Link
                       href="/admin"
                       onClick={() => setUserDropOpen(false)}

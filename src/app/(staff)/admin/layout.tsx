@@ -5,8 +5,11 @@ import Image from "next/image";
 import RegisterSW from "@/components/admin/RegisterSW";
 import MobileNav from "@/components/admin/MobileNav";
 
-const NAV = [
+const DASHBOARD_NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
+];
+
+const STAFF_NAV = [
   { href: "/admin/pos", label: "จัดการเวลา", icon: "⏱️" },
   { href: "/admin/menu", label: "จัดการเมนู", icon: "🍜" },
   { href: "/admin/addon-groups", label: "Set Add-on", icon: "➕" },
@@ -19,7 +22,7 @@ const NAV = [
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
 ];
 
-const OWNER_NAV = [
+const OWNER_ONLY_NAV = [
   { href: "/admin/members", label: "สมาชิก", icon: "👥" },
   { href: "/admin/users", label: "ผู้ใช้งานระบบ", icon: "🔑" },
   { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "📈" },
@@ -34,12 +37,20 @@ export default async function AdminLayout({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/admin");
-  if (session.user.role !== "STAFF" && session.user.role !== "OWNER") {
+  const role = session.user.role;
+  if (role !== "CASHIER" && role !== "STAFF" && role !== "OWNER") {
     redirect("/");
   }
 
-  const isOwner = session.user.role === "OWNER";
-  const allNav = isOwner ? [...NAV, ...OWNER_NAV] : NAV;
+  // CASHIER: dashboard + all staff nav
+  // STAFF: all staff nav (no dashboard)
+  // OWNER: dashboard + staff nav + owner-only nav
+  const allNav =
+    role === "OWNER"
+      ? [...DASHBOARD_NAV, ...STAFF_NAV, ...OWNER_ONLY_NAV]
+      : role === "CASHIER"
+      ? [...DASHBOARD_NAV, ...STAFF_NAV]
+      : STAFF_NAV;
 
   return (
     <div className="flex min-h-screen bg-gray-50">

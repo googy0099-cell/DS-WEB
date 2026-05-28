@@ -51,6 +51,7 @@ model Table {
 model Bill {
   id        Int             @id @default(autoincrement())
   name      String
+  color     String          @default("indigo")
   tableId   Int
   table     Table           @relation(fields: [tableId], references: [id])
   status    String          @default("ACTIVE")

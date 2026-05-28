@@ -22,7 +22,7 @@ export default function AdminUsersPage() {
   const { data: session } = useSession();
   const { data: users = [], mutate } = useSWR<AdminUser[]>("/api/users", fetcher);
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", username: "", role: "STAFF" });
+  const [form, setForm] = useState({ email: "", password: "", firstName: "", lastName: "", username: "", role: "CASHIER" });
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -127,6 +127,7 @@ export default function AdminUsersPage() {
                     onChange={(e) => changeRole(u.id, e.target.value)}
                     className="border border-sand rounded-lg px-2 py-1 text-xs"
                   >
+                    <option value="CASHIER">CASHIER</option>
                     <option value="STAFF">STAFF</option>
                     <option value="OWNER">OWNER</option>
                   </select>
