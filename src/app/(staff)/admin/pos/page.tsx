@@ -1171,13 +1171,14 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
 
 function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDelete: (() => void) | null }) {
   const [offsetX, setOffsetX] = useState(0);
-  const [swiped, setSwiped] = useState(false);
+  const [dragging, setDragging] = useState(false);
   const startXRef = useRef(0);
-  const REVEAL = 68;
-  const THRESHOLD = 40;
+  const REVEAL = 72;
+  const THRESHOLD = 36;
 
   function handleTouchStart(e: React.TouchEvent) {
     startXRef.current = e.touches[0].clientX;
+    setDragging(true);
   }
   function handleTouchMove(e: React.TouchEvent) {
     if (!onDelete) return;
@@ -1185,31 +1186,39 @@ function SwipeableRow({ children, onDelete }: { children: React.ReactNode; onDel
     setOffsetX(Math.min(0, Math.max(-REVEAL, dx)));
   }
   function handleTouchEnd() {
+    setDragging(false);
     if (!onDelete) return;
-    if (offsetX < -THRESHOLD) { setOffsetX(-REVEAL); setSwiped(true); }
-    else { setOffsetX(0); setSwiped(false); }
+    if (offsetX < -THRESHOLD) setOffsetX(-REVEAL);
+    else setOffsetX(0);
   }
-  function reset() { setOffsetX(0); setSwiped(false); }
+
+  const transition = dragging ? "none" : "transform 0.2s ease";
 
   return (
-    <div className="relative rounded-xl overflow-hidden">
-      {onDelete && (
-        <div className="absolute right-0 top-0 bottom-0 w-[68px] bg-red-500 flex items-center justify-center rounded-r-xl">
-          <button type="button" onClick={() => { onDelete(); reset(); }} className="w-full h-full flex flex-col items-center justify-center gap-0.5">
-            <span className="text-xl">🗑️</span>
-            <span className="text-white text-[10px] font-bold">ลบ</span>
-          </button>
+    <div className="overflow-hidden rounded-xl">
+      <div className="relative flex">
+        {/* Sliding card content */}
+        <div
+          className="w-full shrink-0"
+          style={{ transform: `translateX(${offsetX}px)`, transition }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {children}
         </div>
-      )}
-      <div
-        style={{ transform: `translateX(${offsetX}px)`, transition: swiped && offsetX === -REVEAL ? "none" : "transform 0.18s ease" }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onClick={offsetX < 0 ? reset : undefined}
-        className="relative"
-      >
-        {children}
+        {/* Delete button slides in from the right together with the card */}
+        {onDelete && (
+          <div
+            className="absolute right-0 top-0 bottom-0 w-[72px] bg-red-500 flex flex-col items-center justify-center gap-0.5 rounded-r-xl"
+            style={{ transform: `translateX(${REVEAL + offsetX}px)`, transition }}
+          >
+            <button type="button" onClick={() => { onDelete(); setOffsetX(0); }} className="w-full h-full flex flex-col items-center justify-center gap-0.5">
+              <span className="text-xl">🗑️</span>
+              <span className="text-white text-[10px] font-bold">ลบ</span>
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
