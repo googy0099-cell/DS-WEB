@@ -5,8 +5,8 @@ export async function POST(req: NextRequest) {
   try {
     const { auth } = await import("@/lib/auth");
     const session = await auth();
-    if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) {
-      return NextResponse.json({ error: "ไม่มีสิทธิ์ กรุณา login ก่อน" }, { status: 403 });
+    if (!session?.user) {
+      return NextResponse.json({ error: "กรุณา login ก่อน" }, { status: 401 });
     }
   } catch (e) {
     return NextResponse.json({ error: `ตรวจสอบสิทธิ์ไม่ได้: ${String(e)}` }, { status: 500 });
