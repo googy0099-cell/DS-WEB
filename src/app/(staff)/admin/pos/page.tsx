@@ -65,9 +65,9 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, prepRemaining, onCheckout, onExtend }: {
-  session: PlayerSession; prepRemaining: number;
-  onCheckout: (id: number) => void; onExtend: (session: PlayerSession) => void;
+function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend }: {
+  session: PlayerSession; bill: Bill; prepRemaining: number;
+  onCheckout: (id: number) => void; onExtend: (session: PlayerSession, bill: Bill) => void;
 }) {
   const prep = useCountdown(prepRemaining);
   const remaining = useCountdown(session.timeRemaining);
@@ -112,7 +112,7 @@ function SessionCard({ session, prepRemaining, onCheckout, onExtend }: {
       <div className="flex gap-2 pt-1">
         {!isAllDay && (
           <button
-            onClick={() => onExtend(session)}
+            onClick={() => onExtend(session, bill)}
             className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
           >
             ⏱️ ต่อเวลา
@@ -343,11 +343,22 @@ export default function AdminTimePage() {
 
   // extend time flow
   const [extendSession, setExtendSession] = useState<PlayerSession | null>(null);
+  const [extendBill, setExtendBill] = useState<Bill | null>(null);
   const [extendPkg, setExtendPkg] = useState<PkgKey>("B");
   const [extendQty, setExtendQty] = useState(1);
+  const [extendStep, setExtendStep] = useState<0 | 1 | 2>(0); // 0=pkg+drink, 1=method, 2=QR+slip
+  const [extendDrinkName, setExtendDrinkName] = useState("");
+  const [extendDrinkPrice, setExtendDrinkPrice] = useState(0);
+  const [extendDrinkMenuItemId, setExtendDrinkMenuItemId] = useState<number | null>(null);
+  const [extendOrderId, setExtendOrderId] = useState<number | null>(null);
+  const [extendQr, setExtendQr] = useState<{ qrDataUrl: string | null; accountName: string; bankName: string } | null>(null);
+  const [extendSlipFile, setExtendSlipFile] = useState<File | null>(null);
+  const [extendSlipPreview, setExtendSlipPreview] = useState<string | null>(null);
+  const [extendSlipUploading, setExtendSlipUploading] = useState(false);
+  const extendSlipRef = useRef<HTMLInputElement>(null);
 
   // item picker (drink or extra item) — list then detail
-  type PickerCtx = { list: "players"; idx: number } | { list: "addPlayers"; idx: number } | { list: "extraItems" } | { list: "addExtraItems" };
+  type PickerCtx = { list: "players"; idx: number } | { list: "addPlayers"; idx: number } | { list: "extraItems" } | { list: "addExtraItems" } | { list: "extendDrink" };
   const [pickerCtx, setPickerCtx] = useState<PickerCtx | null>(null);
   const [pickerItem, setPickerItem] = useState<DrinkItem | null>(null);
 
@@ -385,6 +396,10 @@ export default function AdminTimePage() {
         ? { ...x, drinkName: name, drinkPrice: price, drinkMenuItemId: menuItemId } : x));
     } else if (pickerCtx.list === "extraItems") {
       setExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options }]);
+    } else if (pickerCtx.list === "extendDrink") {
+      setExtendDrinkName(name);
+      setExtendDrinkPrice(price);
+      setExtendDrinkMenuItemId(menuItemId);
     } else {
       setAddExtraItems((prev) => [...prev, { menuItemId, nameTh: name, priceTHB: price, qty: 1, selectedSize: size, selectedAddons: addons, selectedOptions: options }]);
     }
@@ -585,16 +600,77 @@ export default function AdminTimePage() {
     setChangeTableBill(null); load();
   }
 
-  async function submitExtend() {
+  function openExtend(session: PlayerSession, bill: Bill) {
+    setExtendSession(session); setExtendBill(bill);
+    setExtendPkg("B"); setExtendQty(1); setExtendStep(0);
+    setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null);
+    setExtendOrderId(null); setExtendQr(null);
+    setExtendSlipFile(null); setExtendSlipPreview(null);
+  }
+
+  function extendTotal() {
+    if (extendPkg === "A") return extendDrinkPrice;
+    if (extendPkg === "B") return PACKAGES.B.price * extendQty;
+    return 0;
+  }
+
+  async function addExtendTime() {
     if (!extendSession) return;
-    const pkg = PACKAGES[extendPkg];
-    const addSecs = extendPkg === "B" ? pkg.timeSeconds * extendQty : pkg.timeSeconds;
+    const addSecs = extendPkg === "B" ? PACKAGES.B.timeSeconds * extendQty : PACKAGES.A.timeSeconds;
     await fetch(`/api/pos/sessions/${extendSession.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ addSeconds: addSecs }),
     });
-    setExtendSession(null);
+  }
+
+  async function chooseExtendCash() {
+    if (!extendBill) return;
+    setSaving(true);
+    const items = extendPkg === "A" && extendDrinkMenuItemId
+      ? [{ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 }]
+      : [];
+    await fetch(`/api/pos/bills/${extendBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "CASH", items, totalTHB: extendTotal() }),
+    });
+    await addExtendTime();
+    setSaving(false);
+    closeExtendFlow();
+  }
+
+  async function chooseExtendQR() {
+    if (!extendBill) return;
+    setSaving(true);
+    const items = extendPkg === "A" && extendDrinkMenuItemId
+      ? [{ menuItemId: extendDrinkMenuItemId, nameTh: extendDrinkName, unitPriceTHB: extendDrinkPrice, qty: 1 }]
+      : [];
+    const res = await fetch(`/api/pos/bills/${extendBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "PROMPTPAY", items, totalTHB: extendTotal() }),
+    });
+    setSaving(false);
+    if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return; }
+    const data = await res.json();
+    setExtendOrderId(data.orderId);
+    setExtendQr({ qrDataUrl: data.qrDataUrl, accountName: data.accountName, bankName: data.bankName });
+    setExtendStep(2);
+  }
+
+  async function submitExtendSlip() {
+    if (!extendSlipFile || !extendOrderId) return;
+    setExtendSlipUploading(true);
+    const fd = new FormData();
+    fd.append("orderId", String(extendOrderId));
+    fd.append("slip", extendSlipFile);
+    await fetch("/api/payment/slip", { method: "POST", body: fd });
+    await addExtendTime();
+    setExtendSlipUploading(false);
+    closeExtendFlow();
+  }
+
+  function closeExtendFlow() {
+    setExtendSession(null); setExtendBill(null); setExtendStep(0);
     load();
   }
 
@@ -758,7 +834,7 @@ export default function AdminTimePage() {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={(sess) => { setExtendSession(sess); setExtendPkg("B"); setExtendQty(1); }} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} />)}
             </div>
           </div>
         );
@@ -906,21 +982,28 @@ export default function AdminTimePage() {
       )}
 
       {/* Extend time modal */}
-      {extendSession && (
-        <Modal onClose={() => setExtendSession(null)} title={`ต่อเวลา — ${extendSession.nickname}`}>
+      {extendSession && extendStep === 0 && (
+        <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
           <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
           <div className="space-y-2">
-            {(["A", "B", "C"] as PkgKey[]).map((key) => (
-              <button
-                key={key}
-                onClick={() => { setExtendPkg(key); setExtendQty(1); }}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}
-              >
+            {(["A", "B"] as PkgKey[]).map((key) => (
+              <button key={key} onClick={() => { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); }}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
                 <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
                 <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
               </button>
             ))}
           </div>
+
+          {extendPkg === "A" && (
+            <div>
+              <button onClick={() => openPickerList({ list: "extendDrink" })}
+                className={`w-full border-2 rounded-xl px-4 py-2.5 text-sm text-left transition-colors ${extendDrinkMenuItemId ? "border-orange bg-orange/5 text-navy font-semibold" : "border-dashed border-sand text-gray-400 hover:border-orange hover:text-orange"}`}>
+                {extendDrinkMenuItemId ? `🥤 ${extendDrinkName} (+${extendDrinkPrice}฿)` : "🥤 เลือกเครื่องดื่ม"}
+              </button>
+            </div>
+          )}
+
           {extendPkg === "B" && (
             <div className="flex items-center gap-3 justify-center">
               <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
@@ -928,15 +1011,34 @@ export default function AdminTimePage() {
               <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
               <button onClick={() => setExtendQty((q) => q + 1)}
                 className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
-              <span className="text-sm text-gray-500">× {PACKAGES.B.timeSeconds / 3600} ชม. = {extendQty * 2} ชม. ({extendQty * PACKAGES.B.price}฿)</span>
+              <span className="text-sm text-gray-500">= {extendQty * 2} ชม. ({extendQty * PACKAGES.B.price}฿)</span>
             </div>
           )}
-          <button
-            onClick={submitExtend}
-            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm"
-          >
-            ✓ ยืนยันต่อเวลา{extendPkg === "B" ? ` ${extendQty * 2} ชม.` : extendPkg === "C" ? " เหมาวัน" : " 1 ชม."}
+
+          <div className="bg-sand/40 rounded-xl p-3 text-center">
+            <p className="text-xs text-gray-500">ยอดรวม</p>
+            <p className="font-bold text-navy text-xl">฿{extendTotal()}</p>
+          </div>
+
+          <button onClick={() => setExtendStep(1)}
+            disabled={extendPkg === "A" && !extendDrinkMenuItemId}
+            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
+            ถัดไป — เลือกวิธีชำระ →
           </button>
+        </Modal>
+      )}
+
+      {extendSession && extendStep === 1 && (
+        <Modal onClose={closeExtendFlow} title="ชำระเงิน">
+          {renderMethodStep(extendTotal(), chooseExtendCash, chooseExtendQR, () => setExtendStep(0))}
+        </Modal>
+      )}
+
+      {extendSession && extendStep === 2 && extendQr && (
+        <Modal onClose={closeExtendFlow} title="สแกน QR ชำระเงิน">
+          {renderQRStep(extendQr, extendTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
+            (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
+            submitExtendSlip, () => setExtendStep(1))}
         </Modal>
       )}
 
