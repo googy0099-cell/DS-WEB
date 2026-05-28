@@ -65,14 +65,15 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, prepRemaining, onCheckout, onAddTime }: {
+function SessionCard({ session, prepRemaining, onCheckout, onExtend }: {
   session: PlayerSession; prepRemaining: number;
-  onCheckout: (id: number) => void; onAddTime: (id: number, secs: number) => void;
+  onCheckout: (id: number) => void; onExtend: (session: PlayerSession) => void;
 }) {
   const prep = useCountdown(prepRemaining);
   const remaining = useCountdown(session.timeRemaining);
   const inPrep = prep > 0;
   const color = timerColor(remaining);
+  const isAllDay = session.packageType === "C";
   const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? 3600;
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
 
@@ -83,8 +84,8 @@ function SessionCard({ session, prepRemaining, onCheckout, onAddTime }: {
           <p className="font-bold text-white text-base">{session.nickname}</p>
           <p className="text-white/50 text-xs">{PACKAGES[session.packageType]?.desc}</p>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : color.text} border border-current`}>
-          {inPrep ? "เตรียมตัว" : color.label}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : isAllDay ? "text-purple-300" : color.text} border border-current`}>
+          {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : color.label}
         </span>
       </div>
       {session.user && (
@@ -96,8 +97,10 @@ function SessionCard({ session, prepRemaining, onCheckout, onAddTime }: {
       {inPrep ? (
         <div>
           <div className="text-2xl font-mono font-bold text-sky-300">เริ่มใน {fmt(prep)}</div>
-          <p className="text-white/40 text-xs mt-1">เวลาเล่น {fmt(session.timeRemaining)} (ยังไม่เริ่มนับ)</p>
+          <p className="text-white/40 text-xs mt-1">เวลาเล่น {isAllDay ? "ไม่จำกัด" : fmt(session.timeRemaining)} (ยังไม่เริ่มนับ)</p>
         </div>
+      ) : isAllDay ? (
+        <div className="text-2xl font-mono font-bold text-purple-300">∞ ไม่จำกัดเวลา</div>
       ) : (
         <div>
           <div className={`text-2xl font-mono font-bold ${color.text}`}>{fmt(remaining)}</div>
@@ -107,9 +110,14 @@ function SessionCard({ session, prepRemaining, onCheckout, onAddTime }: {
         </div>
       )}
       <div className="flex gap-2 pt-1">
-        <button onClick={() => onAddTime(session.id, 3600)}
-          className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
-          title="สั่งน้ำเพิ่ม → เพิ่มเวลา 1 ชั่วโมง">🥤 +1 ชม.</button>
+        {!isAllDay && (
+          <button
+            onClick={() => onExtend(session)}
+            className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
+          >
+            ⏱️ ต่อเวลา
+          </button>
+        )}
         <button onClick={() => onCheckout(session.id)}
           className="flex-1 text-xs bg-orange hover:bg-orange/80 text-white font-bold py-2 rounded-xl transition-colors">ปิด</button>
       </div>
@@ -332,6 +340,11 @@ export default function AdminTimePage() {
   const [editBill, setEditBill] = useState<Bill | null>(null);
   const [editBillName, setEditBillName] = useState("");
   const [editBillColor, setEditBillColor] = useState("indigo");
+
+  // extend time flow
+  const [extendSession, setExtendSession] = useState<PlayerSession | null>(null);
+  const [extendPkg, setExtendPkg] = useState<PkgKey>("B");
+  const [extendQty, setExtendQty] = useState(1);
 
   // item picker (drink or extra item) — list then detail
   type PickerCtx = { list: "players"; idx: number } | { list: "addPlayers"; idx: number } | { list: "extraItems" } | { list: "addExtraItems" };
@@ -572,6 +585,19 @@ export default function AdminTimePage() {
     setChangeTableBill(null); load();
   }
 
+  async function submitExtend() {
+    if (!extendSession) return;
+    const pkg = PACKAGES[extendPkg];
+    const addSecs = extendPkg === "B" ? pkg.timeSeconds * extendQty : pkg.timeSeconds;
+    await fetch(`/api/pos/sessions/${extendSession.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ addSeconds: addSecs }),
+    });
+    setExtendSession(null);
+    load();
+  }
+
   async function submitEditBill() {
     if (!editBill || !editBillName.trim()) return;
     await fetch(`/api/pos/bills/${editBill.id}`, {
@@ -732,7 +758,7 @@ export default function AdminTimePage() {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onAddTime={addTime} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={(sess) => { setExtendSession(sess); setExtendPkg("B"); setExtendQty(1); }} />)}
             </div>
           </div>
         );
@@ -876,6 +902,41 @@ export default function AdminTimePage() {
               </button>
             ))}
           </div>
+        </Modal>
+      )}
+
+      {/* Extend time modal */}
+      {extendSession && (
+        <Modal onClose={() => setExtendSession(null)} title={`ต่อเวลา — ${extendSession.nickname}`}>
+          <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
+          <div className="space-y-2">
+            {(["A", "B", "C"] as PkgKey[]).map((key) => (
+              <button
+                key={key}
+                onClick={() => { setExtendPkg(key); setExtendQty(1); }}
+                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}
+              >
+                <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
+                <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
+              </button>
+            ))}
+          </div>
+          {extendPkg === "B" && (
+            <div className="flex items-center gap-3 justify-center">
+              <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
+                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">−</button>
+              <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
+              <button onClick={() => setExtendQty((q) => q + 1)}
+                className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
+              <span className="text-sm text-gray-500">× {PACKAGES.B.timeSeconds / 3600} ชม. = {extendQty * 2} ชม. ({extendQty * PACKAGES.B.price}฿)</span>
+            </div>
+          )}
+          <button
+            onClick={submitExtend}
+            className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm"
+          >
+            ✓ ยืนยันต่อเวลา{extendPkg === "B" ? ` ${extendQty * 2} ชม.` : extendPkg === "C" ? " เหมาวัน" : " 1 ชม."}
+          </button>
         </Modal>
       )}
 
