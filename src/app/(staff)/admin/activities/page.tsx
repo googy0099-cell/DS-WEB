@@ -23,6 +23,7 @@ type Block =
   | { type: "heading"; value: string }
   | { type: "text"; value: string }
   | { type: "image"; url: string; caption: string; size: "small" | "medium" | "full"; align: "left" | "center" | "right" }
+  | { type: "image-set"; images: { url: string; caption: string }[] }
   | { type: "button"; url: string; label: string }
   | { type: "highlight"; value: string; color: "orange" | "green" | "blue" }
   | { type: "divider" };
@@ -31,6 +32,7 @@ const BLOCK_LABELS: Record<string, string> = {
   heading: "หัวข้อ",
   text: "ข้อความ",
   image: "รูปภาพ",
+  "image-set": "เซ็ทรูป",
   button: "ปุ่มลิงก์",
   highlight: "กล่องเน้น",
   divider: "เส้นคั่น",
@@ -82,6 +84,7 @@ function BlockEditor({ blocks, onChange }: { blocks: Block[]; onChange: (b: Bloc
     else if (type === "text") newBlock = { type: "text", value: "" };
     else if (type === "image") newBlock = { type: "image", url: "", caption: "", size: "full", align: "center" };
     else if (type === "button") newBlock = { type: "button", url: "", label: "ดูรายละเอียด →" };
+    else if (type === "image-set") newBlock = { type: "image-set", images: [] };
     else if (type === "highlight") newBlock = { type: "highlight", value: "", color: "orange" };
     else newBlock = { type: "divider" };
     onChange([...blocks, newBlock]);
@@ -148,6 +151,45 @@ function BlockEditor({ blocks, onChange }: { blocks: Block[]; onChange: (b: Bloc
                     </button>
                   ))}
                 </div>
+              </div>
+            );
+          })()}
+
+          {block.type === "image-set" && (() => {
+            const setBlock = block as Extract<Block, { type: "image-set" }>;
+            function updateImages(imgs: { url: string; caption: string }[]) {
+              update(i, { images: imgs } as Partial<Block>);
+            }
+            return (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {setBlock.images.map((img, j) => (
+                    <div key={j} className="relative group">
+                      <ImageUpload
+                        value={img.url}
+                        onChange={(url) => {
+                          const next = [...setBlock.images];
+                          next[j] = { ...next[j], url: url || "" };
+                          updateImages(next);
+                        }}
+                      />
+                      <button
+                        onClick={() => updateImages(setBlock.images.filter((_, k) => k !== j))}
+                        className="absolute top-1 right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      >×</button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => updateImages([...setBlock.images, { url: "", caption: "" }])}
+                    className="aspect-square border-2 border-dashed border-sand rounded-xl flex flex-col items-center justify-center text-gray-400 hover:border-orange hover:text-orange transition-colors text-xs gap-1"
+                  >
+                    <span className="text-2xl">+</span>
+                    <span>เพิ่มรูป</span>
+                  </button>
+                </div>
+                {setBlock.images.length > 0 && (
+                  <p className="text-xs text-gray-400">{setBlock.images.length} รูป · แสดงเป็น grid 3 คอลัมน์</p>
+                )}
               </div>
             );
           })()}

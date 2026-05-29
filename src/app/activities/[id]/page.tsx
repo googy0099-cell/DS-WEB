@@ -11,6 +11,7 @@ type Block =
   | { type: "heading"; value: string }
   | { type: "text"; value: string }
   | { type: "image"; url: string; caption?: string; size?: "small" | "medium" | "full"; align?: "left" | "center" | "right" }
+  | { type: "image-set"; images: { url: string; caption?: string }[] }
   | { type: "button"; url: string; label: string }
   | { type: "highlight"; value: string; color: "orange" | "green" | "blue" }
   | { type: "divider" };
@@ -52,6 +53,22 @@ function RenderBlocks({ blocks }: { blocks: Block[] }) {
                 <figcaption className="text-center text-xs text-gray-400 py-2 bg-white">{block.caption}</figcaption>
               )}
             </figure>
+          );
+        }
+        if (block.type === "image-set") {
+          return (
+            <div key={i} className="grid grid-cols-3 gap-2">
+              {block.images.map((img, j) => (
+                <figure key={j} className="rounded-xl overflow-hidden shadow-sm">
+                  <div className="relative w-full aspect-square">
+                    <Image src={img.url} alt={img.caption ?? ""} fill className="object-cover" />
+                  </div>
+                  {img.caption && (
+                    <figcaption className="text-center text-[10px] text-gray-400 py-1 bg-white leading-tight">{img.caption}</figcaption>
+                  )}
+                </figure>
+              ))}
+            </div>
           );
         }
         if (block.type === "button") {
@@ -102,12 +119,12 @@ export default async function ActivityDetailPage({
       <Navbar />
       <div className="pt-16 min-h-screen bg-cream">
         {act.imageUrl ? (
-          <div className="relative w-full aspect-[16/9] overflow-hidden bg-sand">
+          <div className="relative w-full aspect-[16/6] overflow-hidden bg-sand">
             <Image src={act.imageUrl} alt={act.title} fill className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-navy/30 to-transparent" />
           </div>
         ) : (
-          <div className="w-full h-40 bg-navy flex items-center justify-center">
+          <div className="w-full h-32 bg-navy flex items-center justify-center">
             <span className="text-6xl">{act.emoji}</span>
           </div>
         )}
