@@ -119,9 +119,14 @@ export default async function ActivityDetailPage({
       <Navbar />
       <div className="pt-16 min-h-screen bg-cream">
         {act.imageUrl ? (
-          <div className="relative w-full aspect-[16/6] overflow-hidden bg-sand">
-            <Image src={act.imageUrl} alt={act.title} fill className="object-cover" />
-            <div className="absolute inset-0 bg-gradient-to-t from-navy/30 to-transparent" />
+          <div className="w-full bg-sand flex justify-center overflow-hidden">
+            <Image
+              src={act.imageUrl}
+              alt={act.title}
+              width={1200}
+              height={600}
+              className="w-full max-h-48 object-contain"
+            />
           </div>
         ) : (
           <div className="w-full h-32 bg-navy flex items-center justify-center">

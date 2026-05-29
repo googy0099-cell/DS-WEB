@@ -30,11 +30,17 @@ export default async function ActivitiesSection() {
               className="bg-white rounded-2xl overflow-hidden shadow-sm flex flex-col hover:-translate-y-1 hover:shadow-lg transition-all duration-200"
             >
               {act.imageUrl ? (
-                <div className="relative w-full aspect-[16/9] overflow-hidden shrink-0">
-                  <Image src={act.imageUrl} alt={act.title} fill className="object-cover" />
+                <div className="w-full bg-sand flex justify-center overflow-hidden shrink-0">
+                  <Image
+                    src={act.imageUrl}
+                    alt={act.title}
+                    width={800}
+                    height={400}
+                    className="w-full max-h-28 object-contain"
+                  />
                 </div>
               ) : (
-                <div className="w-full aspect-[16/9] bg-gradient-to-br from-orange/20 to-sand flex items-center justify-center shrink-0">
+                <div className="w-full h-28 bg-gradient-to-br from-orange/20 to-sand flex items-center justify-center shrink-0">
                   <span className="text-4xl">{act.emoji}</span>
                 </div>
               )}
