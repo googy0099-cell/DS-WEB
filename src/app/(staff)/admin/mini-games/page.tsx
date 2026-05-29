@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 import useSWR from "swr";
 import Image from "next/image";
 import ImageUpload from "@/components/admin/ImageUpload";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type MiniGame = {
   id: number;
@@ -200,10 +201,10 @@ export default function AdminMiniGamesPage() {
 
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">ลำดับการแสดง</label>
-                <input
-                  type="number"
+                <NumpadInput
                   value={editing.sortOrder || ""}
-                  onChange={(e) => setEditing({ ...editing, sortOrder: parseInt(e.target.value) || 0 })}
+                  onChange={(v) => setEditing({ ...editing, sortOrder: v })}
+                  placeholder="0"
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />
               </div>

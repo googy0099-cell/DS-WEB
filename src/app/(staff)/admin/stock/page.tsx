@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 const UNITS = ["kg", "g", "liter", "ml", "piece", "pack", "bottle", "box", "bag"];
 
@@ -244,21 +245,21 @@ export default function StockPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-semibold text-navy block mb-1">ขั้นต่ำ (แจ้งเตือน)</label>
-                  <input type="number" min={0} value={form.minQty || ""}
-                    onChange={(e) => setForm((p) => ({ ...p, minQty: Number(e.target.value) }))}
+                  <NumpadInput value={form.minQty || ""} onChange={(v) => setForm((p) => ({ ...p, minQty: v }))}
+                    allowDecimal placeholder="0"
                     className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-navy block mb-1">ควรสั่งซื้อเมื่อ</label>
-                  <input type="number" min={0} value={form.reorderQty || ""}
-                    onChange={(e) => setForm((p) => ({ ...p, reorderQty: Number(e.target.value) }))}
+                  <NumpadInput value={form.reorderQty || ""} onChange={(v) => setForm((p) => ({ ...p, reorderQty: v }))}
+                    allowDecimal placeholder="0"
                     className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">ต้นทุน/หน่วย (฿)</label>
-                <input type="number" min={0} step={0.01} value={form.costPerUnit || ""}
-                  onChange={(e) => setForm((p) => ({ ...p, costPerUnit: Number(e.target.value) }))}
+                <NumpadInput value={form.costPerUnit || ""} onChange={(v) => setForm((p) => ({ ...p, costPerUnit: v }))}
+                  allowDecimal placeholder="0"
                   className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
               </div>
             </div>
@@ -287,9 +288,8 @@ export default function StockPage() {
             </div>
             <div>
               <label className="text-xs font-semibold text-navy block mb-1">จำนวนที่รับ ({stockInItem.unit}) *</label>
-              <input type="number" min={0.01} step={0.01} value={inQty}
-                onChange={(e) => setInQty(e.target.value)}
-                autoFocus placeholder="0"
+              <NumpadInput value={inQty} onChange={(v) => setInQty(v === 0 ? "" : String(v))}
+                allowDecimal placeholder="0"
                 className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-2xl font-bold text-center focus:outline-none focus:border-orange" />
             </div>
             <div>

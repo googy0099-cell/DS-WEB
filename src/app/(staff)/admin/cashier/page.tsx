@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type LowMenu = { id: number; nameTh: string; missing: string[] };
 type ReorderItem = { id: number; sku: string; name: string; unit: string; currentQty: number; reorderQty: number };
@@ -191,11 +192,11 @@ export default function CashierPage() {
         <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
           <div>
             <label className="text-sm font-semibold text-navy block mb-1.5">ยอดเงินเปิดเก๊ะ (฿)</label>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={openingFloat}
-              onChange={(e) => setOpeningFloat(e.target.value)}
+            <NumpadInput
+              value={Number(openingFloat) || ""}
+              onChange={(v) => setOpeningFloat(String(v))}
+              placeholder="0"
+              label="ยอดเงินเปิดเก๊ะ (฿)"
               className="w-full border-2 border-sand rounded-2xl px-4 py-3 text-2xl font-bold text-center text-navy focus:outline-none focus:border-orange"
             />
             <p className="text-xs text-gray-400 mt-1 text-center">เงินทอนที่เตรียมไว้ก่อนเปิดร้าน</p>
@@ -406,12 +407,11 @@ export default function CashierPage() {
                   <div key={d} className="flex items-center gap-2">
                     <span className="w-14 text-right text-sm font-semibold text-navy shrink-0">฿{d}</span>
                     <span className="text-gray-400 text-sm shrink-0">×</span>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={counts[d]}
-                      onChange={(e) => setCounts((prev) => ({ ...prev, [d]: e.target.value }))}
+                    <NumpadInput
+                      value={Number(counts[d]) || ""}
+                      onChange={(v) => setCounts((prev) => ({ ...prev, [d]: v === 0 ? "" : String(v) }))}
                       placeholder="0"
+                      label={`฿${d} × จำนวน`}
                       className="w-20 border border-sand rounded-xl px-2 py-1.5 text-sm text-center focus:outline-none focus:border-orange"
                     />
                     <span className="text-gray-400 text-sm shrink-0">=</span>

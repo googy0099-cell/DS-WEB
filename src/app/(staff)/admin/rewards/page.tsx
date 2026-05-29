@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import useSWR from "swr";
 import Image from "next/image";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -203,8 +204,12 @@ function RewardForm({ form, setForm }: { form: typeof BLANK; setForm: React.Disp
       </div>
       <div>
         <label className="text-xs font-semibold text-navy block mb-1">ราคา (ลูกเต๋า 🎲) *</label>
-        <input type="number" min={1} value={form.cost || ""} onChange={(e) => setForm((p) => ({ ...p, cost: Number(e.target.value) }))}
-          className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+        <NumpadInput
+          value={form.cost || ""}
+          onChange={(v) => setForm((p) => ({ ...p, cost: v }))}
+          placeholder="0"
+          className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
+        />
       </div>
     </div>
   );

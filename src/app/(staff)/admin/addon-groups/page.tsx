@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type AddonItem = { id: number; nameTh: string; priceTHB: number; isActive: boolean };
 type AddonGroup = { id: number; nameTh: string; isActive: boolean; items: AddonItem[] };
@@ -141,10 +142,10 @@ export default function AdminAddonGroupsPage() {
                         onChange={(e) => setEditingItem({ ...editingItem, nameTh: e.target.value })}
                         className="flex-1 border border-sand rounded-lg px-2 py-1 text-sm focus:border-orange focus:outline-none"
                       />
-                      <input
-                        type="number"
+                      <NumpadInput
                         value={editingItem.priceTHB || ""}
-                        onChange={(e) => setEditingItem({ ...editingItem, priceTHB: parseInt(e.target.value) || 0 })}
+                        onChange={(v) => setEditingItem({ ...editingItem, priceTHB: v })}
+                        placeholder="0"
                         className="w-20 border border-sand rounded-lg px-2 py-1 text-sm text-right focus:border-orange focus:outline-none"
                       />
                       <span className="text-xs text-gray-400">฿</span>
@@ -173,10 +174,9 @@ export default function AdminAddonGroupsPage() {
                 placeholder="ชื่อ Add-on"
                 className="flex-1 border border-sand rounded-lg px-2 py-1.5 text-sm focus:border-orange focus:outline-none"
               />
-              <input
-                type="number"
-                value={newItems[group.id]?.priceTHB ?? ""}
-                onChange={(e) => setNewItems((p) => ({ ...p, [group.id]: { ...p[group.id], priceTHB: e.target.value } }))}
+              <NumpadInput
+                value={Number(newItems[group.id]?.priceTHB) || ""}
+                onChange={(v) => setNewItems((p) => ({ ...p, [group.id]: { ...p[group.id], priceTHB: String(v) } }))}
                 placeholder="ราคา"
                 className="w-20 border border-sand rounded-lg px-2 py-1.5 text-sm text-right focus:border-orange focus:outline-none"
               />

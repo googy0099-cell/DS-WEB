@@ -3,6 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import ImageUpload from "@/components/admin/ImageUpload";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type MenuItem = {
   id: number;
@@ -403,8 +404,8 @@ export default function AdminMenuPage() {
                 ))}
               </select>
               <div className="flex gap-2">
-                <input type="number" min={0.001} step={0.001} placeholder="จำนวน/จาน" value={newRecipeQty}
-                  onChange={(e) => setNewRecipeQty(e.target.value)}
+                <NumpadInput value={newRecipeQty} onChange={(v) => setNewRecipeQty(v === 0 ? "" : String(v))}
+                  allowDecimal placeholder="จำนวน/จาน"
                   className="flex-1 border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
                 <button onClick={addRecipe} disabled={recipeSaving || !newRecipeStockId || !parseFloat(newRecipeQty)}
                   className="bg-orange text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">
@@ -455,18 +456,21 @@ export default function AdminMenuPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">ราคาปกติ ฿ (สำหรับเมนูที่ไม่มีไซส์)</label>
-                <input type="number" value={editing.priceTHB || ""} onChange={(e) => setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })}
+                <NumpadInput value={editing.priceTHB || ""} onChange={(v) => setEditing({ ...editing, priceTHB: v })}
+                  placeholder="0"
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ราคา S ฿</label>
-                  <input type="number" placeholder="ไม่มีไซส์" value={editing.priceS ?? ""} onChange={(e) => setEditing({ ...editing, priceS: e.target.value === "" ? null : parseInt(e.target.value) || 0 })}
+                  <NumpadInput value={editing.priceS ?? ""} onChange={(v) => setEditing({ ...editing, priceS: v || null })}
+                    placeholder="ไม่มีไซส์"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ราคา XL ฿</label>
-                  <input type="number" placeholder="ไม่มีไซส์" value={editing.priceXL ?? ""} onChange={(e) => setEditing({ ...editing, priceXL: e.target.value === "" ? null : parseInt(e.target.value) || 0 })}
+                  <NumpadInput value={editing.priceXL ?? ""} onChange={(v) => setEditing({ ...editing, priceXL: v || null })}
+                    placeholder="ไม่มีไซส์"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
                 </div>
               </div>

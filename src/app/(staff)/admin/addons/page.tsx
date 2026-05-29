@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type Addon = { id: number; nameTh: string; priceTHB: number; isActive: boolean };
 
@@ -109,12 +110,10 @@ export default function AdminAddonsPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">ราคาเพิ่ม (฿)</label>
-                <input
-                  type="number"
+                <NumpadInput
                   value={editing.priceTHB || ""}
-                  onChange={(e) =>
-                    setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })
-                  }
+                  onChange={(v) => setEditing({ ...editing, priceTHB: v })}
+                  placeholder="0"
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />
               </div>

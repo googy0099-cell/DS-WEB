@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type OptionChoice = { id: number; nameTh: string; priceTHB: number; isDefault: boolean; isActive: boolean };
 type OptionGroup = { id: number; nameTh: string; isRequired: boolean; isActive: boolean; choices: OptionChoice[] };
@@ -166,10 +167,10 @@ export default function AdminOptionGroupsPage() {
                         onChange={(e) => setEditingChoice({ ...editingChoice, nameTh: e.target.value })}
                         className="flex-1 border border-sand rounded-lg px-2 py-1 text-sm focus:border-orange focus:outline-none"
                       />
-                      <input
-                        type="number"
+                      <NumpadInput
                         value={editingChoice.priceTHB || ""}
-                        onChange={(e) => setEditingChoice({ ...editingChoice, priceTHB: parseInt(e.target.value) || 0 })}
+                        onChange={(v) => setEditingChoice({ ...editingChoice, priceTHB: v })}
+                        placeholder="0"
                         className="w-20 border border-sand rounded-lg px-2 py-1 text-sm text-right focus:border-orange focus:outline-none"
                       />
                       <span className="text-xs text-gray-400">฿</span>
@@ -205,10 +206,9 @@ export default function AdminOptionGroupsPage() {
                 placeholder="ชื่อตัวเลือก เช่น 50%"
                 className="flex-1 min-w-32 border border-sand rounded-lg px-2 py-1.5 text-sm focus:border-orange focus:outline-none"
               />
-              <input
-                type="number"
-                value={newChoices[group.id]?.priceTHB ?? ""}
-                onChange={(e) => setNewChoices((p) => ({ ...p, [group.id]: { ...p[group.id], priceTHB: e.target.value } }))}
+              <NumpadInput
+                value={Number(newChoices[group.id]?.priceTHB) || ""}
+                onChange={(v) => setNewChoices((p) => ({ ...p, [group.id]: { ...p[group.id], priceTHB: String(v) } }))}
                 placeholder="ราคาเพิ่ม"
                 className="w-24 border border-sand rounded-lg px-2 py-1.5 text-sm text-right focus:border-orange focus:outline-none"
               />

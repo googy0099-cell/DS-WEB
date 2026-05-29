@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import useSWR from "swr";
 import Image from "next/image";
 import ImageUpload from "@/components/admin/ImageUpload";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 type GameGuide = {
   id: number;
@@ -530,31 +531,28 @@ export default function AdminGamesPage() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ผู้เล่นน้อยสุด</label>
-                  <input
-                    type="number"
-                    min={1}
+                  <NumpadInput
                     value={editing.minPlayers ?? ""}
-                    onChange={(e) => setEditing({ ...editing, minPlayers: Number(e.target.value) || 1 })}
+                    onChange={(v) => setEditing({ ...editing, minPlayers: v || 1 })}
+                    placeholder="2"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">ผู้เล่นมากสุด</label>
-                  <input
-                    type="number"
-                    min={1}
+                  <NumpadInput
                     value={editing.maxPlayers ?? ""}
-                    onChange={(e) => setEditing({ ...editing, maxPlayers: Number(e.target.value) || 1 })}
+                    onChange={(v) => setEditing({ ...editing, maxPlayers: v || 1 })}
+                    placeholder="8"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">เวลา (นาที)</label>
-                  <input
-                    type="number"
-                    min={1}
+                  <NumpadInput
                     value={editing.durationMin ?? ""}
-                    onChange={(e) => setEditing({ ...editing, durationMin: Number(e.target.value) || 1 })}
+                    onChange={(v) => setEditing({ ...editing, durationMin: v || 1 })}
+                    placeholder="30"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
@@ -606,10 +604,10 @@ export default function AdminGamesPage() {
                 </label>
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-gray-400">ลำดับ</label>
-                  <input
-                    type="number"
+                  <NumpadInput
                     value={editing.sortOrder || ""}
-                    onChange={(e) => setEditing({ ...editing, sortOrder: Number(e.target.value) })}
+                    onChange={(v) => setEditing({ ...editing, sortOrder: v })}
+                    placeholder="0"
                     className="w-16 border border-sand rounded-lg px-2 py-1 text-sm text-center focus:border-orange focus:outline-none"
                   />
                 </div>
