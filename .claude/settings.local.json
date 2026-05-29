@@ -112,7 +112,21 @@
       "Bash(grep -c 'function __TRACKED_VAR__' public/werewolf-gm-canvas.html)",
       "Bash(grep -c 'function __TRACKED_VAR__' /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/werewolf-gm-canvas.html)",
       "Bash(lsof -ti:3000)",
-      "Bash(xargs ps -o comm= -p)"
+      "Bash(xargs ps -o comm= -p)",
+      "Bash(grep -rn \"api/pos/orders\\\\|/pos/\\\\${\\\\|/table/\\\\${\\\\|pos/\\\\[tableId\\\\]\" src/)",
+      "Bash(npx tsx *)",
+      "Bash(xargs cat)",
+      "Bash(turso auth *)",
+      "Read(//Users/wisdechsiri/.config/turso/**)",
+      "Read(//Users/wisdechsiri/.turso/**)",
+      "Bash(xargs ls)",
+      "Bash(DATABASE_URL=\"file:./prisma/dice-shop.db\" npx prisma *)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma *)",
+      "Bash(TURSO_DATABASE_URL=\"libsql://dice-shop-googy0099-cell.aws-ap-northeast-1.turso.io?authToken=eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzkzMzQ2NTYsImlkIjoiMDE5ZTQ4OWItZjIwMS03MzNlLTg4ODYtN2U1MDRhMDkyOGE1IiwicmlkIjoiNGQ3Y2ZmZDUtMjRiMi00N2I2LTk0NWYtOTE0NjA0MDM0MGI4In0.JmS6y_OSTjlpPjkJ-yen1mxaKCQ7YgQdUwFJov1d-qk-XamK6f2P3bP-8Ca9I0irwJxDzVmIGS7ogRZDxCqpDQ\" DATABASE_URL=\"\" npx prisma *)",
+      "Bash(npm list *)",
+      "Bash(/Users/wisdechsiri/.turso/turso auth *)",
+      "Bash(xargs ls -la)",
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -20 {}')"
     ]
   }
 }

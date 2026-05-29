@@ -69,7 +69,7 @@ export async function PATCH(
     return NextResponse.json(order);
   }
 
-  // Confirm cash payment (no prior payment record)
+  // Confirm cash payment (with or without prior payment record)
   if ("confirmCash" in body) {
     const { receivedAmount, changeAmount } = body as { receivedAmount: number; changeAmount?: number };
     const orderFull = await db.order.findUnique({
@@ -77,16 +77,18 @@ export async function PATCH(
       select: { totalTHB: true, userId: true },
     });
     if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
-    await db.payment.create({
-      data: {
-        orderId,
-        method: "CASH",
-        amountTHB: orderFull.totalTHB,
-        status: "CONFIRMED",
-        confirmedAt: new Date(),
-        receivedAmount,
-        changeAmount: changeAmount ?? 0,
-      },
+    const confirmData = {
+      method: "CASH" as const,
+      amountTHB: orderFull.totalTHB,
+      status: "CONFIRMED",
+      confirmedAt: new Date(),
+      receivedAmount,
+      changeAmount: changeAmount ?? 0,
+    };
+    await db.payment.upsert({
+      where: { orderId },
+      create: { orderId, ...confirmData },
+      update: confirmData,
     });
     const pts = Math.floor(orderFull.totalTHB / 10);
     if (orderFull.userId && pts > 0) {
