@@ -2,12 +2,14 @@ import OrderQueue from "@/components/admin/OrderQueue";
 import { DashboardClock } from "@/components/admin/DashboardClock";
 import CashierOrderButton from "@/components/admin/CashierOrderButton";
 import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import db from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
   const session = await auth();
+  if (session?.user?.role === "STAFF") redirect("/admin/pos");
 
   // Quick stats
   const today = new Date();

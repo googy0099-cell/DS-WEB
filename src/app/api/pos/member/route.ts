@@ -4,7 +4,7 @@ import db from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) {
+  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER" && session.user.role !== "CASHIER")) {
     return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   }
 
