@@ -1,6 +1,7 @@
 import OrderQueue from "@/components/admin/OrderQueue";
 import { DashboardClock } from "@/components/admin/DashboardClock";
 import CashierOrderButton from "@/components/admin/CashierOrderButton";
+import DiceRedeemButton from "@/components/admin/DiceRedeemButton";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
@@ -29,7 +30,10 @@ export default async function AdminPage() {
           <h1 className="text-xl font-bold text-navy">Dashboard</h1>
           <p className="text-gray-500 text-sm">ยินดีต้อนรับ, {session?.user?.username}</p>
         </div>
-        <CashierOrderButton />
+        <div className="flex gap-2">
+          <DiceRedeemButton />
+          <CashierOrderButton />
+        </div>
       </div>
 
       {/* Stats */}

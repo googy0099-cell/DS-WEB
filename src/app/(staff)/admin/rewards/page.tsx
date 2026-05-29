@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import useSWR from "swr";
+import Image from "next/image";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -73,45 +74,44 @@ export default function RewardsAdminPage() {
         <button onClick={() => setAdding(true)} className="bg-orange text-white text-sm font-bold px-4 py-2 rounded-xl">+ เพิ่มรางวัล</button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-sand text-xs text-gray-400">
-              <th className="text-left p-3 pl-4">ชื่อรางวัล</th>
-              <th className="text-left p-3">รายละเอียด</th>
-              <th className="text-right p-3">ราคา 🎲</th>
-              <th className="text-center p-3">สถานะ</th>
-              <th className="p-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-sand/50">
-            {items.length === 0 ? (
-              <tr><td colSpan={5} className="text-center text-gray-400 py-10">ยังไม่มีรายการ — กด &quot;+ เพิ่มรางวัล&quot;</td></tr>
-            ) : items.map((item) => (
-              <tr key={item.id} className="hover:bg-sand/20">
-                <td className="p-3 pl-4 font-semibold text-navy">{item.nameTh}</td>
-                <td className="p-3 text-gray-400 text-xs max-w-[160px] truncate">{item.description || "-"}</td>
-                <td className="p-3 text-right font-bold text-orange">{item.cost}</td>
-                <td className="p-3 text-center">
+      {/* Card grid */}
+      {items.length === 0 ? (
+        <div className="bg-white rounded-2xl p-10 text-center text-gray-400">ยังไม่มีรายการ — กด &quot;+ เพิ่มรางวัล&quot;</div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {items.map((item) => (
+            <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden border-2 ${item.isAvailable ? "border-transparent" : "border-gray-200 opacity-60"}`}>
+              {item.imageUrl ? (
+                <div className="relative w-full aspect-video bg-gray-100">
+                  <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover" />
+                </div>
+              ) : (
+                <div className="w-full aspect-video bg-sand/40 flex items-center justify-center text-3xl">🎁</div>
+              )}
+              <div className="p-3 space-y-2">
+                <div>
+                  <p className="font-semibold text-navy text-sm leading-tight">{item.nameTh}</p>
+                  {item.description && <p className="text-xs text-gray-400 mt-0.5">{item.description}</p>}
+                  <p className="text-orange font-bold text-xs mt-1">🎲 {item.cost} แต้ม</p>
+                </div>
+                <div className="flex gap-1.5">
                   <button onClick={() => toggleAvailable(item)}
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${item.isAvailable ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
+                    className={`flex-1 text-xs font-semibold py-1 rounded-lg ${item.isAvailable ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"}`}>
                     {item.isAvailable ? "เปิด" : "ปิด"}
                   </button>
-                </td>
-                <td className="p-3 pr-4 flex gap-2 justify-end">
-                  <button onClick={() => openEdit(item)} className="text-xs text-navy border border-sand px-2.5 py-1 rounded-lg hover:border-navy">แก้ไข</button>
-                  <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 border border-red-200 px-2.5 py-1 rounded-lg hover:bg-red-50">ลบ</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                  <button onClick={() => openEdit(item)} className="flex-1 text-xs text-navy border border-sand py-1 rounded-lg hover:border-navy">แก้ไข</button>
+                  <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 border border-red-200 px-2 py-1 rounded-lg hover:bg-red-50">ลบ</button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Add modal */}
       {adding && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-navy text-lg">เพิ่มรางวัลใหม่</h3>
             <RewardForm form={form} setForm={setForm} />
             <div className="flex gap-2">
@@ -127,7 +127,7 @@ export default function RewardsAdminPage() {
       {/* Edit modal */}
       {editing && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-bold text-navy text-lg">แก้ไขรางวัล</h3>
             <RewardForm form={editForm} setForm={setEditForm} />
             <div className="flex gap-2">
@@ -144,8 +144,51 @@ export default function RewardsAdminPage() {
 }
 
 function RewardForm({ form, setForm }: { form: typeof BLANK; setForm: React.Dispatch<React.SetStateAction<typeof BLANK>> }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  async function handleImageUpload(file: File) {
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    setUploading(false);
+    if (res.ok) {
+      const { url } = await res.json();
+      setForm((p) => ({ ...p, imageUrl: url }));
+    }
+  }
+
   return (
     <div className="space-y-3">
+      {/* Image upload */}
+      <div>
+        <label className="text-xs font-semibold text-navy block mb-1">รูปภาพ</label>
+        <div
+          onClick={() => fileRef.current?.click()}
+          className="cursor-pointer border-2 border-dashed border-sand hover:border-orange rounded-xl overflow-hidden transition-colors"
+        >
+          {form.imageUrl ? (
+            <div className="relative w-full aspect-video">
+              <Image src={form.imageUrl} alt="reward" fill className="object-cover" />
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                <p className="text-white text-xs font-semibold">เปลี่ยนรูป</p>
+              </div>
+            </div>
+          ) : (
+            <div className="w-full aspect-video flex flex-col items-center justify-center text-gray-400 gap-1">
+              <span className="text-2xl">{uploading ? "⏳" : "📷"}</span>
+              <span className="text-xs">{uploading ? "กำลังอัปโหลด..." : "กดเพื่อเลือกรูป"}</span>
+            </div>
+          )}
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }} />
+        {form.imageUrl && (
+          <button onClick={() => setForm((p) => ({ ...p, imageUrl: "" }))} className="text-xs text-red-400 mt-1">ลบรูป</button>
+        )}
+      </div>
+
       <div>
         <label className="text-xs font-semibold text-navy block mb-1">ชื่อรางวัล *</label>
         <input value={form.nameTh} onChange={(e) => setForm((p) => ({ ...p, nameTh: e.target.value }))}
