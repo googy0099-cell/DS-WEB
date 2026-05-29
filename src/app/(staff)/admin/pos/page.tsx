@@ -67,6 +67,40 @@ function useCountdown(initial: number) {
   return secs;
 }
 
+function playTimeUpBeep() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [0, 0.35, 0.7].forEach((t, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.setValueAtTime(880 - i * 120, now + t);
+      gain.gain.setValueAtTime(0.5, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
+      osc.start(now + t); osc.stop(now + t + 0.28);
+    });
+  } catch {}
+}
+
+function playWarningBeep() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [0, 0.2].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(660, now + t);
+      gain.gain.setValueAtTime(0.35, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.15);
+      osc.start(now + t); osc.stop(now + t + 0.15);
+    });
+  } catch {}
+}
+
 function fmt(secs: number) {
   if (secs >= 86400) return "∞";
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
@@ -90,7 +124,27 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdi
   const remaining = useCountdown(session.timeRemaining);
   const inPrep = prep > 0;
   const color = timerColor(remaining);
-  const isAllDay = session.packageType === "C";
+  const isAllDay = session.timeRemaining >= 86400;
+
+  // Fire notifications at 5-min warning and time-up
+  const notifiedRef = useRef({ warned: false, expired: false });
+  useEffect(() => { notifiedRef.current = { warned: false, expired: false }; }, [session.timeRemaining]);
+  useEffect(() => {
+    if (isAllDay || inPrep) return;
+    if (remaining === 0 && !notifiedRef.current.expired) {
+      notifiedRef.current.expired = true;
+      playTimeUpBeep();
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("⏰ หมดเวลา!", { body: `${session.nickname} หมดเวลาแล้ว`, icon: "/DS-new-logo.png" });
+      }
+    } else if (remaining <= 300 && remaining > 0 && !notifiedRef.current.warned) {
+      notifiedRef.current.warned = true;
+      playWarningBeep();
+      if ("Notification" in window && Notification.permission === "granted") {
+        new Notification("⚠️ ใกล้หมดเวลา", { body: `${session.nickname} เหลือ 5 นาที`, icon: "/DS-new-logo.png" });
+      }
+    }
+  }, [remaining, isAllDay, inPrep, session.nickname]);
   const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? 3600;
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
 
