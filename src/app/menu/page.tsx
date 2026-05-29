@@ -8,6 +8,7 @@ import Footer from "@/components/shared/Footer";
 import CartDrawer from "@/components/orders/CartDrawer";
 import { useOrderStore, makeCartKey } from "@/store/orderStore";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
+import { useSession } from "next-auth/react";
 
 function getBangkokHHMM(): string {
   const now = new Date();
@@ -77,6 +78,7 @@ const GAME_PACKAGES = [
 ];
 
 export default function MenuPage() {
+  const { data: session, status } = useSession();
   const [items, setItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
   const [CATEGORIES, setCATEGORIES] = useState(DEFAULT_CATEGORIES);
@@ -85,6 +87,17 @@ export default function MenuPage() {
   const [pickerAddons, setPickerAddons] = useState<CartSelectedAddon[]>([]);
   const [pickerOptions, setPickerOptions] = useState<CartSelectedOption[]>([]);
   const { addItem } = useOrderStore();
+  const [showMemberPrompt, setShowMemberPrompt] = useState(false);
+
+  useEffect(() => {
+    if (status !== "unauthenticated") return;
+    if (sessionStorage.getItem("member_prompt_seen")) return;
+    const t = setTimeout(() => {
+      setShowMemberPrompt(true);
+      sessionStorage.setItem("member_prompt_seen", "1");
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [status]);
 
   useEffect(() => {
     Promise.all([
@@ -208,6 +221,52 @@ export default function MenuPage() {
   return (
     <>
       <Navbar />
+
+      {/* Member sign-up prompt for guests */}
+      {showMemberPrompt && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden animate-[slideUp_0.3s_ease-out]">
+            <div className="bg-navy px-6 pt-7 pb-5 text-center">
+              <div className="text-5xl mb-3">🎲</div>
+              <h2 className="text-xl font-bold text-cream leading-tight">สมัครสมาชิกวันนี้</h2>
+              <p className="text-cream/70 text-sm mt-1">เพื่อเก็บลูกเต๋าและรับสิทธิประโยชน์</p>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {[
+                { icon: "🎲", text: "สะสมลูกเต๋าทุกการสั่งอาหาร" },
+                { icon: "🎁", text: "แลกรางวัลและของรางวัลพิเศษ" },
+                { icon: "⭐", text: "รับสิทธิประโยชน์อื่นๆ อีกมากมาย" },
+              ].map((b) => (
+                <div key={b.text} className="flex items-center gap-3">
+                  <span className="text-xl shrink-0">{b.icon}</span>
+                  <span className="text-sm text-navy font-medium">{b.text}</span>
+                </div>
+              ))}
+              <Link
+                href="/register"
+                onClick={() => setShowMemberPrompt(false)}
+                className="block w-full bg-orange text-white font-bold py-3.5 rounded-2xl text-center text-sm mt-2"
+              >
+                สมัครสมาชิกฟรี →
+              </Link>
+              <Link
+                href="/login"
+                onClick={() => setShowMemberPrompt(false)}
+                className="block w-full text-center text-sm text-gray-400 py-1"
+              >
+                มีบัญชีแล้ว? เข้าสู่ระบบ
+              </Link>
+              <button
+                onClick={() => setShowMemberPrompt(false)}
+                className="block w-full text-center text-xs text-gray-300 pb-1"
+              >
+                ข้ามไปก่อน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="pt-16 min-h-screen bg-cream pb-28">
         <div className="bg-navy px-4 py-10 text-center">
           <h1 className="text-2xl font-bold text-cream mb-1">เมนูทั้งหมด</h1>
