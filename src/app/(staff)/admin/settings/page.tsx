@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import useSWR from "swr";
 import Image from "next/image";
+import {
+  isSerialSupported, requestPrinter, getGrantedPrinter,
+  getBaudRate, setBaudRate, buildReceiptEscPos, buildKitchenEscPos, printToSerial,
+} from "@/lib/thermal-print";
 
 interface PaymentConfig {
   id: number;
@@ -74,6 +78,19 @@ export default function AdminSettingsPage() {
   const [printSaving, setPrintSaving] = useState(false);
   const [printSuccess, setPrintSuccess] = useState(false);
 
+  // Serial printer state
+  const [serialSupported, setSerialSupported] = useState(false);
+  const [printerConnected, setPrinterConnected] = useState(false);
+  const [baudRate, setBaudRateState] = useState(9600);
+  const [serialTesting, setSerialTesting] = useState(false);
+  const [serialStatus, setSerialStatus] = useState<"" | "ok" | "fail">("");
+
+  useEffect(() => {
+    setSerialSupported(isSerialSupported());
+    setBaudRateState(getBaudRate());
+    getGrantedPrinter().then((p) => setPrinterConnected(!!p));
+  }, []);
+
   if (siteSettings && !promoLoaded) {
     setPromoTitle(siteSettings.promo_title ?? "🎉 โปรโมชั่นพิเศษ!");
     setPromoBody(siteSettings.promo_body ?? "สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)");
@@ -133,6 +150,40 @@ export default function AdminSettingsPage() {
     } finally {
       setPrintSaving(false);
     }
+  }
+
+  async function handleSelectPrinter() {
+    const port = await requestPrinter();
+    setPrinterConnected(!!port);
+  }
+
+  function handleBaudChange(rate: number) {
+    setBaudRateState(rate);
+    setBaudRate(rate);
+  }
+
+  async function handleSerialTestPrint() {
+    setSerialTesting(true);
+    setSerialStatus("");
+    const sampleReceipt: Parameters<typeof buildReceiptEscPos>[0] = {
+      id: 999,
+      orderName: "ทดสอบ",
+      totalTHB: 150,
+      note: "ไม่ใส่น้ำตาล",
+      createdAt: new Date().toISOString(),
+      items: [
+        { nameTh: "ชาไทย", selectedSize: "XL", selectedAddons: null, selectedOptions: null, quantity: 2, unitPriceTHB: 55 },
+        { nameTh: "กาแฟ", selectedSize: null, selectedAddons: null, selectedOptions: null, quantity: 1, unitPriceTHB: 40 },
+      ],
+    };
+    const data = buildReceiptEscPos(sampleReceipt, {
+      shopName: rShopName, shopInfo: rShopInfo, footer: rFooter,
+      showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer,
+      showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal,
+    });
+    const ok = await printToSerial(data);
+    setSerialStatus(ok ? "ok" : "fail");
+    setSerialTesting(false);
   }
 
   function testReceiptPrint() {
@@ -404,6 +455,59 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
       <div>
         <h1 className="text-xl font-bold text-navy mb-4">🖨️ ตั้งค่าการพิมพ์</h1>
 
+        {/* Printer connection */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4 mb-4">
+          <h2 className="font-semibold text-navy border-b border-sand pb-2">เชื่อมต่อเครื่องพิมพ์</h2>
+
+          {!serialSupported ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+              <p className="text-sm font-semibold text-amber-800">ต้องใช้ Google Chrome หรือ Edge</p>
+              <p className="text-xs text-amber-700">การพิมพ์ตรงไปยังเครื่องพิมพ์ (ไม่มีหน้าต่าง) ต้องใช้ Web Serial API ซึ่งรองรับเฉพาะ Chrome / Edge</p>
+              <p className="text-xs text-amber-700 mt-1">ถ้ายังต้องการใช้ Safari/Firefox — กด "ทดสอบพิมพ์" ข้างล่างเพื่อตั้งค่าเครื่องพิมพ์ใน browser แทน</p>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full shrink-0 ${printerConnected ? "bg-green-500" : "bg-gray-300"}`} />
+                <span className="text-sm text-navy font-medium">
+                  {printerConnected ? "เชื่อมต่อแล้ว — พร้อมพิมพ์อัตโนมัติ" : "ยังไม่ได้เลือกเครื่องพิมพ์"}
+                </span>
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-navy block mb-2">Baud Rate <span className="font-normal text-gray-400">(ความเร็วพอร์ต)</span></label>
+                <div className="flex gap-2 flex-wrap">
+                  {[9600, 19200, 38400, 115200].map((rate) => (
+                    <button key={rate} onClick={() => handleBaudChange(rate)}
+                      className={`px-3 py-1.5 rounded-lg border-2 text-xs font-medium transition-all ${baudRate === rate ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      {rate}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">ส่วนใหญ่ใช้ 9600 — ถ้าพิมพ์ผิดลองเปลี่ยนเป็น 115200</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={handleSelectPrinter}
+                  className="flex-1 bg-navy text-cream font-semibold py-2.5 rounded-xl text-sm hover:bg-navy/90">
+                  {printerConnected ? "🔄 เปลี่ยนเครื่องพิมพ์" : "🖨️ เลือกเครื่องพิมพ์"}
+                </button>
+                {printerConnected && (
+                  <button onClick={handleSerialTestPrint} disabled={serialTesting}
+                    className="flex-1 border border-orange text-orange font-semibold py-2.5 rounded-xl text-sm hover:bg-orange/5 disabled:opacity-50">
+                    {serialTesting ? "กำลังพิมพ์..." : "ทดสอบพิมพ์ (ไม่มีหน้าต่าง)"}
+                  </button>
+                )}
+              </div>
+
+              {serialStatus === "ok" && <p className="text-sm text-green-600 font-medium">✅ พิมพ์สำเร็จ! ตรวจสอบเครื่องพิมพ์</p>}
+              {serialStatus === "fail" && <p className="text-sm text-red-500 font-medium">❌ พิมพ์ไม่ได้ — ตรวจสอบ baud rate หรือการเชื่อมต่อ USB</p>}
+
+              <p className="text-xs text-gray-400">เมื่อเลือกเครื่องพิมพ์แล้ว กด 🖨️ ในการ์ดออเดอร์จะพิมพ์ออกเลย ไม่มีหน้าต่างยืนยัน</p>
+            </>
+          )}
+        </div>
+
         {/* Receipt */}
         <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4 mb-4">
           <h2 className="font-semibold text-navy border-b border-sand pb-2">ใบเสร็จลูกค้า</h2>
@@ -525,7 +629,7 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
         </div>
 
         <p className="text-xs text-gray-400 mt-3 text-center">
-          💡 การเลือกเครื่องพิมพ์ทำในหน้าต่างพิมพ์ของ browser — browser จะจำการตั้งค่าไว้อัตโนมัติ
+          💡 ต้องใช้ Chrome หรือ Edge เพื่อเชื่อมต่อเครื่องพิมพ์โดยตรง — Safari / Firefox ใช้ปุ่ม "ทดสอบพิมพ์" แล้ว browser จะจำเครื่องพิมพ์ไว้
         </p>
       </div>
     </div>

@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
+import {
+  buildReceiptEscPos, buildKitchenEscPos, printToSerial,
+  getGrantedPrinter,
+} from "@/lib/thermal-print";
 
 interface ReceiptSettings {
   shopName: string;
@@ -45,7 +49,43 @@ function openPrintWindow(html: string) {
   setTimeout(() => win.print(), 300);
 }
 
-function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
+async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
+  // Try silent serial print first
+  const hasPrinter = await getGrantedPrinter();
+  if (hasPrinter) {
+    const data = buildReceiptEscPos(
+      {
+        id: order.id,
+        orderName: order.orderName,
+        totalTHB: order.totalTHB,
+        note: order.note,
+        createdAt: order.createdAt,
+        tableId: order.tableId,
+        items: order.items.map((i) => ({
+          nameTh: i.menuItem.nameTh,
+          selectedSize: i.selectedSize,
+          selectedAddons: i.selectedAddons,
+          selectedOptions: i.selectedOptions,
+          quantity: i.quantity,
+          unitPriceTHB: i.unitPriceTHB,
+        })),
+      },
+      {
+        shopName: settings.shopName,
+        shopInfo: settings.shopInfo,
+        footer: settings.footer,
+        showOrderId: settings.showOrderId,
+        showDate: settings.showDate,
+        showCustomer: settings.showCustomer,
+        showNote: settings.showNote,
+        showItemPrice: settings.showItemPrice,
+        showTotal: settings.showTotal,
+      }
+    );
+    const ok = await printToSerial(data);
+    if (ok) return;
+  }
+  // Fallback: browser print window
   const dateStr = formatThaiDateTime(order.createdAt);
   const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
   const itemsHtml = order.items
@@ -87,7 +127,33 @@ ${settings.showNote && order.note ? `<div class="note">📝 หมายเห�
 </body></html>`);
 }
 
-function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
+async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
+  // Try silent serial print first
+  const hasPrinter = await getGrantedPrinter();
+  if (hasPrinter) {
+    const data = buildKitchenEscPos(
+      {
+        id: order.id,
+        orderName: order.orderName,
+        totalTHB: order.totalTHB,
+        note: order.note,
+        createdAt: order.createdAt,
+        tableId: order.tableId,
+        items: order.items.map((i) => ({
+          nameTh: i.menuItem.nameTh,
+          selectedSize: i.selectedSize,
+          selectedAddons: i.selectedAddons,
+          selectedOptions: i.selectedOptions,
+          quantity: i.quantity,
+          unitPriceTHB: i.unitPriceTHB,
+        })),
+      },
+      { showTable: settings.showTable, showNote: settings.showNote }
+    );
+    const ok = await printToSerial(data);
+    if (ok) return;
+  }
+  // Fallback: browser print window
   const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
   const itemsHtml = order.items
     .map((item) => {
