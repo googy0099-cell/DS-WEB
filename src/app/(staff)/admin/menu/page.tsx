@@ -23,6 +23,8 @@ type MenuItem = {
 
 type AddonGroup = { id: number; nameTh: string; isActive: boolean };
 type OptionGroup = { id: number; nameTh: string; isRequired: boolean; isActive: boolean };
+type StockItem = { id: number; name: string; unit: string; currentQty: number };
+type Recipe = { id: number; stockItemId: number; qtyUsed: number; stockItem: StockItem };
 
 export type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; isBuiltin?: boolean };
 
@@ -74,6 +76,17 @@ export default function AdminMenuPage() {
   const [selectedOptionGroupIds, setSelectedOptionGroupIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [filterCat, setFilterCat] = useState<string>("all");
+
+  // Recipe modal state
+  const [recipeMenuItem, setRecipeMenuItem] = useState<MenuItem | null>(null);
+  const { data: allStockItems = [] } = useSWR<StockItem[]>("/api/stock/items", fetcher);
+  const { data: recipes = [], mutate: mutateRecipes } = useSWR<Recipe[]>(
+    recipeMenuItem ? `/api/stock/recipes?menuItemId=${recipeMenuItem.id}` : null,
+    fetcher
+  );
+  const [newRecipeStockId, setNewRecipeStockId] = useState("");
+  const [newRecipeQty, setNewRecipeQty] = useState("");
+  const [recipeSaving, setRecipeSaving] = useState(false);
 
   // Category manager
   const [showCatManager, setShowCatManager] = useState(false);
@@ -172,6 +185,24 @@ export default function AdminMenuPage() {
 
   function toggleGroupId(ids: number[], id: number): number[] {
     return ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+  }
+
+  async function addRecipe() {
+    if (!recipeMenuItem || !newRecipeStockId || !parseFloat(newRecipeQty)) return;
+    setRecipeSaving(true);
+    await fetch("/api/stock/recipes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menuItemId: recipeMenuItem.id, stockItemId: Number(newRecipeStockId), qtyUsed: parseFloat(newRecipeQty) }),
+    });
+    await mutateRecipes();
+    setNewRecipeStockId(""); setNewRecipeQty("");
+    setRecipeSaving(false);
+  }
+
+  async function deleteRecipe(id: number) {
+    await fetch(`/api/stock/recipes/${id}`, { method: "DELETE" });
+    await mutateRecipes();
   }
 
   const filtered = filterCat === "all" ? items : items.filter((i) => i.category === filterCat);
@@ -278,6 +309,7 @@ export default function AdminMenuPage() {
                 <td className="p-3">
                   <div className="flex gap-1">
                     <button onClick={() => openEdit(item)} className="text-xs text-orange hover:underline">แก้ไข</button>
+                    <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); }} className="text-xs text-navy/60 hover:text-navy">📦</button>
                     <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
                   </div>
                 </td>
@@ -330,6 +362,62 @@ export default function AdminMenuPage() {
               </button>
             </div>
             <button onClick={() => setShowCatManager(false)} className="w-full border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ปิด</button>
+          </div>
+        </div>
+      )}
+
+      {/* Recipe Editor Modal */}
+      {recipeMenuItem && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setRecipeMenuItem(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div>
+              <h3 className="font-bold text-navy text-lg">📦 สูตรวัตถุดิบ</h3>
+              <p className="text-sm text-gray-400 mt-0.5">{recipeMenuItem.nameTh}</p>
+            </div>
+
+            {/* Current recipes */}
+            <div className="space-y-2">
+              {recipes.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-3">ยังไม่มีวัตถุดิบในสูตรนี้</p>
+              ) : (
+                recipes.map((r) => (
+                  <div key={r.id} className="flex items-center justify-between bg-sand/30 rounded-xl px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium text-navy">{r.stockItem.name}</p>
+                      <p className="text-xs text-gray-400">{r.qtyUsed} {r.stockItem.unit} / จาน · คงเหลือ {r.stockItem.currentQty} {r.stockItem.unit}</p>
+                    </div>
+                    <button onClick={() => deleteRecipe(r.id)} className="text-gray-300 hover:text-red-400 text-lg ml-3">🗑️</button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Add new recipe */}
+            <div className="border-t border-sand pt-3 space-y-2">
+              <p className="text-xs font-semibold text-navy">+ เพิ่มวัตถุดิบ</p>
+              <select value={newRecipeStockId} onChange={(e) => setNewRecipeStockId(e.target.value)}
+                className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange">
+                <option value="">เลือกวัตถุดิบ...</option>
+                {allStockItems.filter((s) => !recipes.find((r) => r.stockItemId === s.id)).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
+                ))}
+              </select>
+              <div className="flex gap-2">
+                <input type="number" min={0.001} step={0.001} placeholder="จำนวน/จาน" value={newRecipeQty}
+                  onChange={(e) => setNewRecipeQty(e.target.value)}
+                  className="flex-1 border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+                <button onClick={addRecipe} disabled={recipeSaving || !newRecipeStockId || !parseFloat(newRecipeQty)}
+                  className="bg-orange text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-40">
+                  {recipeSaving ? "..." : "เพิ่ม"}
+                </button>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 bg-sand/20 rounded-xl px-3 py-2">
+              ℹ️ ระบบจะตัดสต็อกตามสูตรนี้ทุกครั้งที่ออเดอร์ถูก SERVED
+            </p>
+
+            <button onClick={() => setRecipeMenuItem(null)} className="w-full border border-sand text-gray-400 py-3 rounded-2xl text-sm">ปิด</button>
           </div>
         </div>
       )}

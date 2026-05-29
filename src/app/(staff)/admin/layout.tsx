@@ -21,6 +21,7 @@ const STAFF_NAV = [
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
   { href: "/admin/dice-redeem", label: "แลกแต้ม", icon: "🎲" },
+  { href: "/admin/stock", label: "สต็อก", icon: "📦" },
 ];
 
 const OWNER_ONLY_NAV = [

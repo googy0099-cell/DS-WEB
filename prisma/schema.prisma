@@ -32,6 +32,9 @@ model User {
   handledOrders       Order[]              @relation("StaffOrders")
   auditLogs           AuditLog[]
   cashDrawerSessions  CashDrawerSession[] @relation("DrawerClosedBy")
+  stockInLogs         StockInLog[]        @relation("StockInLogs")
+  stockOutLogs        StockOutLog[]       @relation("StockOutLogs")
+  shopSessions        ShopSession[]       @relation("ShopSessions")
   notifications          Notification[]
   werewolfRoomsGM        WerewolfRoom[]          @relation("WerewolfRoomsGM")
   werewolfRoomPlayers    WerewolfRoomPlayer[]    @relation("WerewolfRoomPlayers")
@@ -99,6 +102,7 @@ model MenuItem {
   orderItems    OrderItem[]
   addonGroups   MenuItemAddonGroup[]
   optionGroups  MenuItemOptionGroup[]
+  stockRecipes  MenuStockRecipe[]
 }
 
 model RewardItem {
@@ -439,4 +443,81 @@ model SiteSetting {
   key       String   @id
   value     String
   updatedAt DateTime @updatedAt
+}
+
+model StockItem {
+  id          Int      @id @default(autoincrement())
+  sku         String   @unique
+  name        String
+  unit        String
+  currentQty  Float    @default(0) @map("current_qty")
+  minQty      Float    @default(0) @map("min_qty")
+  reorderQty  Float    @default(0) @map("reorder_qty")
+  costPerUnit Float    @default(0) @map("cost_per_unit")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  recipes     MenuStockRecipe[]
+  stockInLogs  StockInLog[]
+  stockOutLogs StockOutLog[]
+  alerts       StockAlert[]
+  @@map("stock_items")
+}
+
+model MenuStockRecipe {
+  id          Int       @id @default(autoincrement())
+  menuItemId  Int       @map("menu_item_id")
+  stockItemId Int       @map("stock_item_id")
+  qtyUsed     Float     @map("qty_used")
+  menuItem    MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  @@unique([menuItemId, stockItemId])
+  @@map("menu_stock_recipes")
+}
+
+model StockInLog {
+  id          Int       @id @default(autoincrement())
+  stockItemId Int       @map("stock_item_id")
+  qty         Float
+  note        String?
+  createdById Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  createdBy   User      @relation("StockInLogs", fields: [createdById], references: [id])
+  @@map("stock_in_log")
+}
+
+model StockOutLog {
+  id          Int       @id @default(autoincrement())
+  stockItemId Int       @map("stock_item_id")
+  qty         Float
+  reason      String
+  orderId     Int?      @map("order_id")
+  createdById Int       @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id])
+  createdBy   User      @relation("StockOutLogs", fields: [createdById], references: [id])
+  @@map("stock_out_log")
+}
+
+model StockAlert {
+  id          Int        @id @default(autoincrement())
+  type        String
+  stockItemId Int?       @map("stock_item_id")
+  menuItemId  Int?       @map("menu_item_id")
+  message     String
+  isRead      Boolean    @default(false) @map("is_read")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  stockItem   StockItem? @relation(fields: [stockItemId], references: [id])
+  @@map("stock_alerts")
+}
+
+model ShopSession {
+  id         Int       @id @default(1)
+  isOpen     Boolean   @default(false) @map("is_open")
+  openedAt   DateTime? @map("opened_at")
+  closedAt   DateTime? @map("closed_at")
+  openedById Int?      @map("opened_by")
+  openedBy   User?     @relation("ShopSessions", fields: [openedById], references: [id])
+  @@map("shop_session")
 }

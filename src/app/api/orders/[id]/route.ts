@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
+import { deductStockForOrder } from "@/lib/stock-deduct";
 
 const STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "✅ ยืนยันออเดอร์แล้ว",
@@ -108,6 +109,7 @@ export async function PATCH(
       data: { status: "SERVED", ...(handledById ? { handledById } : {}) },
       select: { id: true, orderName: true, status: true },
     });
+    if (handledById) await deductStockForOrder(orderId, handledById);
     return NextResponse.json(served);
   }
 
@@ -130,6 +132,8 @@ export async function PATCH(
       await db.user.update({ where: { id: order.userId }, data: { dicePoints: { increment: diceEarned } } });
     }
   }
+
+  if (status === "SERVED" && handledById) await deductStockForOrder(orderId, handledById);
 
   if (handledById && AUDIT_ACTIONS[status]) {
     await db.auditLog.create({
