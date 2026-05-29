@@ -16,12 +16,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!session) return NextResponse.json({ error: "ไม่พบ Session" }, { status: 404 });
 
   // Profile-only update (nickname / member link)
+  // Must also snapshot current remaining time — Prisma will bump updatedAt, which would cause
+  // remainingSeconds() to restart the countdown from the original DB timeRemaining value.
   if (body.nickname !== undefined || body.userId !== undefined) {
+    const startsAt = session.bill?.startsAt ?? session.createdAt;
+    const current = remainingSeconds(session.timeRemaining, startsAt, session.updatedAt);
     const updated = await db.playerSession.update({
       where: { id: Number(id) },
       data: {
         ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
         ...(body.userId !== undefined ? { userId: body.userId } : {}),
+        timeRemaining: current,
       },
     });
     return NextResponse.json(updated);

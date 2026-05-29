@@ -470,6 +470,9 @@ export default function AdminTimePage() {
   const [extendSlipUploading, setExtendSlipUploading] = useState(false);
   const extendSlipRef = useRef<HTMLInputElement>(null);
 
+  // bulk extend (ต่อยกตี้) flow — reuses extendPkg/extendQty/extendStep/extendQr/extendOrderId/slip state
+  const [extendAllBill, setExtendAllBill] = useState<Bill | null>(null);
+
   // edit session modal
   const [editingSession, setEditingSession] = useState<PlayerSession | null>(null);
   const [editNickname, setEditNickname] = useState("");
@@ -933,6 +936,97 @@ export default function AdminTimePage() {
     load();
   }
 
+  // ---- Bulk extend (ต่อยกตี้) ----
+  function openExtendAll(bill: Bill) {
+    setExtendAllBill(bill);
+    setExtendPkg("B"); setExtendQty(1); setExtendStep(0);
+    setExtendOrderId(null); setExtendQr(null);
+    setExtendSlipFile(null); setExtendSlipPreview(null);
+  }
+
+  function extendAllPlayerCount() {
+    return extendAllBill?.sessions.filter((s) => s.timeRemaining < 86400).length ?? 0;
+  }
+
+  function extendAllTotal() {
+    const n = extendAllPlayerCount();
+    if (extendPkg === "B") return PACKAGES.B.price * extendQty * n;
+    if (extendPkg === "D") return PACKAGES.D.price * n;
+    return 0;
+  }
+
+  function buildBulkExtendLineItems() {
+    const n = extendAllPlayerCount();
+    if (n === 0) return [];
+    const items: { menuItemId: number; nameTh: string; unitPriceTHB: number; qty: number }[] = [];
+    const gtItem = gametimeItems.find((g) => g.nameEn === `gametime-${extendPkg}`);
+    if (gtItem) {
+      const qty = extendPkg === "B" ? extendQty * n : n;
+      items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: PACKAGES[extendPkg]?.price ?? 0, qty });
+    }
+    return items;
+  }
+
+  async function addExtendTimeAll() {
+    if (!extendAllBill) return;
+    const toExtend = extendPkg === "D"
+      ? extendAllBill.sessions.filter((s) => s.timeRemaining < 86400)
+      : extendAllBill.sessions;
+    await Promise.all(toExtend.map((s) =>
+      fetch(`/api/pos/sessions/${s.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          extendPkg === "D" ? { upgradeToAllDay: true } : { addSeconds: PACKAGES.B.timeSeconds * extendQty }
+        ),
+      })
+    ));
+  }
+
+  async function chooseExtendAllCash() {
+    if (!extendAllBill) return;
+    setSaving(true);
+    await fetch(`/api/pos/bills/${extendAllBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "CASH", items: buildBulkExtendLineItems(), totalTHB: extendAllTotal() }),
+    });
+    await addExtendTimeAll();
+    setSaving(false);
+    closeExtendAllFlow();
+  }
+
+  async function chooseExtendAllQR() {
+    if (!extendAllBill) return;
+    setSaving(true);
+    const res = await fetch(`/api/pos/bills/${extendAllBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "PROMPTPAY", items: buildBulkExtendLineItems(), totalTHB: extendAllTotal() }),
+    });
+    setSaving(false);
+    if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return; }
+    const data = await res.json();
+    setExtendOrderId(data.orderId);
+    setExtendQr({ qrDataUrl: data.qrDataUrl, accountName: data.accountName, bankName: data.bankName });
+    setExtendStep(2);
+  }
+
+  async function submitExtendAllSlip() {
+    if (!extendSlipFile || !extendOrderId) return;
+    setExtendSlipUploading(true);
+    const fd = new FormData();
+    fd.append("orderId", String(extendOrderId));
+    fd.append("slip", extendSlipFile);
+    await fetch("/api/payment/slip", { method: "POST", body: fd });
+    await addExtendTimeAll();
+    setExtendSlipUploading(false);
+    closeExtendAllFlow();
+  }
+
+  function closeExtendAllFlow() {
+    setExtendAllBill(null); setExtendStep(0);
+    load();
+  }
+
   async function submitEditBill() {
     if (!editBill || !editBillName.trim()) return;
     await fetch(`/api/pos/bills/${editBill.id}`, {
@@ -1122,8 +1216,11 @@ export default function AdminTimePage() {
                 </button>
                 <button onClick={() => setChangeTableBill(bill)} className="block text-white/60 text-xs hover:text-white underline-offset-2 hover:underline">📍 โต๊ะ {bill.table.number} · เปลี่ยน</button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
+                {bill.sessions.length > 0 && (
+                  <button onClick={() => openExtendAll(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ ต่อยกตี้</button>
+                )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>
@@ -1306,6 +1403,69 @@ export default function AdminTimePage() {
           {renderQRStep(extendQr, extendTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
             (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
             submitExtendSlip, () => setExtendStep(1))}
+        </Modal>
+      )}
+
+      {/* Bulk extend (ต่อยกตี้) modals */}
+      {extendAllBill && extendStep === 0 && (() => {
+        const playerCount = extendAllBill.sessions.length;
+        const nonAllDayCount = extendAllBill.sessions.filter((s) => s.timeRemaining < 86400).length;
+        return (
+          <Modal onClose={closeExtendAllFlow} title={`ต่อยกตี้ — ${extendAllBill.name}`}>
+            <p className="text-sm text-gray-500 -mt-2">ต่อเวลาพร้อมกัน {playerCount} คน</p>
+            <div className="space-y-2">
+              {(["B", "D"] as PkgKey[]).map((key) => {
+                const blocked = blockedPkgKeys.has(key);
+                const count = key === "D" ? nonAllDayCount : playerCount;
+                const unitPrice = PACKAGES[key].price;
+                const previewTotal = key === "B" ? unitPrice * extendQty * count : unitPrice * count;
+                return (
+                  <button key={key} disabled={blocked || count === 0}
+                    onClick={() => { if (!blocked) { setExtendPkg(key); setExtendQty(1); } }}
+                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${(blocked || count === 0) ? "border-sand opacity-40 cursor-not-allowed" : extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
+                    <p className="font-bold text-navy text-sm">{PACKAGES[key].label} {(blocked || count === 0) ? "— ไม่มีผู้เล่นที่ต้องการ" : ""}</p>
+                    <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
+                    {!blocked && count > 0 && <p className="text-xs text-orange font-semibold mt-0.5">{count} คน × ฿{unitPrice}{key === "B" ? ` × ${extendQty} ชั่วโมง` : ""} = ฿{previewTotal}</p>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {extendPkg === "B" && (
+              <div className="flex items-center gap-3 justify-center">
+                <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
+                  className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">−</button>
+                <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
+                <button onClick={() => setExtendQty((q) => q + 1)}
+                  className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
+                <span className="text-sm text-gray-500">= {extendQty * 2} ชม./คน</span>
+              </div>
+            )}
+
+            <div className="bg-sand/40 rounded-xl p-3 text-center">
+              <p className="text-xs text-gray-500">ยอดรวมทั้งหมด</p>
+              <p className="font-bold text-navy text-xl">฿{extendAllTotal()}</p>
+            </div>
+
+            <button onClick={() => setExtendStep(1)} disabled={extendAllTotal() === 0}
+              className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
+              ถัดไป — เลือกวิธีชำระ →
+            </button>
+          </Modal>
+        );
+      })()}
+
+      {extendAllBill && extendStep === 1 && (
+        <Modal onClose={closeExtendAllFlow} title="ชำระเงิน">
+          {renderMethodStep(extendAllTotal(), chooseExtendAllCash, chooseExtendAllQR, () => setExtendStep(0))}
+        </Modal>
+      )}
+
+      {extendAllBill && extendStep === 2 && extendQr && (
+        <Modal onClose={closeExtendAllFlow} title="สแกน QR ชำระเงิน">
+          {renderQRStep(extendQr, extendAllTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
+            (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
+            submitExtendAllSlip, () => setExtendStep(1))}
         </Modal>
       )}
 
