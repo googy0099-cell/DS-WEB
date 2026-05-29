@@ -21,7 +21,32 @@ interface SiteSettings {
   promo_enabled?: string;
   print_receipt?: string;
   print_kitchen?: string;
+  business_hours?: string;
 }
+
+const DAYS = [
+  { key: "mon", label: "จันทร์" },
+  { key: "tue", label: "อังคาร" },
+  { key: "wed", label: "พุธ" },
+  { key: "thu", label: "พฤหัสบดี" },
+  { key: "fri", label: "ศุกร์" },
+  { key: "sat", label: "เสาร์" },
+  { key: "sun", label: "อาทิตย์" },
+] as const;
+
+type DayKey = (typeof DAYS)[number]["key"];
+type DayHours = { open: string; close: string; closed: boolean };
+type BusinessHours = Record<DayKey, DayHours>;
+
+const DEFAULT_HOURS: BusinessHours = {
+  mon: { open: "10:00", close: "22:00", closed: false },
+  tue: { open: "10:00", close: "22:00", closed: false },
+  wed: { open: "10:00", close: "22:00", closed: false },
+  thu: { open: "10:00", close: "22:00", closed: false },
+  fri: { open: "10:00", close: "22:00", closed: false },
+  sat: { open: "10:00", close: "22:00", closed: false },
+  sun: { open: "10:00", close: "22:00", closed: false },
+};
 
 const DEFAULT_RECEIPT_SETTINGS = {
   shopName: "ร้านลูกเต๋า",
@@ -80,6 +105,11 @@ export default function AdminSettingsPage() {
   const [printSaving, setPrintSaving] = useState(false);
   const [printSuccess, setPrintSuccess] = useState(false);
 
+  const [hours, setHours] = useState<BusinessHours>(DEFAULT_HOURS);
+  const [hoursLoaded, setHoursLoaded] = useState(false);
+  const [hoursSaving, setHoursSaving] = useState(false);
+  const [hoursSuccess, setHoursSuccess] = useState(false);
+
   // Serial printer state
   const [serialSupported, setSerialSupported] = useState(false);
   const [printerConnected, setPrinterConnected] = useState(false);
@@ -114,6 +144,14 @@ export default function AdminSettingsPage() {
       setKShowTable(k.showTable); setKShowNote(k.showNote);
     } catch {}
     setPrintLoaded(true);
+  }
+
+  if (siteSettings && !hoursLoaded) {
+    try {
+      const parsed = JSON.parse(siteSettings.business_hours ?? "{}");
+      setHours({ ...DEFAULT_HOURS, ...parsed });
+    } catch {}
+    setHoursLoaded(true);
   }
 
   async function savePromo() {
@@ -152,6 +190,26 @@ export default function AdminSettingsPage() {
     } finally {
       setPrintSaving(false);
     }
+  }
+
+  async function saveHours() {
+    setHoursSaving(true);
+    setHoursSuccess(false);
+    try {
+      await fetch("/api/site-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ business_hours: JSON.stringify(hours) }),
+      });
+      await mutateSite();
+      setHoursSuccess(true);
+    } finally {
+      setHoursSaving(false);
+    }
+  }
+
+  function updateDay(day: DayKey, field: keyof DayHours, value: string | boolean) {
+    setHours((prev) => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
   }
 
   async function handleSelectPrinter() {
@@ -670,6 +728,62 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
         <p className="text-xs text-gray-400 mt-3 text-center">
           💡 ต้องใช้ Chrome หรือ Edge เพื่อเชื่อมต่อเครื่องพิมพ์โดยตรง — Safari / Firefox ใช้ปุ่ม "ทดสอบพิมพ์" แล้ว browser จะจำเครื่องพิมพ์ไว้
         </p>
+
+        {/* ── Business Hours ───────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+          <div>
+            <h2 className="font-bold text-navy text-base">🕐 เวลาทำการ</h2>
+            <p className="text-xs text-gray-400 mt-0.5">กำหนดเวลาเปิด-ปิดร้านในแต่ละวัน</p>
+          </div>
+
+          <div className="space-y-2">
+            {DAYS.map(({ key, label }) => {
+              const day = hours[key];
+              return (
+                <div key={key} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${day.closed ? "bg-gray-50" : "bg-sand/20"}`}>
+                  <div className="w-20 shrink-0">
+                    <span className={`text-sm font-semibold ${day.closed ? "text-gray-400 line-through" : "text-navy"}`}>{label}</span>
+                  </div>
+                  {day.closed ? (
+                    <span className="flex-1 text-sm text-gray-400">หยุด</span>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        type="time"
+                        value={day.open}
+                        onChange={(e) => updateDay(key, "open", e.target.value)}
+                        className="border border-sand rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-orange w-28"
+                      />
+                      <span className="text-gray-400 text-sm">–</span>
+                      <input
+                        type="time"
+                        value={day.close}
+                        onChange={(e) => updateDay(key, "close", e.target.value)}
+                        className="border border-sand rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-orange w-28"
+                      />
+                    </div>
+                  )}
+                  <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={day.closed}
+                      onChange={(e) => updateDay(key, "closed", e.target.checked)}
+                      className="accent-red-500 w-3.5 h-3.5"
+                    />
+                    หยุด
+                  </label>
+                </div>
+              );
+            })}
+          </div>
+
+          {hoursSuccess && <p className="text-sm text-green-600 font-medium">✅ บันทึกเรียบร้อยแล้ว</p>}
+
+          <button onClick={saveHours} disabled={hoursSaving}
+            className="w-full bg-orange text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50">
+            {hoursSaving ? "กำลังบันทึก..." : "บันทึกเวลาทำการ"}
+          </button>
+        </div>
       </div>
     </div>
   );
