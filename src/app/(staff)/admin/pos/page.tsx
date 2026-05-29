@@ -9,9 +9,11 @@ type PlayerSession = {
   timeRemaining: number; status: string; updatedAt: string;
   userId: number | null; user: MemberRef | null;
 };
+type PendingCash = { orderId: number; totalTHB: number; paymentId: number | null; staffNote: string | null };
 type Bill = {
   id: number; name: string; color: string; tableId: number; startsAt: string; prepRemaining: number;
   table: { number: number }; sessions: PlayerSession[];
+  pendingCash: PendingCash[];
 };
 
 const BILL_COLORS: Record<string, { gradient: string; accent: string }> = {
@@ -477,9 +479,7 @@ export default function AdminTimePage() {
     const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
     if (received < cashInputTotal) { window.alert("ยอดเงินที่รับมาไม่เพียงพอ"); return; }
     setCashInputOpen(false);
-    if (cashInputAction === "new") await chooseCash(received);
-    else if (cashInputAction === "addBill") await chooseAddBillCash(received);
-    else await chooseExtendCash(received);
+    if (cashInputAction === "extend") await chooseExtendCash(received);
   }
 
   // item picker (drink or extra item) — list then detail
@@ -593,12 +593,18 @@ export default function AdminTimePage() {
     );
   }
 
-  async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[], receivedAmount?: number) {
+  async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[], opts?: { receivedAmount?: number; includePendingPlayers?: boolean }) {
     const items = buildLineItems(draftPlayers, draftExtra);
+    const pendingPlayers = opts?.includePendingPlayers
+      ? draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty }))
+      : undefined;
+    const pendingExtras = opts?.includePendingPlayers
+      ? draftExtra.map((e) => ({ menuItemId: e.menuItemId, qty: e.qty, unitPriceTHB: e.priceTHB, assignedPlayerIdx: e.assignedPlayerIdx }))
+      : undefined;
     const res = await fetch(`/api/pos/bills/${billId}/order`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: method, items, totalTHB: grandTotal, receivedAmount }),
+      body: JSON.stringify({ paymentMethod: method, items, totalTHB: grandTotal, pendingPlayers, pendingExtras }),
     });
     if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return null; }
     return await res.json() as { orderId: number; totalTHB: number; qrDataUrl: string | null; accountName: string; bankName: string };
@@ -659,14 +665,11 @@ export default function AdminTimePage() {
     return calcPlayersTotal(players) + extraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
-  async function chooseCash(received?: number) {
+  async function chooseCash() {
     if (!draftBillId) return;
     setSaving(true);
-    const sessionIds = await createSessions(draftBillId, players);
-    if (!sessionIds) { setSaving(false); return; }
-    setPlayerSessionIds(sessionIds);
-    await createOrder("CASH", draftBillId, grandTotal(), players, extraItems, received);
-    await patchExtraSpend(extraItems, sessionIds);
+    // Sessions created AFTER cashier confirms — send player data with order
+    await createOrder("CASH", draftBillId, grandTotal(), players, extraItems, { includePendingPlayers: true });
     setSaving(false);
     closeFlow();
   }
@@ -677,7 +680,7 @@ export default function AdminTimePage() {
     const sessionIds = await createSessions(draftBillId, players);
     if (!sessionIds) { setSaving(false); return; }
     setPlayerSessionIds(sessionIds);
-    const result = await createOrder("PROMPTPAY", draftBillId, grandTotal(), players, extraItems);
+    const result = await createOrder("PROMPTPAY", draftBillId, grandTotal(), players, extraItems, {});
     setSaving(false);
     if (!result) return;
     setOrderId(result.orderId);
@@ -722,14 +725,11 @@ export default function AdminTimePage() {
     return calcPlayersTotal(addPlayers) + addExtraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
-  async function chooseAddBillCash(received?: number) {
+  async function chooseAddBillCash() {
     if (!addToBill) return;
     setSaving(true);
-    const sessionIds = await createSessions(addToBill.id, addPlayers);
-    if (!sessionIds) { setSaving(false); return; }
-    setAddBillPlayerSessionIds(sessionIds);
-    await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, received);
-    await patchExtraSpend(addExtraItems, sessionIds);
+    // Sessions created AFTER cashier confirms — send player data with order
+    await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, { includePendingPlayers: true });
     setSaving(false);
     closeAddBillFlow();
   }
@@ -740,7 +740,7 @@ export default function AdminTimePage() {
     const sessionIds = await createSessions(addToBill.id, addPlayers);
     if (!sessionIds) { setSaving(false); return; }
     setAddBillPlayerSessionIds(sessionIds);
-    const result = await createOrder("PROMPTPAY", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems);
+    const result = await createOrder("PROMPTPAY", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, {});
     setSaving(false);
     if (!result) return;
     setAddBillOrderId(result.orderId);
@@ -1049,6 +1049,28 @@ export default function AdminTimePage() {
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>
+            {/* Pending counter payment indicator */}
+            {bill.pendingCash.map((pc) => {
+              let playerSummary = "";
+              try {
+                const d = JSON.parse(pc.staffNote ?? "");
+                playerSummary = d.players?.map((p: { packageType: string; drinkName?: string }) =>
+                  `${p.packageType}${p.drinkName ? ` (${p.drinkName})` : ""}`
+                ).join(", ") ?? "";
+              } catch { /* ignore */ }
+              return (
+                <div key={pc.orderId} className="bg-yellow-400/20 border border-yellow-400/50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-yellow-200 text-xs font-bold flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                      รอชำระที่เคาน์เตอร์ — ฿{pc.totalTHB}
+                    </p>
+                    {playerSummary && <p className="text-yellow-300/70 text-[10px] mt-0.5">{playerSummary}</p>}
+                  </div>
+                  <span className="text-yellow-200/60 text-xs">รหัสออเดอร์ #{pc.orderId}</span>
+                </div>
+              );
+            })}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} onEdit={openEditSession} />)}
             </div>

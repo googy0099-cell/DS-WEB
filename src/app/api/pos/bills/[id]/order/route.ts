@@ -12,13 +12,29 @@ type LineItem = {
   selectedOptions?: string;
 };
 
+type PendingPlayer = {
+  nameOrCode?: string;
+  packageType: string;
+  drinkName?: string;
+  drinkPrice?: number;
+  qty?: number;
+};
+
+type PendingExtra = {
+  menuItemId: number;
+  qty: number;
+  unitPriceTHB: number;
+  assignedPlayerIdx: number | null;
+};
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const billId = Number(id);
-  const { paymentMethod, items, receivedAmount } = (await req.json()) as {
+  const { paymentMethod, items, pendingPlayers, pendingExtras } = (await req.json()) as {
     paymentMethod: "CASH" | "PROMPTPAY";
     items: LineItem[];
-    receivedAmount?: number;
+    pendingPlayers?: PendingPlayer[];
+    pendingExtras?: PendingExtra[];
   };
 
   const bill = await db.bill.findUnique({ where: { id: billId }, include: { table: true } });
@@ -33,6 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: {
       orderName: `บิล ${bill.name} — โต๊ะ ${bill.table.number}`,
       tableId: bill.tableId,
+      billId,
       status: "PENDING",
       totalTHB,
       items: {
@@ -49,12 +66,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (paymentMethod === "CASH") {
+    // Store pending player data in staffNote — cashier creates sessions after confirming
+    const staffNote = pendingPlayers?.length
+      ? JSON.stringify({ billId, tableId: bill.tableId, players: pendingPlayers, extraItems: pendingExtras ?? [] })
+      : null;
+
     await db.payment.create({
       data: {
         orderId: order.id,
         method: "CASH",
         amountTHB: totalTHB,
         status: "PENDING",
+        staffNote,
       },
     });
   }

@@ -12,6 +12,10 @@ export async function GET() {
         include: { user: { select: { id: true, username: true, memberCode: true, firstName: true } } },
         orderBy: { createdAt: "asc" },
       },
+      orders: {
+        where: { status: "PENDING", payment: { status: "PENDING", method: "CASH" } },
+        select: { id: true, totalTHB: true, payment: { select: { id: true, staffNote: true } } },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -23,6 +27,12 @@ export async function GET() {
     sessions: b.sessions.map((s) => ({
       ...s,
       timeRemaining: remainingSeconds(s.timeRemaining, b.startsAt, s.updatedAt, now),
+    })),
+    pendingCash: b.orders.map((o) => ({
+      orderId: o.id,
+      totalTHB: o.totalTHB,
+      paymentId: o.payment?.id ?? null,
+      staffNote: o.payment?.staffNote ?? null,
     })),
   }));
 

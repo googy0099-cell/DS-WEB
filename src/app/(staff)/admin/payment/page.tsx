@@ -13,6 +13,7 @@ interface PendingPayment {
   method: string;
   amountTHB: number;
   slipUrl: string | null;
+  staffNote: string | null;
   createdAt: string;
   order: {
     id: number;
@@ -20,6 +21,18 @@ interface PendingPayment {
     items: { quantity: number; unitPriceTHB: number; menuItem: { nameTh: string } }[];
   };
 }
+
+function parsePendingPlayers(staffNote: string | null): { packageType: string; drinkName?: string; qty?: number }[] {
+  if (!staffNote) return [];
+  try { return JSON.parse(staffNote).players ?? []; } catch { return []; }
+}
+
+const PKG_LABELS: Record<string, string> = {
+  A: "Package A (ฟรี+เครื่องดื่ม)",
+  B: "Package B (49฿/2ชม.)",
+  C: "Package C (120฿ เหมาวัน)",
+  D: "Package D (80฿ อัพเกรด)",
+};
 
 export default function AdminPaymentPage() {
   const { data: payments, mutate } = useSWR<PendingPayment[]>(
@@ -140,28 +153,44 @@ export default function AdminPaymentPage() {
                 <span className="text-gray-400 font-normal">{counter.length} รายการ</span>
               </h2>
               <div className="space-y-4">
-                {counter.map((p) => (
-                  <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="font-bold text-navy text-base">{p.order.orderName}</p>
-                        <p className="text-xs text-gray-400">{formatThaiDateTime(p.createdAt)}</p>
+                {counter.map((p) => {
+                  const pendingPlayers = parsePendingPlayers(p.staffNote);
+                  return (
+                    <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <p className="font-bold text-navy text-base">{p.order.orderName}</p>
+                          <p className="text-xs text-gray-400">{formatThaiDateTime(p.createdAt)}</p>
+                        </div>
+                        <p className="text-2xl font-bold text-orange">฿{p.amountTHB}</p>
                       </div>
-                      <p className="text-2xl font-bold text-orange">฿{p.amountTHB}</p>
+                      {pendingPlayers.length > 0 ? (
+                        <div className="mb-3 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 space-y-1">
+                          <p className="text-xs font-bold text-blue-700 mb-1">ผู้เล่น {pendingPlayers.length} คน</p>
+                          {pendingPlayers.map((pl, i) => (
+                            <p key={i} className="text-xs text-blue-800">
+                              {i + 1}. {PKG_LABELS[pl.packageType] ?? pl.packageType}
+                              {pl.drinkName ? ` — ${pl.drinkName}` : ""}
+                              {pl.qty && pl.qty > 1 ? ` ×${pl.qty}` : ""}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5 mb-3 text-sm text-gray-600">
+                          {p.order.items.map((item, i) => (
+                            <p key={i}>{item.menuItem.nameTh} ×{item.quantity}</p>
+                          ))}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => openCashModal(p)}
+                        className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm"
+                      >
+                        💵 รับเงินสด ฿{p.amountTHB}
+                      </button>
                     </div>
-                    <div className="space-y-0.5 mb-3 text-sm text-gray-600">
-                      {p.order.items.map((item, i) => (
-                        <p key={i}>{item.menuItem.nameTh} ×{item.quantity}</p>
-                      ))}
-                    </div>
-                    <button
-                      onClick={() => openCashModal(p)}
-                      className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm"
-                    >
-                      💵 รับเงินสด ฿{p.amountTHB}
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
