@@ -65,7 +65,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  if (paymentMethod === "CASH") {
+  if (paymentMethod === "CASH" || (paymentMethod === "PROMPTPAY" && pendingPlayers?.length)) {
     // Store pending player data in staffNote — cashier creates sessions after confirming
     const staffNote = pendingPlayers?.length
       ? JSON.stringify({ billId, tableId: bill.tableId, players: pendingPlayers, extraItems: pendingExtras ?? [] })
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await db.payment.create({
       data: {
         orderId: order.id,
-        method: "CASH",
+        method: paymentMethod,
         amountTHB: totalTHB,
         status: "PENDING",
         staffNote,

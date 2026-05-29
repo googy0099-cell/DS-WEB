@@ -677,10 +677,7 @@ export default function AdminTimePage() {
   async function chooseQR() {
     if (!draftBillId) return;
     setSaving(true);
-    const sessionIds = await createSessions(draftBillId, players);
-    if (!sessionIds) { setSaving(false); return; }
-    setPlayerSessionIds(sessionIds);
-    const result = await createOrder("PROMPTPAY", draftBillId, grandTotal(), players, extraItems, {});
+    const result = await createOrder("PROMPTPAY", draftBillId, grandTotal(), players, extraItems, { includePendingPlayers: true });
     setSaving(false);
     if (!result) return;
     setOrderId(result.orderId);
@@ -695,7 +692,6 @@ export default function AdminTimePage() {
     fd.append("orderId", String(orderId));
     fd.append("slip", slipFile);
     await fetch("/api/payment/slip", { method: "POST", body: fd });
-    await patchExtraSpend(extraItems, playerSessionIds);
     setSlipUploading(false);
     closeFlow();
   }
@@ -737,10 +733,7 @@ export default function AdminTimePage() {
   async function chooseAddBillQR() {
     if (!addToBill) return;
     setSaving(true);
-    const sessionIds = await createSessions(addToBill.id, addPlayers);
-    if (!sessionIds) { setSaving(false); return; }
-    setAddBillPlayerSessionIds(sessionIds);
-    const result = await createOrder("PROMPTPAY", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, {});
+    const result = await createOrder("PROMPTPAY", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, { includePendingPlayers: true });
     setSaving(false);
     if (!result) return;
     setAddBillOrderId(result.orderId);
@@ -755,7 +748,6 @@ export default function AdminTimePage() {
     fd.append("orderId", String(addBillOrderId));
     fd.append("slip", addBillSlipFile);
     await fetch("/api/payment/slip", { method: "POST", body: fd });
-    await patchExtraSpend(addExtraItems, addBillPlayerSessionIds);
     setAddBillSlipUploading(false);
     closeAddBillFlow();
   }

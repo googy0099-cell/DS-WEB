@@ -82,7 +82,7 @@ export interface OrderWithItems {
   totalTHB: number;
   note: string | null;
   createdAt: string;
-  payment?: { slipUrl: string | null; status: string } | null;
+  payment?: { id: number; slipUrl: string | null; status: string; method: string; amountTHB: number } | null;
   items: {
     id: number;
     quantity: number;

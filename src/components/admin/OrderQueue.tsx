@@ -290,6 +290,10 @@ export default function OrderQueue() {
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT);
   const [kitchenSettings, setKitchenSettings] = useState<KitchenSettings>(DEFAULT_KITCHEN);
 
+  // Cash payment modal
+  const [cashOrder, setCashOrder] = useState<OrderWithItems | null>(null);
+  const [cashInputStr, setCashInputStr] = useState("");
+
   // Edit modal state
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
@@ -449,6 +453,40 @@ export default function OrderQueue() {
     });
   }
 
+  function openCashModal(order: OrderWithItems) {
+    setCashOrder(order);
+    setCashInputStr("");
+  }
+
+  async function confirmCashPayment() {
+    if (!cashOrder) return;
+    const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
+    if (received < cashOrder.totalTHB) return;
+    const change = received - cashOrder.totalTHB;
+    setLoading(cashOrder.id, true);
+    await fetch(`/api/orders/${cashOrder.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmCash: true, receivedAmount: received, changeAmount: change }),
+    });
+    setCashOrder(null);
+    setCashInputStr("");
+    await mutate();
+    setLoading(cashOrder.id, false);
+  }
+
+  async function confirmQrPayment(order: OrderWithItems) {
+    if (!order.payment?.id) return;
+    setLoading(order.id, true);
+    await fetch("/api/payment/confirm", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentId: order.payment.id }),
+    });
+    await mutate();
+    setLoading(order.id, false);
+  }
+
   function openEdit(order: OrderWithItems) {
     setEditOrder(order);
     setEditItems(
@@ -550,6 +588,8 @@ export default function OrderQueue() {
                 onPrint={(o) => printReceipt(o, receiptSettings)}
                 onKitchen={(o) => printKitchen(o, kitchenSettings)}
                 kitchenEnabled={kitchenSettings.enabled}
+                onOpenCashModal={openCashModal}
+                onConfirmQr={confirmQrPayment}
               />
             ))}
           </div>
@@ -573,6 +613,8 @@ export default function OrderQueue() {
                 onPrint={(o) => printReceipt(o, receiptSettings)}
                 onKitchen={(o) => printKitchen(o, kitchenSettings)}
                 kitchenEnabled={kitchenSettings.enabled}
+                onOpenCashModal={openCashModal}
+                onConfirmQr={confirmQrPayment}
               />
             ))}
           </div>
@@ -656,6 +698,62 @@ export default function OrderQueue() {
           </div>
         )}
       </div>
+
+      {/* Cash payment modal */}
+      {cashOrder && (() => {
+        const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
+        const change = received - cashOrder.totalTHB;
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+              <h3 className="font-bold text-navy text-lg text-center">รับเงินสด</h3>
+              <p className="text-sm text-center text-gray-500">{cashOrder.orderName}</p>
+              <div className="text-center">
+                <p className="text-xs text-gray-400">ยอดที่ต้องชำระ</p>
+                <p className="text-3xl font-bold text-orange">฿{cashOrder.totalTHB.toLocaleString()}</p>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-navy block mb-1">ลูกค้าจ่ายมา</label>
+                <input
+                  type="number" inputMode="numeric" autoFocus
+                  value={cashInputStr}
+                  onChange={(e) => setCashInputStr(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && received >= cashOrder.totalTHB) confirmCashPayment(); }}
+                  placeholder="0"
+                  className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center focus:outline-none focus:border-orange"
+                />
+              </div>
+              {cashInputStr && (
+                <div className={`rounded-xl p-3 text-center ${received >= cashOrder.totalTHB ? "bg-green-50" : "bg-red-50"}`}>
+                  {received >= cashOrder.totalTHB ? (
+                    <><p className="text-xs text-green-600">เงินทอน</p><p className="text-3xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
+                  ) : (
+                    <p className="text-sm font-semibold text-red-500">ยอดไม่เพียงพอ — ขาดอีก ฿{(cashOrder.totalTHB - received).toLocaleString()}</p>
+                  )}
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-2">
+                {[20, 50, 100, 500, 1000].map((amt) => (
+                  <button key={amt} type="button"
+                    onClick={() => setCashInputStr(String((parseInt(cashInputStr) || 0) + amt))}
+                    className="bg-sand/50 hover:bg-orange/10 border border-sand text-navy text-sm font-semibold py-2 rounded-xl">+{amt}</button>
+                ))}
+                <button type="button" onClick={() => setCashInputStr("")}
+                  className="bg-sand/50 border border-sand text-gray-400 text-sm py-2 rounded-xl">ล้าง</button>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => setCashOrder(null)}
+                  className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                <button onClick={confirmCashPayment}
+                  disabled={!cashInputStr || received < cashOrder.totalTHB}
+                  className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                  ✅ ลูกค้าชำระแล้ว
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Confirm Modal */}
       {confirmAction && (
@@ -796,6 +894,8 @@ function OrderCard({
   onPrint,
   onKitchen,
   kitchenEnabled,
+  onOpenCashModal,
+  onConfirmQr,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -806,10 +906,16 @@ function OrderCard({
   onPrint: (order: OrderWithItems) => void;
   onKitchen: (order: OrderWithItems) => void;
   kitchenEnabled: boolean;
+  onOpenCashModal: (order: OrderWithItems) => void;
+  onConfirmQr: (order: OrderWithItems) => void;
 }) {
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
   const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
   const canEdit = order.status === "PENDING" || order.status === "CONFIRMED" || order.status === "PAID";
+
+  // Determine special primary action for CONFIRMED orders
+  const isConfirmedCash = order.status === "CONFIRMED" && (!order.payment || order.payment.method === "CASH");
+  const isConfirmedQr = order.status === "CONFIRMED" && order.payment?.method === "PROMPTPAY" && !!order.payment.slipUrl;
 
   return (
     <div
@@ -898,7 +1004,23 @@ function OrderCard({
         )}
 
         {/* Primary action */}
-        {cfg.next && (
+        {isConfirmedCash ? (
+          <button
+            onClick={() => onOpenCashModal(order)}
+            disabled={isLoading}
+            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-green-600 text-white transition-opacity disabled:opacity-60"
+          >
+            {isLoading ? "กำลังบันทึก..." : `💵 ชำระเงิน ฿${order.totalTHB.toLocaleString()}`}
+          </button>
+        ) : isConfirmedQr ? (
+          <button
+            onClick={() => onConfirmQr(order)}
+            disabled={isLoading}
+            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-sage text-white transition-opacity disabled:opacity-60"
+          >
+            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
+          </button>
+        ) : cfg.next ? (
           <button
             onClick={() => {
               if (cfg.next === "SERVED") onPrint(order);
@@ -909,7 +1031,7 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : cfg.nextLabel}
           </button>
-        )}
+        ) : null}
 
         {/* Secondary actions */}
         <div className="flex gap-2">

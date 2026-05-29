@@ -45,7 +45,7 @@ function getBangkokHHMM(): string {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { orderName, userId, items, note } = body as {
+  const { orderName, userId, items, note, source } = body as {
     orderName: string;
     userId?: number | null;
     items: {
@@ -56,7 +56,9 @@ export async function POST(req: NextRequest) {
       selectedOptions?: { groupId: number; groupName: string; choiceId: number; choiceName: string; priceTHB: number }[];
     }[];
     note?: string;
+    source?: "cashier";
   };
+  const isCashier = source === "cashier";
 
   if (!orderName?.trim() || !items?.length) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
@@ -143,6 +145,7 @@ export async function POST(req: NextRequest) {
       userId: userId ?? null,
       totalTHB,
       note: note || null,
+      status: isCashier ? "CONFIRMED" : "PENDING",
       items: {
         create: itemsWithPrice.map((i) => ({
           menuItemId: i.menuItemId,
@@ -170,12 +173,14 @@ export async function POST(req: NextRequest) {
     })
     .join("\n");
 
-  const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
-  await Promise.allSettled([
-    sendTelegramNotify(lineMsg),
-    sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
-    sendFcmNotify("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
-  ]);
+  if (!isCashier) {
+    const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
+    await Promise.allSettled([
+      sendTelegramNotify(lineMsg),
+      sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
+      sendFcmNotify("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
+    ]);
+  }
 
   return NextResponse.json(order, { status: 201 });
 }

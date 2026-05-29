@@ -69,6 +69,45 @@ export async function PATCH(
     return NextResponse.json(order);
   }
 
+  // Confirm cash payment (no prior payment record)
+  if ("confirmCash" in body) {
+    const { receivedAmount, changeAmount } = body as { receivedAmount: number; changeAmount?: number };
+    const orderFull = await db.order.findUnique({
+      where: { id: orderId },
+      select: { totalTHB: true, userId: true },
+    });
+    if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
+    await db.payment.create({
+      data: {
+        orderId,
+        method: "CASH",
+        amountTHB: orderFull.totalTHB,
+        status: "CONFIRMED",
+        confirmedAt: new Date(),
+        receivedAmount,
+        changeAmount: changeAmount ?? 0,
+      },
+    });
+    const pts = Math.floor(orderFull.totalTHB / 10);
+    if (orderFull.userId && pts > 0) {
+      await db.user.update({
+        where: { id: orderFull.userId },
+        data: { points: { increment: pts }, totalSpentTHB: { increment: orderFull.totalTHB } },
+      });
+    }
+    if (orderFull.userId) {
+      const dice = Math.floor(orderFull.totalTHB / 49);
+      if (dice > 0) await db.user.update({ where: { id: orderFull.userId }, data: { dicePoints: { increment: dice } } });
+    }
+    const served = await db.order.update({
+      where: { id: orderId },
+      data: { status: "SERVED", ...(handledById ? { handledById } : {}) },
+      select: { id: true, orderName: true, status: true },
+    });
+    await sendTelegramNotify(`💸 รับเงินสดแล้ว\nชื่อ: ${served.orderName} | ฿${orderFull.totalTHB}\nออเดอร์ #${orderId}`);
+    return NextResponse.json(served);
+  }
+
   // Status update mode
   const { status } = body as { status: string };
 

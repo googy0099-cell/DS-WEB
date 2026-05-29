@@ -66,6 +66,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Auto-advance order to CONFIRMED so it appears ready for cashier verification
+  if (order.status === "PENDING") {
+    await db.order.update({ where: { id: orderId }, data: { status: "CONFIRMED" } });
+  }
+
   const msg = `💳 สลิปใหม่! 👤 ${order.orderName}\n฿${order.totalTHB}\nกรุณาตรวจสอบใน /admin/payment`;
   await Promise.allSettled([
     sendTelegramNotify(msg),
