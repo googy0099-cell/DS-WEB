@@ -232,15 +232,61 @@ export default function AdminMenuPage() {
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+      {/* Mobile card list */}
+      <div className="md:hidden bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/50">
+        {filtered.length === 0 && <p className="text-center text-gray-400 py-8">ไม่มีรายการ</p>}
+        {filtered.map((item) => (
+          <div key={item.id} className="p-3 flex gap-3 items-start">
+            {item.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={item.imageUrl} alt={item.nameTh} className="w-12 h-12 rounded-xl object-cover shrink-0" />
+            ) : (
+              <div className="w-12 h-12 rounded-xl bg-sand flex items-center justify-center text-xl shrink-0">🍽️</div>
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-navy text-sm leading-tight">{item.nameTh}</p>
+              {item.nameEn && <p className="text-gray-400 text-xs mt-0.5">{item.nameEn}</p>}
+              {(item.addonGroups?.length > 0 || item.optionGroups?.length > 0) && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {item.addonGroups?.map((g) => (
+                    <span key={g.id} className="text-[10px] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">+{g.nameTh}</span>
+                  ))}
+                  {item.optionGroups?.map((g) => (
+                    <span key={g.id} className="text-[10px] bg-navy/10 text-navy px-1.5 py-0.5 rounded-full">{g.nameTh}</span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <span className="text-xs font-bold text-navy">
+                  {item.priceS != null && item.priceXL != null
+                    ? `S ฿${item.priceS} / XL ฿${item.priceXL}`
+                    : `฿${item.priceTHB}`}
+                </span>
+                <button onClick={() => toggleAvailable(item)} className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.isAvailable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
+                  {item.isAvailable ? "เปิด" : "ปิด"}
+                </button>
+                <button onClick={() => toggleFeatured(item)} className={`text-base transition-transform ${item.isFeatured ? "scale-110" : "opacity-30"}`}>⭐</button>
+              </div>
+              <div className="flex gap-4 mt-2">
+                <button onClick={() => openEdit(item)} className="text-xs text-orange font-medium">แก้ไข</button>
+                <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); }} className="text-xs text-navy/60">สูตร</button>
+                <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400">ลบ</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-sand/40 border-b border-sand">
             <tr>
               <th className="text-left p-3 text-navy font-semibold">รายการ</th>
-              <th className="text-left p-3 text-navy font-semibold hidden md:table-cell">หมวด</th>
+              <th className="text-left p-3 text-navy font-semibold">หมวด</th>
               <th className="text-right p-3 text-navy font-semibold">ราคา</th>
               <th className="text-center p-3 text-navy font-semibold">สถานะ</th>
-              <th className="text-center p-3 text-navy font-semibold hidden md:table-cell">เวลาขาย</th>
+              <th className="text-center p-3 text-navy font-semibold">เวลาขาย</th>
               <th className="text-center p-3 text-navy font-semibold">หน้าแรก</th>
               <th className="p-3"></th>
             </tr>
@@ -278,7 +324,7 @@ export default function AdminMenuPage() {
                     </div>
                   </div>
                 </td>
-                <td className="p-3 text-gray-500 hidden md:table-cell">{catMap[item.category]?.icon} {catMap[item.category]?.label ?? item.category}</td>
+                <td className="p-3 text-gray-500">{catMap[item.category]?.icon} {catMap[item.category]?.label ?? item.category}</td>
                 <td className="p-3 text-right font-bold text-navy text-sm">
                   {item.priceS != null && item.priceXL != null
                     ? `S ฿${item.priceS} / XL ฿${item.priceXL}`
@@ -289,7 +335,7 @@ export default function AdminMenuPage() {
                     {item.isAvailable ? "เปิด" : "ปิด"}
                   </button>
                 </td>
-                <td className="p-3 text-center hidden md:table-cell">
+                <td className="p-3 text-center">
                   {item.sellStartTime && item.sellEndTime ? (
                     <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
                       ⏰ {item.sellStartTime}–{item.sellEndTime}
