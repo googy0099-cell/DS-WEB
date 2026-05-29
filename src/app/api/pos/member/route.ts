@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
 
   const member = await db.user.findUnique({
     where: { memberCode: code },
-    select: { id: true, username: true, memberCode: true, firstName: true },
+    select: { id: true, username: true, memberCode: true, firstName: true, dicePoints: true },
   });
 
   if (!member) return NextResponse.json({ error: "ไม่พบสมาชิก" }, { status: 404 });

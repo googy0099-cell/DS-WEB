@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
-type MemberRef = { id: number; username: string; memberCode: string; firstName: string };
+type MemberRef = { id: number; username: string; memberCode: string; firstName: string; dicePoints: number };
 type PlayerSession = {
   id: number; nickname: string; packageType: string; packagePrice: number;
   timeRemaining: number; status: string; updatedAt: string;
@@ -494,8 +494,11 @@ export default function AdminTimePage() {
     setEditMemberLoading(true);
     const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
     setEditMemberLoading(false);
-    if (res.ok) { setEditMemberInfo(await res.json()); }
-    else { setEditMemberInfo(null); setEditMemberError("ไม่พบสมาชิก"); }
+    if (res.ok) {
+      const member: MemberRef = await res.json();
+      setEditMemberInfo(member);
+      setEditNickname(member.firstName);
+    } else { setEditMemberInfo(null); setEditMemberError("ไม่พบสมาชิก"); }
   }
 
   async function saveEditSession() {
@@ -1418,7 +1421,7 @@ export default function AdminTimePage() {
                   <div>
                     <p className="text-xs text-green-700 font-semibold">✅ พบสมาชิก</p>
                     <p className="text-sm font-bold text-navy">{editMemberInfo.firstName} (@{editMemberInfo.username})</p>
-                    <p className="text-xs text-gray-400">{editMemberInfo.memberCode}</p>
+                    <p className="text-xs text-gray-400">{editMemberInfo.memberCode} · 🎲 {editMemberInfo.dicePoints} แต้ม</p>
                   </div>
                   <button onClick={() => { setEditMemberInfo(null); setEditMemberCode(""); }}
                     className="text-gray-300 hover:text-red-400 text-lg">×</button>
