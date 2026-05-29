@@ -51,6 +51,7 @@ interface RewardItem {
   nameTh: string;
   description: string;
   cost: number;
+  imageUrl: string | null;
   isAvailable: boolean;
 }
 
