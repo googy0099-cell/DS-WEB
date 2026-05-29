@@ -53,20 +53,41 @@ export async function deductStockForOrder(orderId: number, performedById: number
 
   for (const item of updated) {
     if (item.currentQty >= item.minQty) continue;
+
+    // Auto-close all menu items that use this ingredient
+    const affectedRecipes = await db.menuStockRecipe.findMany({
+      where: { stockItemId: item.id },
+      select: { menuItemId: true, menuItem: { select: { nameTh: true } } },
+    });
+    let closedMenuNames: string[] = [];
+    if (affectedRecipes.length > 0) {
+      const menuIds = affectedRecipes.map((r) => r.menuItemId);
+      const result = await db.menuItem.findMany({ where: { id: { in: menuIds }, isAvailable: true }, select: { nameTh: true } });
+      closedMenuNames = result.map((m) => m.nameTh);
+      if (closedMenuNames.length > 0) {
+        await db.menuItem.updateMany({ where: { id: { in: menuIds }, isAvailable: true }, data: { isAvailable: false } });
+      }
+    }
+
+    // Alert (once per item until resolved)
     const alreadyAlerted = await db.stockAlert.findFirst({
       where: { stockItemId: item.id, type: "low_stock", isRead: false },
     });
     if (alreadyAlerted) continue;
 
+    const closedLine = closedMenuNames.length > 0
+      ? `\n🚫 ปิดเมนูอัตโนมัติ: ${closedMenuNames.join(", ")}`
+      : "";
+
     await db.stockAlert.create({
       data: {
         type: "low_stock",
         stockItemId: item.id,
-        message: `${item.name} เหลือ ${item.currentQty} ${item.unit} (ขั้นต่ำ ${item.minQty})`,
+        message: `${item.name} เหลือ ${item.currentQty} ${item.unit} (ขั้นต่ำ ${item.minQty})${closedLine}`,
       },
     });
     await sendTelegramNotify(
-      `⚠️ สต็อกต่ำ!\n📦 ${item.name}\nเหลือ: ${item.currentQty} ${item.unit}\nขั้นต่ำ: ${item.minQty} ${item.unit}`
+      `⚠️ สต็อกต่ำ!\n📦 ${item.name}\nเหลือ: ${item.currentQty} ${item.unit}\nขั้นต่ำ: ${item.minQty} ${item.unit}${closedLine}`
     );
   }
 }
