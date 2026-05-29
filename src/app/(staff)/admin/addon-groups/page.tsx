@@ -143,7 +143,7 @@ export default function AdminAddonGroupsPage() {
                       />
                       <input
                         type="number"
-                        value={editingItem.priceTHB}
+                        value={editingItem.priceTHB || ""}
                         onChange={(e) => setEditingItem({ ...editingItem, priceTHB: parseInt(e.target.value) || 0 })}
                         className="w-20 border border-sand rounded-lg px-2 py-1 text-sm text-right focus:border-orange focus:outline-none"
                       />

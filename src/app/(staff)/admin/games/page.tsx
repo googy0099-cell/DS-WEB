@@ -533,8 +533,8 @@ export default function AdminGamesPage() {
                   <input
                     type="number"
                     min={1}
-                    value={editing.minPlayers ?? 2}
-                    onChange={(e) => setEditing({ ...editing, minPlayers: Number(e.target.value) })}
+                    value={editing.minPlayers ?? ""}
+                    onChange={(e) => setEditing({ ...editing, minPlayers: Number(e.target.value) || 1 })}
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
@@ -543,8 +543,8 @@ export default function AdminGamesPage() {
                   <input
                     type="number"
                     min={1}
-                    value={editing.maxPlayers ?? 8}
-                    onChange={(e) => setEditing({ ...editing, maxPlayers: Number(e.target.value) })}
+                    value={editing.maxPlayers ?? ""}
+                    onChange={(e) => setEditing({ ...editing, maxPlayers: Number(e.target.value) || 1 })}
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
@@ -553,8 +553,8 @@ export default function AdminGamesPage() {
                   <input
                     type="number"
                     min={1}
-                    value={editing.durationMin ?? 30}
-                    onChange={(e) => setEditing({ ...editing, durationMin: Number(e.target.value) })}
+                    value={editing.durationMin ?? ""}
+                    onChange={(e) => setEditing({ ...editing, durationMin: Number(e.target.value) || 1 })}
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
@@ -608,7 +608,7 @@ export default function AdminGamesPage() {
                   <label className="text-xs text-gray-400">ลำดับ</label>
                   <input
                     type="number"
-                    value={editing.sortOrder ?? 0}
+                    value={editing.sortOrder || ""}
                     onChange={(e) => setEditing({ ...editing, sortOrder: Number(e.target.value) })}
                     className="w-16 border border-sand rounded-lg px-2 py-1 text-sm text-center focus:border-orange focus:outline-none"
                   />

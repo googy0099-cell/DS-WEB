@@ -455,7 +455,7 @@ export default function AdminMenuPage() {
               </div>
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">ราคาปกติ ฿ (สำหรับเมนูที่ไม่มีไซส์)</label>
-                <input type="number" value={editing.priceTHB ?? 0} onChange={(e) => setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })}
+                <input type="number" value={editing.priceTHB || ""} onChange={(e) => setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })}
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-3">

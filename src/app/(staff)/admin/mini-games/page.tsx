@@ -202,7 +202,7 @@ export default function AdminMiniGamesPage() {
                 <label className="text-xs font-medium text-navy block mb-1">ลำดับการแสดง</label>
                 <input
                   type="number"
-                  value={editing.sortOrder ?? 0}
+                  value={editing.sortOrder || ""}
                   onChange={(e) => setEditing({ ...editing, sortOrder: parseInt(e.target.value) || 0 })}
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                 />

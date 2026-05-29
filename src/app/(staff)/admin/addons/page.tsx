@@ -111,7 +111,7 @@ export default function AdminAddonsPage() {
                 <label className="text-xs font-medium text-navy block mb-1">ราคาเพิ่ม (฿)</label>
                 <input
                   type="number"
-                  value={editing.priceTHB ?? 0}
+                  value={editing.priceTHB || ""}
                   onChange={(e) =>
                     setEditing({ ...editing, priceTHB: parseInt(e.target.value) || 0 })
                   }

@@ -168,7 +168,7 @@ export default function AdminOptionGroupsPage() {
                       />
                       <input
                         type="number"
-                        value={editingChoice.priceTHB}
+                        value={editingChoice.priceTHB || ""}
                         onChange={(e) => setEditingChoice({ ...editingChoice, priceTHB: parseInt(e.target.value) || 0 })}
                         className="w-20 border border-sand rounded-lg px-2 py-1 text-sm text-right focus:border-orange focus:outline-none"
                       />

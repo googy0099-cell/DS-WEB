@@ -244,20 +244,20 @@ export default function StockPage() {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-xs font-semibold text-navy block mb-1">ขั้นต่ำ (แจ้งเตือน)</label>
-                  <input type="number" min={0} value={form.minQty}
+                  <input type="number" min={0} value={form.minQty || ""}
                     onChange={(e) => setForm((p) => ({ ...p, minQty: Number(e.target.value) }))}
                     className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-navy block mb-1">ควรสั่งซื้อเมื่อ</label>
-                  <input type="number" min={0} value={form.reorderQty}
+                  <input type="number" min={0} value={form.reorderQty || ""}
                     onChange={(e) => setForm((p) => ({ ...p, reorderQty: Number(e.target.value) }))}
                     className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
                 </div>
               </div>
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">ต้นทุน/หน่วย (฿)</label>
-                <input type="number" min={0} step={0.01} value={form.costPerUnit}
+                <input type="number" min={0} step={0.01} value={form.costPerUnit || ""}
                   onChange={(e) => setForm((p) => ({ ...p, costPerUnit: Number(e.target.value) }))}
                   className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
               </div>
