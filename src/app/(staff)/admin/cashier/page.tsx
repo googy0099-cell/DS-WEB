@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 
+type LowMenu = { id: number; nameTh: string; missing: string[] };
+type ReorderItem = { id: number; sku: string; name: string; unit: string; currentQty: number; reorderQty: number };
+
 const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5, 2, 1];
 
 interface Payment {
@@ -79,6 +82,11 @@ export default function CashierPage() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Stock checks
+  const [lowMenus, setLowMenus] = useState<LowMenu[] | null>(null);
+  const [stockCheckLoading, setStockCheckLoading] = useState(false);
+  const [reorderItems, setReorderItems] = useState<ReorderItem[]>([]);
+
   // Restore today's shift from localStorage
   useEffect(() => {
     const stored = localStorage.getItem(SHIFT_KEY());
@@ -106,13 +114,25 @@ export default function CashierPage() {
     setLoadingSummary(false);
   }, []);
 
-  function openStore() {
+  async function handleOpenClick() {
+    setStockCheckLoading(true);
+    const data = await fetch("/api/stock/session?check=preopen").then((r) => r.json()).catch(() => ({ lowMenus: [] }));
+    setLowMenus(data.lowMenus ?? []);
+    setStockCheckLoading(false);
+  }
+
+  function confirmOpenStore() {
     const now = new Date().toISOString();
     const float = parseInt(openingFloat) || 0;
     localStorage.setItem(SHIFT_KEY(), JSON.stringify({ openedAt: now, openingFloat: float }));
     setOpenedAt(now);
     setOpeningFloat(String(float));
     setShiftState("OPEN");
+    setLowMenus(null);
+    fetch("/api/stock/session", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "open" }),
+    });
   }
 
   function startClose() {
@@ -135,6 +155,12 @@ export default function CashierPage() {
     });
     if (res.ok) {
       localStorage.removeItem(SHIFT_KEY());
+      // Sync close to DB + fetch reorder list
+      const [, stockData] = await Promise.all([
+        fetch("/api/stock/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "close" }) }),
+        fetch("/api/stock/session?check=preclose").then((r) => r.json()).catch(() => ({ needReorder: [] })),
+      ]);
+      setReorderItems(stockData.needReorder ?? []);
       await loadSummary();
       setCloseStep(4);
     }
@@ -149,6 +175,7 @@ export default function CashierPage() {
     setNote("");
     setCloseStep(1);
     setSummary(null);
+    setReorderItems([]);
   }
 
   // ── CLOSED: Open store screen ──────────────────────────────────────────────
@@ -175,16 +202,57 @@ export default function CashierPage() {
           </div>
 
           <button
-            onClick={openStore}
-            className="w-full bg-green-500 hover:bg-green-400 text-white font-bold py-4 rounded-2xl text-base transition-colors"
+            onClick={handleOpenClick}
+            disabled={stockCheckLoading}
+            className="w-full bg-green-500 hover:bg-green-400 text-white font-bold py-4 rounded-2xl text-base transition-colors disabled:opacity-50"
           >
-            ✅ เปิดร้าน
+            {stockCheckLoading ? "กำลังตรวจสอบสต็อก..." : "✅ เปิดร้าน"}
           </button>
         </div>
 
         <div className="text-center">
           <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับ Dashboard</Link>
         </div>
+
+        {/* Pre-open stock check modal */}
+        {lowMenus !== null && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto">
+              <div>
+                <h3 className="font-bold text-navy text-lg">🟢 ก่อนเปิดร้าน</h3>
+                <p className="text-sm text-gray-400 mt-0.5">ตรวจสอบวัตถุดิบ</p>
+              </div>
+
+              {lowMenus.length === 0 ? (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2">
+                  ✅ ทุกเมนูมีวัตถุดิบพร้อม
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-red-600">⚠️ เมนูที่วัตถุดิบอาจไม่พอ ({lowMenus.length} รายการ)</p>
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
+                    {lowMenus.map((m) => (
+                      <div key={m.id} className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+                        <p className="text-sm font-semibold text-navy">{m.nameTh}</p>
+                        {m.missing.map((miss, i) => (
+                          <p key={i} className="text-xs text-red-500 mt-0.5">· {miss}</p>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400">พิจารณาปิดเมนูเหล่านี้ในหน้าจัดการเมนูก่อนเปิดร้าน</p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => setLowMenus(null)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
+                <button onClick={confirmOpenStore} className="flex-1 bg-green-600 text-white font-bold py-3 rounded-2xl text-sm">
+                  ยืนยันเปิดร้าน
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -474,6 +542,18 @@ export default function CashierPage() {
                 <span>ขาด/เกิน</span>
                 <span>{summary.lastClose.difference > 0 ? "+" : ""}{summary.lastClose.difference.toLocaleString()} ฿</span>
               </div>
+            </div>
+          )}
+
+          {reorderItems.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left space-y-2 max-w-xs mx-auto">
+              <p className="text-xs font-bold text-amber-800">📋 ต้องสั่งซื้อเพิ่ม ({reorderItems.length} รายการ)</p>
+              {reorderItems.map((i) => (
+                <div key={i.id} className="flex justify-between text-sm">
+                  <span className="text-navy font-medium">{i.name}</span>
+                  <span className="text-amber-700 font-bold">{i.currentQty}/{i.reorderQty} {i.unit}</span>
+                </div>
+              ))}
             </div>
           )}
 

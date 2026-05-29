@@ -16,12 +16,6 @@ type StockAlert = {
   stockItem: { id: number; name: string; unit: string; currentQty: number } | null;
 };
 
-type ShopSession = {
-  id: number; isOpen: boolean;
-  openedAt: string | null; closedAt: string | null;
-};
-
-type LowMenu = { id: number; nameTh: string; missing: string[] };
 
 const BLANK = { sku: "", name: "", unit: "piece", minQty: 0, reorderQty: 0, costPerUnit: 0 };
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -41,7 +35,6 @@ function qtyBadge(item: StockItem) {
 }
 
 export default function StockPage() {
-  const { data: shopSession, mutate: mutateSession } = useSWR<ShopSession>("/api/stock/session", fetcher);
   const { data: items = [], mutate } = useSWR<StockItem[]>("/api/stock/items", fetcher);
   const { data: alerts = [], mutate: mutateAlerts } = useSWR<StockAlert[]>(
     "/api/stock/alerts", fetcher, { refreshInterval: 300_000 }
@@ -60,56 +53,7 @@ export default function StockPage() {
   const [inNote, setInNote] = useState("");
   const [inSaving, setInSaving] = useState(false);
 
-  // Open/Close store modals
-  const [storeModal, setStoreModal] = useState<null | "opening" | "closing">(null);
-  const [storeCheckData, setStoreCheckData] = useState<{
-    lowMenus?: LowMenu[];
-    needReorder?: StockItem[];
-  } | null>(null);
-  const [storeCheckLoading, setStoreCheckLoading] = useState(false);
-  const [storeConfirming, setStoreConfirming] = useState(false);
-
   const visible = showInactive ? items : items.filter((i) => i.isActive);
-
-  // ── Store open/close ──────────────────────────────────────────────────────
-
-  async function handleOpenStore() {
-    setStoreCheckLoading(true);
-    const data = await fetcher("/api/stock/session?check=preopen");
-    setStoreCheckData(data);
-    setStoreModal("opening");
-    setStoreCheckLoading(false);
-  }
-
-  async function confirmOpenStore() {
-    setStoreConfirming(true);
-    await fetch("/api/stock/session", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "open" }),
-    });
-    await mutateSession();
-    setStoreModal(null);
-    setStoreConfirming(false);
-  }
-
-  async function handleCloseStore() {
-    setStoreCheckLoading(true);
-    const data = await fetcher("/api/stock/session?check=preclose");
-    setStoreCheckData(data);
-    setStoreModal("closing");
-    setStoreCheckLoading(false);
-  }
-
-  async function confirmCloseStore() {
-    setStoreConfirming(true);
-    await fetch("/api/stock/session", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "close" }),
-    });
-    await mutateSession();
-    setStoreModal(null);
-    setStoreConfirming(false);
-  }
 
   // ── Alerts ────────────────────────────────────────────────────────────────
 
@@ -183,36 +127,6 @@ export default function StockPage() {
         <button onClick={openAdd} className="bg-orange text-white font-bold px-4 py-2 rounded-xl text-sm">
           + เพิ่มวัตถุดิบ
         </button>
-      </div>
-
-      {/* ── Shop status card ────────────────────────────────────────────────── */}
-      <div className={`rounded-2xl border-2 px-5 py-4 flex items-center justify-between transition-colors ${shopSession?.isOpen ? "border-green-300 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
-        <div>
-          <p className={`text-sm font-bold ${shopSession?.isOpen ? "text-green-700" : "text-gray-500"}`}>
-            {shopSession?.isOpen ? "🟢 ร้านเปิดอยู่" : "⚫ ร้านปิดอยู่"}
-          </p>
-          {shopSession?.isOpen && shopSession.openedAt && (
-            <p className="text-xs text-green-600 mt-0.5">
-              เปิดตั้งแต่ {new Date(shopSession.openedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.
-            </p>
-          )}
-          {!shopSession?.isOpen && shopSession?.closedAt && (
-            <p className="text-xs text-gray-400 mt-0.5">
-              ปิดเมื่อ {new Date(shopSession.closedAt).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} น.
-            </p>
-          )}
-        </div>
-        {shopSession?.isOpen ? (
-          <button onClick={handleCloseStore} disabled={storeCheckLoading}
-            className="bg-gray-700 hover:bg-gray-800 text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-50">
-            {storeCheckLoading ? "..." : "ปิดร้าน"}
-          </button>
-        ) : (
-          <button onClick={handleOpenStore} disabled={storeCheckLoading}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold px-4 py-2 rounded-xl text-sm disabled:opacity-50">
-            {storeCheckLoading ? "..." : "เปิดร้าน"}
-          </button>
-        )}
       </div>
 
       {/* ── Low-stock alert banner (polls every 5 min) ───────────────────────── */}
@@ -300,91 +214,6 @@ export default function StockPage() {
           </table>
         )}
       </div>
-
-      {/* ── Open Store Modal ─────────────────────────────────────────────────── */}
-      {storeModal === "opening" && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto">
-            <div>
-              <h3 className="font-bold text-navy text-lg">🟢 ยืนยันเปิดร้าน</h3>
-              <p className="text-sm text-gray-400 mt-0.5">ตรวจสอบวัตถุดิบก่อนเปิด</p>
-            </div>
-
-            {(storeCheckData?.lowMenus?.length ?? 0) === 0 ? (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2">
-                <span>✅</span> ทุกเมนูมีวัตถุดิบพร้อม
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-red-600">⚠️ เมนูที่วัตถุดิบอาจไม่พอ ({storeCheckData!.lowMenus!.length} รายการ)</p>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {storeCheckData!.lowMenus!.map((m) => (
-                    <div key={m.id} className="bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
-                      <p className="text-sm font-semibold text-navy">{m.nameTh}</p>
-                      {m.missing.map((miss, i) => (
-                        <p key={i} className="text-xs text-red-500 mt-0.5">· {miss}</p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400">พิจารณาปิดเมนูเหล่านี้ในหน้าจัดการเมนูก่อนเปิดร้าน</p>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setStoreModal(null)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
-              <button onClick={confirmOpenStore} disabled={storeConfirming}
-                className="flex-1 bg-green-600 text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
-                {storeConfirming ? "..." : "ยืนยันเปิดร้าน"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Close Store Modal ────────────────────────────────────────────────── */}
-      {storeModal === "closing" && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto">
-            <div>
-              <h3 className="font-bold text-navy text-lg">⚫ ยืนยันปิดร้าน</h3>
-              <p className="text-sm text-gray-400 mt-0.5">รายการที่ควรสั่งซื้อเพิ่ม</p>
-            </div>
-
-            {(storeCheckData?.needReorder?.length ?? 0) === 0 ? (
-              <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-700 flex items-center gap-2">
-                <span>✅</span> สต็อกทุกรายการยังอยู่ในระดับปกติ
-              </div>
-            ) : (
-              <div className="space-y-2">
-                <p className="text-xs font-semibold text-orange">📋 ต้องสั่งซื้อเพิ่ม ({storeCheckData!.needReorder!.length} รายการ)</p>
-                <div className="space-y-1.5 max-h-52 overflow-y-auto">
-                  {storeCheckData!.needReorder!.map((i) => (
-                    <div key={i.id} className="flex items-center justify-between bg-orange/5 border border-orange/20 rounded-xl px-3 py-2.5">
-                      <div>
-                        <p className="text-sm font-semibold text-navy">{i.name}</p>
-                        <p className="text-xs text-gray-400">{i.sku}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-orange">{i.currentQty} {i.unit}</p>
-                        <p className="text-xs text-gray-400">ควรสั่งที่ ≥{i.reorderQty}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setStoreModal(null)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
-              <button onClick={confirmCloseStore} disabled={storeConfirming}
-                className="flex-1 bg-gray-700 text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
-                {storeConfirming ? "..." : "ยืนยันปิดร้าน"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Add/Edit Modal ───────────────────────────────────────────────────── */}
       {showEditModal && (
