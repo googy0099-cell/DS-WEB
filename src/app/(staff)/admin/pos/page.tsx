@@ -32,6 +32,18 @@ type ExtraItem = {
   assignedPlayerIdx: number | null;
 };
 
+function getBangkokHHMM(): string {
+  const now = new Date();
+  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
+  return `${String(bkk.getHours()).padStart(2, "0")}:${String(bkk.getMinutes()).padStart(2, "0")}`;
+}
+
+function isWithinSellHours(start: string | null | undefined, end: string | null | undefined): boolean {
+  if (!start || !end) return true;
+  const now = getBangkokHHMM();
+  return now >= start && now <= end;
+}
+
 const PACKAGES: Record<string, { label: string; price: number; timeSeconds: number; desc: string }> = {
   A: { label: "Package A", price: 0, timeSeconds: 3600, desc: "สั่งเครื่องดื่ม — เล่นฟรี 1 ชม." },
   B: { label: "Package B", price: 49, timeSeconds: 7200, desc: "49฿ — เล่น 2 ชม." },
@@ -402,9 +414,9 @@ export default function AdminTimePage() {
     setBills(Array.isArray(b) ? b : []);
     setTables(Array.isArray(t) ? t : []);
     const menu = Array.isArray(m) ? (m as DrinkItem[]) : [];
-    setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category)));
-    setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable));
-    setGametimeItems(menu.filter((item) => item.category === "gametime" && item.isAvailable));
+    setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category) && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+    setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+    setGametimeItems(menu.filter((item) => item.category === "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
     setLoading(false);
   }, []);
 

@@ -37,6 +37,12 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(orders);
 }
 
+function getBangkokHHMM(): string {
+  const now = new Date();
+  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
+  return `${String(bkk.getHours()).padStart(2, "0")}:${String(bkk.getMinutes()).padStart(2, "0")}`;
+}
+
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const { orderName, userId, items, note } = body as {
@@ -76,6 +82,19 @@ export async function POST(req: NextRequest) {
   const menuItems = await db.menuItem.findMany({
     where: { id: { in: items.map((i) => i.menuItemId) } },
   });
+
+  // Block items outside their selling hours
+  const nowHHMM = getBangkokHHMM();
+  const blocked = menuItems.filter((m) => {
+    if (!m.sellStartTime || !m.sellEndTime) return false;
+    return nowHHMM < m.sellStartTime || nowHHMM > m.sellEndTime;
+  });
+  if (blocked.length > 0) {
+    return NextResponse.json(
+      { error: `ไม่สามารถสั่งได้ตอนนี้: ${blocked.map((m) => m.nameTh).join(", ")} — รับออเดอร์ ${blocked[0].sellStartTime}–${blocked[0].sellEndTime} น. เท่านั้น` },
+      { status: 400 }
+    );
+  }
 
   const itemsWithPrice = items.map((item) => {
     const menu = menuItems.find((m) => m.id === item.menuItemId)!;

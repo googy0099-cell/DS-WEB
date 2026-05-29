@@ -21,16 +21,27 @@ function isWithinSellHours(start: string | null, end: string | null): boolean {
   return now >= start && now <= end;
 }
 
-const CATEGORIES = [
-  { id: "gametime", label: "ค่าชั่วโมงเกม", icon: "🎲" },
-  { id: "milktea", label: "Milk & Tea", icon: "🧋" },
-  { id: "coffee", label: "Coffee", icon: "☕" },
-  { id: "soda", label: "Soda Zaa", icon: "🥤" },
-  { id: "drink", label: "เครื่องดื่ม", icon: "🧊" },
-  { id: "food", label: "อาหารจานเดียว", icon: "🍜" },
-  { id: "snack", label: "ของทานเล่น", icon: "🍿" },
-  { id: "dessert", label: "ของหวาน", icon: "🍮" },
+const DEFAULT_CATEGORIES = [
+  { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true },
+  { id: "coffee", label: "Coffee", icon: "☕", isActive: true },
+  { id: "soda", label: "Soda Zaa", icon: "🥤", isActive: true },
+  { id: "drink", label: "เครื่องดื่ม", icon: "🧊", isActive: true },
+  { id: "food", label: "อาหารจานเดียว", icon: "🍜", isActive: true },
+  { id: "snack", label: "ของทานเล่น", icon: "🍿", isActive: true },
+  { id: "dessert", label: "ของหวาน", icon: "🍮", isActive: true },
 ];
+
+function parseSavedCategories(saved: string | undefined) {
+  try {
+    const custom: { id: string; label: string; icon: string; isActive: boolean }[] = saved ? JSON.parse(saved) : [];
+    const merged = DEFAULT_CATEGORIES.map((b) => {
+      const found = custom.find((c) => c.id === b.id);
+      return found ? { ...b, isActive: found.isActive } : b;
+    });
+    custom.filter((c) => !DEFAULT_CATEGORIES.find((b) => b.id === c.id) && c.isActive).forEach((c) => merged.push(c));
+    return merged;
+  } catch { return DEFAULT_CATEGORIES; }
+}
 
 
 const GAME_PACKAGES = [
@@ -68,6 +79,7 @@ const GAME_PACKAGES = [
 export default function MenuPage() {
   const [items, setItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [CATEGORIES, setCATEGORIES] = useState(DEFAULT_CATEGORIES);
   const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
   const [pickerSize, setPickerSize] = useState<"S" | "XL">("S");
   const [pickerAddons, setPickerAddons] = useState<CartSelectedAddon[]>([]);
@@ -75,16 +87,18 @@ export default function MenuPage() {
   const { addItem } = useOrderStore();
 
   useEffect(() => {
-    fetch("/api/menu")
-      .then((r) => r.json())
-      .then((data) => {
-        setItems(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch("/api/menu").then((r) => r.json()),
+      fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
+    ]).then(([menuData, settings]) => {
+      setItems(menuData);
+      setCATEGORIES(parseSavedCategories(settings?.menu_categories));
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, []);
 
-  const availableItems = items.filter((i) => i.isAvailable && i.category !== "gametime");
+  const activeCatIds = new Set(CATEGORIES.filter((c) => c.isActive).map((c) => c.id));
+  const availableItems = items.filter((i) => i.isAvailable && i.category !== "gametime" && activeCatIds.has(i.category));
 
   function openPicker(item: MenuItemType) {
     setPickerItem(item);
@@ -197,7 +211,7 @@ export default function MenuPage() {
 
         <div className="sticky top-16 z-10 bg-cream border-b border-sand flex overflow-x-auto no-scrollbar">
           {CATEGORIES.filter(
-            (cat) => cat.id !== "gametime" && (loading || availableItems.some((i) => i.category === cat.id))
+            (cat) => cat.isActive && (loading || availableItems.some((i) => i.category === cat.id))
           ).map((cat) => (
             <a
               key={cat.id}
@@ -240,8 +254,7 @@ export default function MenuPage() {
             </p>
           </section>
 
-          {CATEGORIES.map((cat) => {
-            if (cat.id === "gametime") return null;
+          {CATEGORIES.filter((cat) => cat.isActive).map((cat) => {
             const catItems = availableItems.filter((i) => i.category === cat.id);
             if (catItems.length === 0 && !loading) return null;
 

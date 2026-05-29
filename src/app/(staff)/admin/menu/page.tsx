@@ -24,16 +24,31 @@ type MenuItem = {
 type AddonGroup = { id: number; nameTh: string; isActive: boolean };
 type OptionGroup = { id: number; nameTh: string; isRequired: boolean; isActive: boolean };
 
-const CATEGORIES = ["milktea", "coffee", "soda", "drink", "food", "snack", "dessert"];
-const CAT_LABELS: Record<string, string> = {
-  milktea: "Milk & Tea",
-  coffee: "Coffee",
-  soda: "Soda Zaa",
-  drink: "เครื่องดื่ม",
-  food: "อาหารจานเดียว",
-  snack: "ของทานเล่น",
-  dessert: "ของหวาน",
-};
+export type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; isBuiltin?: boolean };
+
+const BUILTIN_CATEGORIES: MenuCategory[] = [
+  { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true, isBuiltin: true },
+  { id: "coffee", label: "Coffee", icon: "☕", isActive: true, isBuiltin: true },
+  { id: "soda", label: "Soda Zaa", icon: "🥤", isActive: true, isBuiltin: true },
+  { id: "drink", label: "เครื่องดื่ม", icon: "🧊", isActive: true, isBuiltin: true },
+  { id: "food", label: "อาหารจานเดียว", icon: "🍜", isActive: true, isBuiltin: true },
+  { id: "snack", label: "ของทานเล่น", icon: "🍿", isActive: true, isBuiltin: true },
+  { id: "dessert", label: "ของหวาน", icon: "🍮", isActive: true, isBuiltin: true },
+];
+
+function mergeCategories(saved: string | undefined): MenuCategory[] {
+  try {
+    const custom: MenuCategory[] = saved ? JSON.parse(saved) : [];
+    const customIds = new Set(custom.map((c) => c.id));
+    const merged = BUILTIN_CATEGORIES.map((b) => {
+      const found = custom.find((c) => c.id === b.id);
+      return found ? { ...b, isActive: found.isActive } : b;
+    });
+    custom.filter((c) => !BUILTIN_CATEGORIES.find((b) => b.id === c.id)).forEach((c) => merged.push(c));
+    void customIds;
+    return merged;
+  } catch { return BUILTIN_CATEGORIES; }
+}
 
 const EMPTY = {
   nameTh: "", nameEn: "", category: "milktea", priceTHB: 0,
@@ -48,6 +63,10 @@ export default function AdminMenuPage() {
   const { data: items = [], mutate } = useSWR<MenuItem[]>("/api/menu", fetcher);
   const { data: allAddonGroups = [] } = useSWR<AddonGroup[]>("/api/addon-groups", fetcher);
   const { data: allOptionGroups = [] } = useSWR<OptionGroup[]>("/api/option-groups", fetcher);
+  const { data: siteSettings, mutate: mutateSite } = useSWR<{ menu_categories?: string }>("/api/site-settings", fetcher);
+
+  const categories = mergeCategories(siteSettings?.menu_categories);
+  const activeCategories = categories.filter((c) => c.isActive);
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<Partial<typeof EMPTY> & { id?: number } | null>(null);
@@ -55,6 +74,40 @@ export default function AdminMenuPage() {
   const [selectedOptionGroupIds, setSelectedOptionGroupIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const [filterCat, setFilterCat] = useState<string>("all");
+
+  // Category manager
+  const [showCatManager, setShowCatManager] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("🍽️");
+  const [catSaving, setCatSaving] = useState(false);
+
+  async function saveCategories(cats: MenuCategory[]) {
+    setCatSaving(true);
+    await fetch("/api/site-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menu_categories: JSON.stringify(cats) }),
+    });
+    await mutateSite();
+    setCatSaving(false);
+  }
+
+  async function toggleCategoryActive(cat: MenuCategory) {
+    await saveCategories(categories.map((c) => c.id === cat.id ? { ...c, isActive: !c.isActive } : c));
+  }
+
+  async function addCategory() {
+    if (!newCatLabel.trim()) return;
+    const id = newCatLabel.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "") || `cat-${Date.now()}`;
+    const newCat: MenuCategory = { id, label: newCatLabel.trim(), icon: newCatIcon, isActive: true };
+    await saveCategories([...categories, newCat]);
+    setNewCatLabel(""); setNewCatIcon("🍽️");
+  }
+
+  async function deleteCategory(cat: MenuCategory) {
+    if (!confirm(`ลบหมวด "${cat.label}"? เมนูในหมวดนี้จะยังอยู่ในระบบ แต่จะไม่แสดงบนเว็บ`)) return;
+    await saveCategories(categories.filter((c) => c.id !== cat.id));
+  }
 
   function openAdd() {
     setEditing({ ...EMPTY });
@@ -122,6 +175,7 @@ export default function AdminMenuPage() {
   }
 
   const filtered = filterCat === "all" ? items : items.filter((i) => i.category === filterCat);
+  const catMap = Object.fromEntries(categories.map((c) => [c.id, c]));
 
   return (
     <div>
@@ -136,11 +190,14 @@ export default function AdminMenuPage() {
         <button onClick={() => setFilterCat("all")} className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium ${filterCat === "all" ? "bg-navy text-cream" : "bg-white text-navy border border-sand"}`}>
           ทั้งหมด ({items.length})
         </button>
-        {CATEGORIES.map((cat) => (
-          <button key={cat} onClick={() => setFilterCat(cat)} className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium ${filterCat === cat ? "bg-navy text-cream" : "bg-white text-navy border border-sand"}`}>
-            {CAT_LABELS[cat]} ({items.filter((i) => i.category === cat).length})
+        {categories.map((cat) => (
+          <button key={cat.id} onClick={() => setFilterCat(cat.id)} className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium ${filterCat === cat.id ? "bg-navy text-cream" : !cat.isActive ? "bg-white text-gray-300 border border-sand line-through" : "bg-white text-navy border border-sand"}`}>
+            {cat.icon} {cat.label} ({items.filter((i) => i.category === cat.id).length})
           </button>
         ))}
+        <button onClick={() => setShowCatManager(true)} className="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium bg-white text-orange border border-orange/40 hover:bg-orange/5">
+          ⚙️ หมวดหมู่
+        </button>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -183,7 +240,7 @@ export default function AdminMenuPage() {
                     </div>
                   </div>
                 </td>
-                <td className="p-3 text-gray-500 hidden md:table-cell">{CAT_LABELS[item.category]}</td>
+                <td className="p-3 text-gray-500 hidden md:table-cell">{catMap[item.category]?.icon} {catMap[item.category]?.label ?? item.category}</td>
                 <td className="p-3 text-right font-bold text-navy text-sm">
                   {item.priceS != null && item.priceXL != null
                     ? `S ฿${item.priceS} / XL ฿${item.priceXL}`
@@ -226,6 +283,51 @@ export default function AdminMenuPage() {
       </div>
 
       {/* Modal */}
+      {/* Category Manager Modal */}
+      {showCatManager && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setShowCatManager(false)}>
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-xl">
+            <h2 className="font-bold text-navy text-lg mb-4">⚙️ จัดการหมวดหมู่</h2>
+            <div className="space-y-2 max-h-72 overflow-y-auto mb-4">
+              {categories.map((cat) => (
+                <div key={cat.id} className="flex items-center gap-2 p-2 rounded-xl border border-sand">
+                  <span className="text-xl w-7 text-center">{cat.icon}</span>
+                  <span className={`flex-1 text-sm font-medium ${cat.isActive ? "text-navy" : "text-gray-400 line-through"}`}>{cat.label}</span>
+                  <button
+                    onClick={() => toggleCategoryActive(cat)}
+                    className={`text-xs px-2 py-1 rounded-lg font-medium border ${cat.isActive ? "border-green-200 text-green-700 bg-green-50" : "border-gray-200 text-gray-400"}`}
+                  >
+                    {cat.isActive ? "แสดง" : "ซ่อน"}
+                  </button>
+                  {!cat.isBuiltin && (
+                    <button onClick={() => deleteCategory(cat)} className="text-xs text-red-400 hover:text-red-600 px-1">🗑️</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mb-3">+ เพิ่มหมวดหมู่ใหม่</p>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text" value={newCatIcon} onChange={(e) => setNewCatIcon(e.target.value)}
+                className="w-14 text-center border border-sand rounded-xl px-2 py-2 text-lg"
+                placeholder="🍽️"
+              />
+              <input
+                type="text" value={newCatLabel} onChange={(e) => setNewCatLabel(e.target.value)}
+                placeholder="ชื่อหมวดหมู่"
+                className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                onKeyDown={(e) => e.key === "Enter" && addCategory()}
+              />
+              <button onClick={addCategory} disabled={!newCatLabel.trim() || catSaving}
+                className="bg-orange text-white px-3 py-2 rounded-xl text-sm font-semibold disabled:opacity-50">
+                เพิ่ม
+              </button>
+            </div>
+            <button onClick={() => setShowCatManager(false)} className="w-full border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ปิด</button>
+          </div>
+        </div>
+      )}
+
       {showModal && editing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
           <div className="bg-white rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
@@ -248,7 +350,7 @@ export default function AdminMenuPage() {
                 <label className="text-xs font-medium text-navy block mb-1">หมวดหมู่</label>
                 <select value={editing.category ?? "milktea"} onChange={(e) => setEditing({ ...editing, category: e.target.value })}
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none">
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{CAT_LABELS[c]}</option>)}
+                  {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.label}</option>)}
                 </select>
               </div>
               <div>

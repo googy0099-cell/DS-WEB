@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 
-const ALLOWED_KEYS = ["promo_title", "promo_body", "promo_enabled", "print_receipt", "print_kitchen"] as const;
+const ALLOWED_KEYS = ["promo_title", "promo_body", "promo_enabled", "print_receipt", "print_kitchen", "menu_categories"] as const;
 type SettingKey = (typeof ALLOWED_KEYS)[number];
 
 async function requireStaff() {
