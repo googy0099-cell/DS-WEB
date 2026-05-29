@@ -125,6 +125,8 @@ function ItemDetail({ item, onClose, onAdd }: {
   );
 }
 
+type MemberInfo = { id: number; firstName: string; username: string; memberCode: string; dicePoints: number };
+
 export default function CashierOrderButton({ onCreated }: { onCreated?: () => void }) {
   const [open, setOpen] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([]);
@@ -135,6 +137,13 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   const [saving, setSaving] = useState(false);
   const [detailItem, setDetailItem] = useState<MenuItemType | null>(null);
 
+  // Member code for dice points
+  const [memberCode, setMemberCode] = useState("");
+  const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
+  const [memberError, setMemberError] = useState("");
+  const [memberLoading, setMemberLoading] = useState(false);
+  const memberTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const loadMenu = useCallback(async () => {
     const res = await fetch("/api/menu").then((r) => r.json()).catch(() => []);
     const items = Array.isArray(res) ? (res as MenuItemType[]) : [];
@@ -144,6 +153,27 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   function openModal() { setOpen(true); loadMenu(); }
   function closeModal() {
     setOpen(false); setCart([]); setOrderName(""); setOrderNote(""); setSearch("");
+    setMemberCode(""); setMemberInfo(null); setMemberError("");
+  }
+
+  function onMemberCodeChange(code: string) {
+    setMemberCode(code);
+    setMemberError("");
+    if (!code.trim()) { setMemberInfo(null); return; }
+    if (memberTimerRef.current) clearTimeout(memberTimerRef.current);
+    memberTimerRef.current = setTimeout(async () => {
+      setMemberLoading(true);
+      const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
+      setMemberLoading(false);
+      if (res.ok) {
+        const m: MemberInfo = await res.json();
+        setMemberInfo(m);
+        if (!orderName.trim()) setOrderName(m.firstName);
+      } else {
+        setMemberInfo(null);
+        setMemberError("ไม่พบสมาชิก");
+      }
+    }, 500);
   }
 
   function pickItem(item: MenuItemType) {
@@ -178,6 +208,7 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
         orderName: orderName.trim(),
         note: orderNote.trim() || undefined,
         source: "cashier",
+        userId: memberInfo?.id ?? null,
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.qty,
@@ -215,6 +246,27 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
                 <input value={orderName} onChange={(e) => setOrderName(e.target.value)}
                   placeholder="เช่น คุณสมชาย หรือ โต๊ะ 3"
                   className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange" />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-navy block mb-1">รหัสสมาชิก <span className="text-gray-400 font-normal">(ไม่บังคับ — เพื่อสะสมแต้ม)</span></label>
+                <input
+                  value={memberCode}
+                  onChange={(e) => onMemberCodeChange(e.target.value.toUpperCase())}
+                  placeholder="DS-XXXX"
+                  className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm font-mono focus:outline-none focus:border-orange uppercase"
+                />
+                {memberLoading && <p className="text-xs text-gray-400 mt-1">กำลังค้นหา...</p>}
+                {memberInfo && (
+                  <div className="mt-1.5 flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                    <div>
+                      <p className="text-xs text-green-700 font-semibold">✅ {memberInfo.firstName} (@{memberInfo.username})</p>
+                      <p className="text-[11px] text-gray-400">{memberInfo.memberCode} · 🎲 {memberInfo.dicePoints} แต้ม</p>
+                    </div>
+                    <button onClick={() => { setMemberInfo(null); setMemberCode(""); }} className="text-gray-300 hover:text-red-400 text-lg ml-2">×</button>
+                  </div>
+                )}
+                {memberError && <p className="text-xs text-red-500 mt-1">{memberError}</p>}
               </div>
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="🔍 ค้นหารายการ..."
