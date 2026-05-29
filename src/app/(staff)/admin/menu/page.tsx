@@ -18,6 +18,7 @@ type MenuItem = {
   isFeatured: boolean;
   sellStartTime: string | null;
   sellEndTime: string | null;
+  recipeNote: string | null;
   addonGroups: { id: number; nameTh: string }[];
   optionGroups: { id: number; nameTh: string; isRequired: boolean }[];
 };
@@ -89,6 +90,8 @@ export default function AdminMenuPage() {
   const [newRecipeQty, setNewRecipeQty] = useState("");
   const [newRecipeSize, setNewRecipeSize] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
+  const [recipeNote, setRecipeNote] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
 
   // Category manager
   const [showCatManager, setShowCatManager] = useState(false);
@@ -207,6 +210,18 @@ export default function AdminMenuPage() {
     await mutateRecipes();
   }
 
+  async function saveRecipeNote() {
+    if (!recipeMenuItem) return;
+    setNoteSaving(true);
+    await fetch("/api/menu", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: recipeMenuItem.id, recipeNote: recipeNote || null }),
+    });
+    await mutate();
+    setNoteSaving(false);
+  }
+
   const filtered = filterCat === "all" ? items : items.filter((i) => i.category === filterCat);
   const catMap = Object.fromEntries(categories.map((c) => [c.id, c]));
 
@@ -270,7 +285,7 @@ export default function AdminMenuPage() {
               </div>
               <div className="flex gap-4 mt-2">
                 <button onClick={() => openEdit(item)} className="text-xs text-orange font-medium">แก้ไข</button>
-                <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); }} className="text-xs text-navy/60">สูตร</button>
+                <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNote(item.recipeNote ?? ""); setNewRecipeSize(""); }} className="text-xs text-navy/60">สูตร</button>
                 <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400">ลบ</button>
               </div>
             </div>
@@ -357,7 +372,7 @@ export default function AdminMenuPage() {
                 <td className="p-3">
                   <div className="flex gap-3">
                     <button onClick={() => openEdit(item)} className="text-xs text-orange hover:underline">แก้ไข</button>
-                    <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); }} className="text-xs text-navy/60 hover:text-navy">สูตร</button>
+                    <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNote(item.recipeNote ?? ""); setNewRecipeSize(""); }} className="text-xs text-navy/60 hover:text-navy">สูตร</button>
                     <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
                   </div>
                 </td>
@@ -477,6 +492,22 @@ export default function AdminMenuPage() {
             <p className="text-xs text-gray-400 bg-sand/20 rounded-xl px-3 py-2">
               ℹ️ ระบบจะตัดสต็อกตามสูตรนี้ทุกครั้งที่ออเดอร์ถูก SERVED
             </p>
+
+            {/* Recipe instructions */}
+            <div className="border-t border-sand pt-3 space-y-2">
+              <p className="text-xs font-semibold text-navy">📝 วิธีทำ / SOP</p>
+              <textarea
+                value={recipeNote}
+                onChange={(e) => setRecipeNote(e.target.value)}
+                placeholder="ขั้นตอนการทำ เช่น&#10;1. ต้มน้ำ 200ml&#10;2. ใส่ผง..."
+                rows={5}
+                className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange resize-none"
+              />
+              <button onClick={saveRecipeNote} disabled={noteSaving}
+                className="w-full bg-navy text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-40">
+                {noteSaving ? "กำลังบันทึก..." : "💾 บันทึกวิธีทำ"}
+              </button>
+            </div>
 
             <button onClick={() => setRecipeMenuItem(null)} className="w-full border border-sand text-gray-400 py-3 rounded-2xl text-sm">ปิด</button>
           </div>

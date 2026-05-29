@@ -99,6 +99,7 @@ model MenuItem {
   isFeatured    Boolean               @default(false)
   sellStartTime String?
   sellEndTime   String?
+  recipeNote    String?               @map("recipe_note")
   orderItems    OrderItem[]
   addonGroups   MenuItemAddonGroup[]
   optionGroups  MenuItemOptionGroup[]

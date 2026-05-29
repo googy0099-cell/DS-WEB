@@ -22,6 +22,7 @@ const STAFF_NAV = [
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
   { href: "/admin/dice-redeem", label: "แลกแต้ม", icon: "🎲" },
   { href: "/admin/stock", label: "สต็อก", icon: "📦" },
+  { href: "/admin/sop", label: "สูตรอาหาร", icon: "📋" },
 ];
 
 const OWNER_ONLY_NAV = [
