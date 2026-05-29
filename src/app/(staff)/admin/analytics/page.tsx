@@ -13,9 +13,17 @@ const MODULES = [
     href: "/admin/analytics/menu",
     icon: "🍽️",
     title: "เมนูขายดี",
-    desc: "จัดอันดับเมนูตามจำนวนชิ้นและยอดเงิน",
+    desc: "จัดอันดับเมนูตามจำนวนชิ้นและยอดเงิน (ไม่รวมแพ็กเกจเวลา)",
     color: "bg-orange/5 border-orange/20",
     iconBg: "bg-orange/10 text-orange",
+  },
+  {
+    href: "/admin/analytics/gametime",
+    icon: "⏱️",
+    title: "แพ็กเกจเวลา",
+    desc: "จำนวนและรายได้จากแพ็กเกจชั่วโมงเกม",
+    color: "bg-sky-50 border-sky-200",
+    iconBg: "bg-sky-100 text-sky-700",
   },
   {
     href: "/admin/analytics/drawer",

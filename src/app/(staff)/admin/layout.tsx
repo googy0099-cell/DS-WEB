@@ -20,6 +20,7 @@ const STAFF_NAV = [
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
+  { href: "/admin/dice-redeem", label: "แลกแต้ม", icon: "🎲" },
 ];
 
 const OWNER_ONLY_NAV = [
@@ -27,6 +28,7 @@ const OWNER_ONLY_NAV = [
   { href: "/admin/users", label: "ผู้ใช้งานระบบ", icon: "🔑" },
   { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "📈" },
   { href: "/admin/audit", label: "Log การทำงาน", icon: "📋" },
+  { href: "/admin/rewards", label: "จัดการรางวัล", icon: "🎁" },
   { href: "/admin/settings", label: "ตั้งค่าการชำระ", icon: "⚙️" },
 ];
 

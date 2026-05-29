@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
 type CartEntry = {

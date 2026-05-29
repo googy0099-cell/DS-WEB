@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const orderItems = await db.orderItem.findMany({
     where: {
       order: { status: "SERVED", createdAt: { gte: start, lt: end } },
-      menuItem: { category: { not: "gametime" } },
+      menuItem: { category: "gametime" },
     },
     select: {
       menuItemId: true,
