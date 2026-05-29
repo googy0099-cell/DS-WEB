@@ -905,6 +905,12 @@ export default function AdminTimePage() {
             <input value={p.nameOrCode} onChange={(e) => set((x) => ({ ...x, nameOrCode: e.target.value }))}
               placeholder={`ชื่อ/รหัสลูกค้า (ว่าง = Player ${i + 1})`}
               className="flex-1 border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+            {canDelete && (
+              <button type="button" onClick={remove}
+                className="w-7 h-7 rounded-full bg-red-100 hover:bg-red-200 text-red-500 font-bold text-sm flex items-center justify-center shrink-0 transition-colors">
+                ×
+              </button>
+            )}
           </div>
           <PackagePicker value={p.pkg}
             onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
