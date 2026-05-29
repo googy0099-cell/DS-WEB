@@ -78,7 +78,16 @@ export async function PATCH(
       status,
       ...(handledById ? { handledById } : {}),
     },
+    select: { id: true, orderName: true, status: true, userId: true, totalTHB: true },
   });
+
+  // Award dice points only when cashier confirms payment (SERVED)
+  if (status === "SERVED" && order.userId) {
+    const diceEarned = Math.floor(order.totalTHB / 49);
+    if (diceEarned > 0) {
+      await db.user.update({ where: { id: order.userId }, data: { dicePoints: { increment: diceEarned } } });
+    }
+  }
 
   if (handledById && AUDIT_ACTIONS[status]) {
     await db.auditLog.create({

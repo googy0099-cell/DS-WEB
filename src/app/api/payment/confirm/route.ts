@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest) {
   const payment = await db.payment.update({
     where: { id: Number(paymentId) },
     data: { status: "CONFIRMED", confirmedAt: new Date() },
-    include: { order: true },
+    include: { order: { select: { orderName: true, userId: true, totalTHB: true } } },
   });
 
   await db.order.update({
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest) {
     data: { status: "SERVED" },
   });
 
-  // Award points: 1 point per 10 THB
+  // Award loyalty points (1 per 10 THB) and dice points (1 per 49 THB) on cashier confirmation
   if (userId) {
     const pts = Math.floor(payment.amountTHB / 10);
     await db.user.update({
@@ -27,6 +27,14 @@ export async function PATCH(req: NextRequest) {
         totalSpentTHB: { increment: payment.amountTHB },
       },
     });
+  }
+
+  const orderUserId = payment.order.userId;
+  if (orderUserId) {
+    const diceEarned = Math.floor(payment.order.totalTHB / 49);
+    if (diceEarned > 0) {
+      await db.user.update({ where: { id: orderUserId }, data: { dicePoints: { increment: diceEarned } } });
+    }
   }
 
   await Promise.allSettled([

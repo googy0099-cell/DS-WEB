@@ -132,10 +132,6 @@ export async function POST(req: NextRequest) {
     });
     const addMsg = `\n➕ สั่งเพิ่ม! 👤 ${updatedOrder.orderName}\n${itemsWithPrice.map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`).join("\n")}\n💰 รวมใหม่ ฿${updatedOrder.totalTHB}`;
     await Promise.allSettled([sendTelegramNotify(addMsg), sendPushToAll("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`), sendFcmNotify("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`)]);
-    const addDice = Math.floor(newTotal / 49);
-    if (userId && addDice > 0) {
-      await db.user.update({ where: { id: userId }, data: { dicePoints: { increment: addDice } } });
-    }
     return NextResponse.json(updatedOrder, { status: 200 });
   }
 
@@ -180,11 +176,6 @@ export async function POST(req: NextRequest) {
     sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
     sendFcmNotify("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
   ]);
-
-  const diceEarned = Math.floor(totalTHB / 49);
-  if (userId && diceEarned > 0) {
-    await db.user.update({ where: { id: userId }, data: { dicePoints: { increment: diceEarned } } });
-  }
 
   return NextResponse.json(order, { status: 201 });
 }
