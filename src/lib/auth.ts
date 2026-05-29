@@ -68,6 +68,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.picture = user.image ?? null;
         }
       }
+      // Subsequent requests — always sync role from DB so changes take effect immediately
+      if (!user && token.id) {
+        const fresh = await db.user.findUnique({
+          where: { id: parseInt(token.id as string) },
+          select: { role: true },
+        });
+        if (fresh) token.role = fresh.role;
+      }
       return token;
     },
     async signIn({ user, account }) {
