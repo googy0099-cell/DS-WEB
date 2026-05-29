@@ -15,9 +15,10 @@ type LineItem = {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const billId = Number(id);
-  const { paymentMethod, items } = (await req.json()) as {
+  const { paymentMethod, items, receivedAmount } = (await req.json()) as {
     paymentMethod: "CASH" | "PROMPTPAY";
     items: LineItem[];
+    receivedAmount?: number;
   };
 
   const bill = await db.bill.findUnique({ where: { id: billId }, include: { table: true } });
@@ -28,11 +29,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const validItems = items.filter((i) => i.menuItemId && i.qty > 0);
   const totalTHB = validItems.reduce((s, i) => s + i.unitPriceTHB * i.qty, 0);
 
+  // Cash payments confirmed immediately (cashier is physically present)
+  const orderStatus = paymentMethod === "CASH" ? "SERVED" : "PENDING";
+
   const order = await db.order.create({
     data: {
       orderName: `บิล ${bill.name} — โต๊ะ ${bill.table.number}`,
       tableId: bill.tableId,
-      status: "PENDING",
+      status: orderStatus,
       totalTHB,
       items: {
         create: validItems.map((i) => ({
@@ -48,12 +52,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   if (paymentMethod === "CASH") {
+    const received = receivedAmount ?? totalTHB;
+    const change = Math.max(0, received - totalTHB);
     await db.payment.create({
       data: {
         orderId: order.id,
         method: "CASH",
         amountTHB: totalTHB,
-        status: "PENDING",
+        status: "CONFIRMED",
+        confirmedAt: new Date(),
+        receivedAmount: received,
+        changeAmount: change,
       },
     });
   }

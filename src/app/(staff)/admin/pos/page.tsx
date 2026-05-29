@@ -407,6 +407,28 @@ export default function AdminTimePage() {
   const [extendSlipUploading, setExtendSlipUploading] = useState(false);
   const extendSlipRef = useRef<HTMLInputElement>(null);
 
+  // cash amount input modal
+  const [cashInputOpen, setCashInputOpen] = useState(false);
+  const [cashInputStr, setCashInputStr] = useState("");
+  const [cashInputTotal, setCashInputTotal] = useState(0);
+  const [cashInputAction, setCashInputAction] = useState<"new" | "addBill" | "extend">("new");
+
+  function openCashInput(total: number, action: "new" | "addBill" | "extend") {
+    setCashInputTotal(total);
+    setCashInputStr("");
+    setCashInputAction(action);
+    setCashInputOpen(true);
+  }
+
+  async function confirmCashInput() {
+    const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
+    if (received < cashInputTotal) { window.alert("ยอดเงินที่รับมาไม่เพียงพอ"); return; }
+    setCashInputOpen(false);
+    if (cashInputAction === "new") await chooseCash(received);
+    else if (cashInputAction === "addBill") await chooseAddBillCash(received);
+    else await chooseExtendCash(received);
+  }
+
   // item picker (drink or extra item) — list then detail
   type PickerCtx = { list: "players"; idx: number } | { list: "addPlayers"; idx: number } | { list: "extraItems" } | { list: "addExtraItems" } | { list: "extendDrink" };
   const [pickerCtx, setPickerCtx] = useState<PickerCtx | null>(null);
@@ -518,12 +540,12 @@ export default function AdminTimePage() {
     );
   }
 
-  async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[]) {
+  async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[], receivedAmount?: number) {
     const items = buildLineItems(draftPlayers, draftExtra);
     const res = await fetch(`/api/pos/bills/${billId}/order`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: method, items, totalTHB: grandTotal }),
+      body: JSON.stringify({ paymentMethod: method, items, totalTHB: grandTotal, receivedAmount }),
     });
     if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return null; }
     return await res.json() as { orderId: number; totalTHB: number; qrDataUrl: string | null; accountName: string; bankName: string };
@@ -582,13 +604,13 @@ export default function AdminTimePage() {
     return calcPlayersTotal(players) + extraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
-  async function chooseCash() {
+  async function chooseCash(received?: number) {
     if (!draftBillId) return;
     setSaving(true);
     const sessionIds = await createSessions(draftBillId, players);
     if (!sessionIds) { setSaving(false); return; }
     setPlayerSessionIds(sessionIds);
-    await createOrder("CASH", draftBillId, grandTotal(), players, extraItems);
+    await createOrder("CASH", draftBillId, grandTotal(), players, extraItems, received);
     await patchExtraSpend(extraItems, sessionIds);
     setSaving(false);
     closeFlow();
@@ -643,13 +665,13 @@ export default function AdminTimePage() {
     return calcPlayersTotal(addPlayers) + addExtraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
-  async function chooseAddBillCash() {
+  async function chooseAddBillCash(received?: number) {
     if (!addToBill) return;
     setSaving(true);
     const sessionIds = await createSessions(addToBill.id, addPlayers);
     if (!sessionIds) { setSaving(false); return; }
     setAddBillPlayerSessionIds(sessionIds);
-    await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems);
+    await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, received);
     await patchExtraSpend(addExtraItems, sessionIds);
     setSaving(false);
     closeAddBillFlow();
@@ -744,12 +766,12 @@ export default function AdminTimePage() {
     }
   }
 
-  async function chooseExtendCash() {
+  async function chooseExtendCash(received?: number) {
     if (!extendBill) return;
     setSaving(true);
     await fetch(`/api/pos/bills/${extendBill.id}/order`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentMethod: "CASH", items: buildExtendLineItems(), totalTHB: extendTotal() }),
+      body: JSON.stringify({ paymentMethod: "CASH", items: buildExtendLineItems(), totalTHB: extendTotal(), receivedAmount: received }),
     });
     await addExtendTime();
     setSaving(false);
@@ -1011,7 +1033,7 @@ export default function AdminTimePage() {
       {/* Modal 3: Payment Method */}
       {step === 3 && (
         <Modal onClose={closeFlow} title="ชำระเงิน">
-          {renderMethodStep(grandTotal(), chooseCash, chooseQR, () => setStep(2))}
+          {renderMethodStep(grandTotal(), () => openCashInput(grandTotal(), "new"), chooseQR, () => setStep(2))}
         </Modal>
       )}
 
@@ -1039,7 +1061,7 @@ export default function AdminTimePage() {
               </button>
             </>
           )}
-          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0))}
+          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), () => openCashInput(addBillGrandTotal(), "addBill"), chooseAddBillQR, () => setAddBillStep(0))}
           {addBillStep === 2 && addBillQr && renderQRStep(addBillQr, addBillGrandTotal(), addBillSlipFile, addBillSlipPreview, addBillSlipUploading, addBillSlipInputRef,
             (f) => { setAddBillSlipFile(f); setAddBillSlipPreview(URL.createObjectURL(f)); }, submitAddBillSlip, () => setAddBillStep(1))}
         </Modal>
@@ -1112,7 +1134,7 @@ export default function AdminTimePage() {
 
       {extendSession && extendStep === 1 && (
         <Modal onClose={closeExtendFlow} title="ชำระเงิน">
-          {renderMethodStep(extendTotal(), chooseExtendCash, chooseExtendQR, () => setExtendStep(0))}
+          {renderMethodStep(extendTotal(), () => openCashInput(extendTotal(), "extend"), chooseExtendQR, () => setExtendStep(0))}
         </Modal>
       )}
 
@@ -1198,6 +1220,65 @@ export default function AdminTimePage() {
             บันทึก
           </button>
         </Modal>
+      )}
+
+      {/* Cash amount input modal */}
+      {cashInputOpen && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg text-center">รับเงินสด</h3>
+            <div className="text-center">
+              <p className="text-xs text-gray-400">ยอดที่ต้องชำระ</p>
+              <p className="text-3xl font-bold text-orange">฿{cashInputTotal.toLocaleString()}</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-navy block mb-1">ลูกค้าจ่ายมา</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                autoFocus
+                value={cashInputStr}
+                onChange={(e) => setCashInputStr(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") confirmCashInput(); }}
+                placeholder="0"
+                className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center focus:outline-none focus:border-orange"
+              />
+            </div>
+            {cashInputStr && (
+              <div className={`rounded-xl p-3 text-center ${parseInt(cashInputStr) >= cashInputTotal ? "bg-green-50" : "bg-red-50"}`}>
+                {parseInt(cashInputStr) >= cashInputTotal ? (
+                  <>
+                    <p className="text-xs text-green-600">เงินทอน</p>
+                    <p className="text-3xl font-bold text-green-700">฿{(parseInt(cashInputStr) - cashInputTotal).toLocaleString()}</p>
+                  </>
+                ) : (
+                  <p className="text-sm font-semibold text-red-500">ยอดไม่เพียงพอ — ขาดอีก ฿{(cashInputTotal - parseInt(cashInputStr)).toLocaleString()}</p>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {[20, 50, 100, 500, 1000].map((amt) => (
+                <button key={amt} type="button"
+                  onClick={() => setCashInputStr(String((parseInt(cashInputStr) || 0) + amt))}
+                  className="bg-sand/50 hover:bg-orange/10 border border-sand text-navy text-sm font-semibold py-2 rounded-xl">
+                  +{amt}
+                </button>
+              ))}
+              <button type="button"
+                onClick={() => setCashInputStr("")}
+                className="bg-sand/50 hover:bg-red-50 border border-sand text-gray-400 text-sm py-2 rounded-xl">
+                ล้าง
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCashInputOpen(false)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+              <button onClick={confirmCashInput} disabled={saving || !cashInputStr || parseInt(cashInputStr) < cashInputTotal}
+                className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                {saving ? "..." : "ยืนยัน"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

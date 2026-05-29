@@ -31,6 +31,7 @@ model User {
   orders              Order[]              @relation("CustomerOrders")
   handledOrders       Order[]              @relation("StaffOrders")
   auditLogs           AuditLog[]
+  cashDrawerSessions  CashDrawerSession[] @relation("DrawerClosedBy")
   notifications          Notification[]
   werewolfRoomsGM        WerewolfRoom[]          @relation("WerewolfRoomsGM")
   werewolfRoomPlayers    WerewolfRoomPlayer[]    @relation("WerewolfRoomPlayers")
@@ -197,16 +198,32 @@ model OrderItem {
 }
 
 model Payment {
-  id          Int       @id @default(autoincrement())
-  orderId     Int       @unique
-  order       Order     @relation(fields: [orderId], references: [id])
-  method      String
-  amountTHB   Int
-  status      String    @default("PENDING")
-  slipUrl     String?
-  confirmedAt DateTime?
-  staffNote   String?
-  createdAt   DateTime  @default(now())
+  id             Int       @id @default(autoincrement())
+  orderId        Int       @unique
+  order          Order     @relation(fields: [orderId], references: [id])
+  method         String
+  amountTHB      Int
+  status         String    @default("PENDING")
+  slipUrl        String?
+  confirmedAt    DateTime?
+  staffNote      String?
+  receivedAmount Int?
+  changeAmount   Int?
+  createdAt      DateTime  @default(now())
+}
+
+model CashDrawerSession {
+  id            Int      @id @default(autoincrement())
+  date          String
+  openingFloat  Int      @default(0)
+  expectedCash  Int      @default(0)
+  totalTransfer Int      @default(0)
+  countedCash   Int      @default(0)
+  difference    Int      @default(0)
+  note          String?
+  closedById    Int?
+  closedBy      User?    @relation("DrawerClosedBy", fields: [closedById], references: [id])
+  createdAt     DateTime @default(now())
 }
 
 model PaymentConfig {
