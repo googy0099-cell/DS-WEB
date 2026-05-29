@@ -5,77 +5,113 @@ import useSWR from "swr";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
 
-function printReceipt(order: OrderWithItems) {
-  const dateStr = formatThaiDateTime(order.createdAt);
-  const items = order.items
-    .map((item) => {
-      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
-      const subtotal = item.unitPriceTHB * item.quantity;
-      const extras = [
-        item.selectedSize ? `ไซส์: ${item.selectedSize}` : "",
-        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
-        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
-      ].filter(Boolean).join(" | ");
-      return `
-        <tr>
-          <td style="padding:4px 2px;vertical-align:top">
-            ${item.menuItem.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
-            ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
-          </td>
-          <td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>
-        </tr>`;
-    })
-    .join("");
+interface ReceiptSettings {
+  shopName: string;
+  shopInfo: string;
+  paperWidth: string;
+  footer: string;
+  showOrderId: boolean;
+  showDate: boolean;
+  showCustomer: boolean;
+  showNote: boolean;
+  showItemPrice: boolean;
+  showTotal: boolean;
+}
 
-  const html = `<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="utf-8"/>
-<title>ใบเสร็จ #${order.id}</title>
-<style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { font-family: 'Sarabun', 'Helvetica Neue', Arial, sans-serif; font-size:13px; color:#111; width:80mm; margin:0 auto; padding:8px; }
-  h1 { font-size:18px; font-weight:900; text-align:center; margin-bottom:2px; }
-  .sub { font-size:11px; text-align:center; color:#555; margin-bottom:8px; }
-  .divider { border:none; border-top:1px dashed #aaa; margin:6px 0; }
-  table { width:100%; border-collapse:collapse; }
-  .total-row td { font-weight:bold; font-size:15px; padding-top:6px; border-top:1px dashed #aaa; }
-  .note { background:#fff8e7; border:1px solid #f5a623; border-radius:4px; padding:5px 8px; margin-top:6px; font-size:12px; }
-  .footer { text-align:center; font-size:11px; color:#777; margin-top:10px; }
-  @media print { body { width:100%; } }
-</style>
-</head>
-<body>
-  <h1>🎲 ร้านลูกเต๋า</h1>
-  <div class="sub">The Dice Shop • ใบเสร็จรับเงิน</div>
-  <hr class="divider"/>
-  <div style="font-size:12px;margin-bottom:4px">
-    <div><b>ออเดอร์:</b> ${order.orderName || `#${order.id}`}</div>
-    <div><b>วันที่:</b> ${dateStr}</div>
-    <div><b>เลขที่:</b> #${order.id}</div>
-  </div>
-  <hr class="divider"/>
-  <table>
-    <tbody>${items}</tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td>รวมทั้งหมด</td>
-        <td style="text-align:right">฿${order.totalTHB}</td>
-      </tr>
-    </tfoot>
-  </table>
-  ${order.note ? `<div class="note">📝 หมายเหตุ: ${order.note}</div>` : ""}
-  <div class="footer">ขอบคุณที่ใช้บริการ 🎲</div>
-</body>
-</html>`;
+interface KitchenSettings {
+  enabled: boolean;
+  paperWidth: string;
+  showTable: boolean;
+  showNote: boolean;
+}
 
-  const win = window.open("", "_blank", "width=400,height=600");
+const DEFAULT_RECEIPT: ReceiptSettings = {
+  shopName: "ร้านลูกเต๋า", shopInfo: "The Dice Shop", paperWidth: "80",
+  footer: "ขอบคุณที่ใช้บริการ 🎲",
+  showOrderId: true, showDate: true, showCustomer: true,
+  showNote: true, showItemPrice: true, showTotal: true,
+};
+
+const DEFAULT_KITCHEN: KitchenSettings = {
+  enabled: false, paperWidth: "80", showTable: true, showNote: true,
+};
+
+function openPrintWindow(html: string) {
+  const win = window.open("", "_blank", "width=420,height=620");
   if (!win) return;
   win.document.write(html);
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 300);
+}
+
+function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
+  const dateStr = formatThaiDateTime(order.createdAt);
+  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
+  const itemsHtml = order.items
+    .map((item) => {
+      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+      const subtotal = item.unitPriceTHB * item.quantity;
+      const extras = [
+        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
+        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
+      ].filter(Boolean).join(" | ");
+      return `<tr>
+        <td style="padding:4px 2px;vertical-align:top">
+          ${item.menuItem.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
+          ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
+        </td>
+        ${settings.showItemPrice ? `<td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>` : ""}
+      </tr>`;
+    })
+    .join("");
+
+  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ #${order.id}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.divider{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:12px}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style>
+</head><body>
+<h1>🎲 ${settings.shopName}</h1>
+<div class="sub">${settings.shopInfo} • ใบเสร็จรับเงิน</div>
+<hr class="divider"/>
+<div style="font-size:12px;margin-bottom:4px">
+${settings.showCustomer ? `<div><b>ออเดอร์:</b> ${order.orderName || `#${order.id}`}</div>` : ""}
+${settings.showOrderId ? `<div><b>เลขที่:</b> #${order.id}</div>` : ""}
+${settings.showDate ? `<div><b>วันที่:</b> ${dateStr}</div>` : ""}
+</div>
+<hr class="divider"/>
+<table><tbody>${itemsHtml}</tbody>
+${settings.showTotal ? `<tfoot><tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${order.totalTHB}</td></tr></tfoot>` : ""}
+</table>
+${settings.showNote && order.note ? `<div class="note">📝 หมายเหตุ: ${order.note}</div>` : ""}
+<div class="footer">${settings.footer}</div>
+</body></html>`);
+}
+
+function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
+  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
+  const itemsHtml = order.items
+    .map((item) => {
+      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+      const extras = [
+        item.selectedSize ? item.selectedSize : "",
+        addons.length > 0 ? addons.map((a) => a.nameTh).join(", ") : "",
+        options.length > 0 ? options.map((o) => o.choiceName).join(", ") : "",
+      ].filter(Boolean).join(" · ");
+      return `<div style="padding:4px 0;font-size:15px;font-weight:bold">• ${item.menuItem.nameTh} ×${item.quantity}${extras ? `<span style="font-weight:normal;font-size:13px"> (${extras})</span>` : ""}</div>`;
+    })
+    .join("");
+
+  const tableInfo = settings.showTable && order.tableId ? `โต๊ะ ${order.tableId} — ` : "";
+  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบครัว #${order.id}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:17px;font-weight:900;text-align:center;margin-bottom:4px}.info{font-size:12px;text-align:center;margin-bottom:4px}.divider{border:none;border-top:2px solid #111;margin:6px 0}.note{font-size:13px;margin-top:6px;padding:4px 0;border-top:1px dashed #aaa}@media print{body{width:100%}}</style>
+</head><body>
+<h1>🍳 ใบแจ้งครัว</h1>
+<div class="info">${tableInfo}ออเดอร์ #${order.id}${order.orderName ? ` — ${order.orderName}` : ""}</div>
+<hr class="divider"/>
+${itemsHtml}
+${settings.showNote && order.note ? `<div class="note">📝 ${order.note}</div>` : ""}
+</body></html>`);
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -185,6 +221,8 @@ export default function OrderQueue() {
 
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmState | null>(null);
+  const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT);
+  const [kitchenSettings, setKitchenSettings] = useState<KitchenSettings>(DEFAULT_KITCHEN);
 
   // Edit modal state
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
@@ -220,6 +258,20 @@ export default function OrderQueue() {
       }
     }
     setupPush();
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/site-settings")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.print_receipt) {
+          try { setReceiptSettings({ ...DEFAULT_RECEIPT, ...JSON.parse(data.print_receipt) }); } catch {}
+        }
+        if (data.print_kitchen) {
+          try { setKitchenSettings({ ...DEFAULT_KITCHEN, ...JSON.parse(data.print_kitchen) }); } catch {}
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const pendingOrders = orders?.filter((o) => o.status === "PENDING") ?? [];
@@ -429,7 +481,9 @@ export default function OrderQueue() {
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
-                onPrint={printReceipt}
+                onPrint={(o) => printReceipt(o, receiptSettings)}
+                onKitchen={(o) => printKitchen(o, kitchenSettings)}
+                kitchenEnabled={kitchenSettings.enabled}
               />
             ))}
           </div>
@@ -450,7 +504,9 @@ export default function OrderQueue() {
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
-                onPrint={printReceipt}
+                onPrint={(o) => printReceipt(o, receiptSettings)}
+                onKitchen={(o) => printKitchen(o, kitchenSettings)}
+                kitchenEnabled={kitchenSettings.enabled}
               />
             ))}
           </div>
@@ -672,6 +728,8 @@ function OrderCard({
   onEdit,
   onDelete,
   onPrint,
+  onKitchen,
+  kitchenEnabled,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -680,6 +738,8 @@ function OrderCard({
   onEdit: (order: OrderWithItems) => void;
   onDelete: (id: number) => void;
   onPrint: (order: OrderWithItems) => void;
+  onKitchen: (order: OrderWithItems) => void;
+  kitchenEnabled: boolean;
 }) {
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
   const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
@@ -803,6 +863,15 @@ function OrderCard({
               className="flex-1 bg-red-50 text-red-600 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
             >
               ❌ ยกเลิก
+            </button>
+          )}
+          {kitchenEnabled && order.status !== "SERVED" && order.status !== "CANCELLED" && (
+            <button
+              onClick={() => onKitchen(order)}
+              className="bg-gray-50 text-gray-500 border border-gray-200 text-sm px-3 py-2 rounded-xl hover:bg-gray-100"
+              title="แจ้งครัว"
+            >
+              🍳
             </button>
           )}
           <button

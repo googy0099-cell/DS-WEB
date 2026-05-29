@@ -15,7 +15,29 @@ interface SiteSettings {
   promo_title?: string;
   promo_body?: string;
   promo_enabled?: string;
+  print_receipt?: string;
+  print_kitchen?: string;
 }
+
+const DEFAULT_RECEIPT_SETTINGS = {
+  shopName: "ร้านลูกเต๋า",
+  shopInfo: "The Dice Shop",
+  paperWidth: "80",
+  footer: "ขอบคุณที่ใช้บริการ 🎲",
+  showOrderId: true,
+  showDate: true,
+  showCustomer: true,
+  showNote: true,
+  showItemPrice: true,
+  showTotal: true,
+};
+
+const DEFAULT_KITCHEN_SETTINGS = {
+  enabled: false,
+  paperWidth: "80",
+  showTable: true,
+  showNote: true,
+};
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -30,11 +52,49 @@ export default function AdminSettingsPage() {
   const [promoSaving, setPromoSaving] = useState(false);
   const [promoSuccess, setPromoSuccess] = useState(false);
 
+  // Print settings — receipt
+  const [rShopName, setRShopName] = useState(DEFAULT_RECEIPT_SETTINGS.shopName);
+  const [rShopInfo, setRShopInfo] = useState(DEFAULT_RECEIPT_SETTINGS.shopInfo);
+  const [rPaperWidth, setRPaperWidth] = useState(DEFAULT_RECEIPT_SETTINGS.paperWidth);
+  const [rFooter, setRFooter] = useState(DEFAULT_RECEIPT_SETTINGS.footer);
+  const [rShowOrderId, setRShowOrderId] = useState(DEFAULT_RECEIPT_SETTINGS.showOrderId);
+  const [rShowDate, setRShowDate] = useState(DEFAULT_RECEIPT_SETTINGS.showDate);
+  const [rShowCustomer, setRShowCustomer] = useState(DEFAULT_RECEIPT_SETTINGS.showCustomer);
+  const [rShowNote, setRShowNote] = useState(DEFAULT_RECEIPT_SETTINGS.showNote);
+  const [rShowItemPrice, setRShowItemPrice] = useState(DEFAULT_RECEIPT_SETTINGS.showItemPrice);
+  const [rShowTotal, setRShowTotal] = useState(DEFAULT_RECEIPT_SETTINGS.showTotal);
+
+  // Print settings — kitchen
+  const [kEnabled, setKEnabled] = useState(DEFAULT_KITCHEN_SETTINGS.enabled);
+  const [kPaperWidth, setKPaperWidth] = useState(DEFAULT_KITCHEN_SETTINGS.paperWidth);
+  const [kShowTable, setKShowTable] = useState(DEFAULT_KITCHEN_SETTINGS.showTable);
+  const [kShowNote, setKShowNote] = useState(DEFAULT_KITCHEN_SETTINGS.showNote);
+
+  const [printLoaded, setPrintLoaded] = useState(false);
+  const [printSaving, setPrintSaving] = useState(false);
+  const [printSuccess, setPrintSuccess] = useState(false);
+
   if (siteSettings && !promoLoaded) {
     setPromoTitle(siteSettings.promo_title ?? "🎉 โปรโมชั่นพิเศษ!");
     setPromoBody(siteSettings.promo_body ?? "สั่งครบ ฿300 รับเครื่องดื่มฟรี 1 แก้ว (ทุกวัน 15:00 – 17:00)");
     setPromoEnabled(siteSettings.promo_enabled !== "false");
     setPromoLoaded(true);
+  }
+
+  if (siteSettings && !printLoaded) {
+    try {
+      const r = { ...DEFAULT_RECEIPT_SETTINGS, ...JSON.parse(siteSettings.print_receipt ?? "{}") };
+      setRShopName(r.shopName); setRShopInfo(r.shopInfo); setRPaperWidth(r.paperWidth);
+      setRFooter(r.footer); setRShowOrderId(r.showOrderId); setRShowDate(r.showDate);
+      setRShowCustomer(r.showCustomer); setRShowNote(r.showNote);
+      setRShowItemPrice(r.showItemPrice); setRShowTotal(r.showTotal);
+    } catch {}
+    try {
+      const k = { ...DEFAULT_KITCHEN_SETTINGS, ...JSON.parse(siteSettings.print_kitchen ?? "{}") };
+      setKEnabled(k.enabled); setKPaperWidth(k.paperWidth);
+      setKShowTable(k.showTable); setKShowNote(k.showNote);
+    } catch {}
+    setPrintLoaded(true);
   }
 
   async function savePromo() {
@@ -56,6 +116,71 @@ export default function AdminSettingsPage() {
       setPromoSaving(false);
     }
   }
+  async function savePrintSettings() {
+    setPrintSaving(true);
+    setPrintSuccess(false);
+    try {
+      await fetch("/api/site-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal }),
+          print_kitchen: JSON.stringify({ enabled: kEnabled, paperWidth: kPaperWidth, showTable: kShowTable, showNote: kShowNote }),
+        }),
+      });
+      await mutateSite();
+      setPrintSuccess(true);
+    } finally {
+      setPrintSaving(false);
+    }
+  }
+
+  function testReceiptPrint() {
+    const w = rPaperWidth === "A4" ? "210mm" : `${rPaperWidth}mm`;
+    const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบเสร็จ</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:12px}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style></head>
+<body>
+<h1>🎲 ${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
+<div style="font-size:12px;margin-bottom:4px">
+${rShowCustomer ? `<div><b>ออเดอร์:</b> ทดสอบ</div>` : ""}
+${rShowOrderId ? `<div><b>เลขที่:</b> #999</div>` : ""}
+${rShowDate ? `<div><b>วันที่:</b> ทดสอบ</div>` : ""}
+</div><hr class="div"/>
+<table><tbody>
+<tr><td style="padding:4px 2px">ชาไทย (XL) ×2</td>${rShowItemPrice ? `<td style="text-align:right;padding:4px 2px">฿110</td>` : ""}</tr>
+<tr><td style="padding:4px 2px">กาแฟ ×1</td>${rShowItemPrice ? `<td style="text-align:right;padding:4px 2px">฿40</td>` : ""}</tr>
+</tbody>${rShowTotal ? `<tfoot><tr><td style="font-weight:bold;padding-top:6px;border-top:1px dashed #aaa">รวมทั้งหมด</td><td style="font-weight:bold;text-align:right;padding-top:6px;border-top:1px dashed #aaa">฿150</td></tr></tfoot>` : ""}</table>
+${rShowNote ? `<div class="note">📝 หมายเหตุ: ไม่ใส่น้ำตาล</div>` : ""}
+<div class="footer">${rFooter}</div>
+</body></html>`;
+    const win = window.open("", "_blank", "width=400,height=600");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  }
+
+  function testKitchenPrint() {
+    const w = kPaperWidth === "A4" ? "210mm" : `${kPaperWidth}mm`;
+    const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบครัว</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:16px;font-weight:900;text-align:center;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}.item{padding:3px 0;font-size:14px}@media print{body{width:100%}}</style></head>
+<body>
+<h1>🍳 ใบแจ้งครัว (ทดสอบ)</h1>
+${kShowTable ? `<div style="font-size:12px;text-align:center">โต๊ะ 3 — ออเดอร์ #999 — ทดสอบ</div>` : `<div style="font-size:12px;text-align:center">ออเดอร์ #999 — ทดสอบ</div>`}
+<hr class="div"/>
+<div class="item">• ชาไทย (XL) ×2</div>
+<div class="item">• กาแฟ ×1</div>
+${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส่น้ำตาล</div>` : ""}
+</body></html>`;
+    const win = window.open("", "_blank", "width=400,height=500");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 300);
+  }
+
   const [promptPayId, setPromptPayId] = useState("");
   const [accountName, setAccountName] = useState("");
   const [bankName, setBankName] = useState("");
@@ -273,6 +398,135 @@ export default function AdminSettingsPage() {
           {saving ? "กำลังบันทึก..." : "บันทึกการตั้งค่า"}
         </button>
       </div>
+      </div>
+
+      {/* Print Settings */}
+      <div>
+        <h1 className="text-xl font-bold text-navy mb-4">🖨️ ตั้งค่าการพิมพ์</h1>
+
+        {/* Receipt */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4 mb-4">
+          <h2 className="font-semibold text-navy border-b border-sand pb-2">ใบเสร็จลูกค้า</h2>
+
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-1">ชื่อร้านบนใบเสร็จ</label>
+            <input type="text" value={rShopName} onChange={(e) => setRShopName(e.target.value)}
+              className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-1">บรรทัดที่สอง <span className="font-normal text-gray-400">(ที่อยู่ / เบอร์โทร / ไม่บังคับ)</span></label>
+            <input type="text" value={rShopInfo} onChange={(e) => setRShopInfo(e.target.value)}
+              placeholder="เช่น 099-999-9999 • ลาดพร้าว 80"
+              className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">ขนาดกระดาษ</label>
+            <div className="flex gap-2">
+              {[["80", "80mm (Thermal)"], ["58", "58mm (Thermal)"], ["A4", "A4"]].map(([val, label]) => (
+                <button key={val} onClick={() => setRPaperWidth(val)}
+                  className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition-all ${rPaperWidth === val ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">ข้อมูลที่แสดงบนใบเสร็จ</label>
+            <div className="space-y-2">
+              {[
+                ["showOrderId", "เลขที่ออเดอร์", rShowOrderId, setRShowOrderId],
+                ["showDate", "วันและเวลา", rShowDate, setRShowDate],
+                ["showCustomer", "ชื่อลูกค้า", rShowCustomer, setRShowCustomer],
+                ["showItemPrice", "ราคาต่อรายการ", rShowItemPrice, setRShowItemPrice],
+                ["showTotal", "ยอดรวม", rShowTotal, setRShowTotal],
+                ["showNote", "หมายเหตุ", rShowNote, setRShowNote],
+              ].map(([key, label, val, setter]) => (
+                <label key={key as string} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={val as boolean} onChange={(e) => (setter as (v: boolean) => void)(e.target.checked)} className="accent-orange w-4 h-4" />
+                  <span className="text-navy">{label as string}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-1">ข้อความท้ายใบเสร็จ</label>
+            <input type="text" value={rFooter} onChange={(e) => setRFooter(e.target.value)}
+              className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={testReceiptPrint}
+              className="flex-1 border border-orange text-orange font-semibold py-2.5 rounded-xl text-sm hover:bg-orange/5">
+              🖨️ ทดสอบพิมพ์
+            </button>
+            <button onClick={savePrintSettings} disabled={printSaving}
+              className="flex-1 bg-orange text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50">
+              {printSaving ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+          </div>
+        </div>
+
+        {/* Kitchen Ticket */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-sand">
+            <h2 className="font-semibold text-navy">ใบแจ้งครัว</h2>
+            <button onClick={() => setKEnabled((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${kEnabled ? "bg-orange" : "bg-gray-300"}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${kEnabled ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+
+          {!kEnabled && <p className="text-sm text-gray-400 text-center py-2">เปิดใช้งานเพื่อแสดงปุ่ม "🍳 แจ้งครัว" ในการ์ดออเดอร์</p>}
+
+          {kEnabled && (
+            <>
+              <div>
+                <label className="text-sm font-semibold text-navy block mb-2">ขนาดกระดาษ</label>
+                <div className="flex gap-2">
+                  {[["80", "80mm"], ["58", "58mm"], ["A4", "A4"]].map(([val, label]) => (
+                    <button key={val} onClick={() => setKPaperWidth(val)}
+                      className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition-all ${kPaperWidth === val ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={kShowTable} onChange={(e) => setKShowTable(e.target.checked)} className="accent-orange w-4 h-4" />
+                  <span className="text-navy">แสดงเลขโต๊ะ</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input type="checkbox" checked={kShowNote} onChange={(e) => setKShowNote(e.target.checked)} className="accent-orange w-4 h-4" />
+                  <span className="text-navy">แสดงหมายเหตุ</span>
+                </label>
+              </div>
+            </>
+          )}
+
+          {printSuccess && <p className="text-sm text-green-600 font-medium">✅ บันทึกเรียบร้อยแล้ว</p>}
+
+          <div className="flex gap-2 pt-1">
+            {kEnabled && (
+              <button onClick={testKitchenPrint}
+                className="flex-1 border border-orange text-orange font-semibold py-2.5 rounded-xl text-sm hover:bg-orange/5">
+                🍳 ทดสอบพิมพ์ใบครัว
+              </button>
+            )}
+            <button onClick={savePrintSettings} disabled={printSaving}
+              className="flex-1 bg-orange text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50">
+              {printSaving ? "กำลังบันทึก..." : "บันทึก"}
+            </button>
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-400 mt-3 text-center">
+          💡 การเลือกเครื่องพิมพ์ทำในหน้าต่างพิมพ์ของ browser — browser จะจำการตั้งค่าไว้อัตโนมัติ
+        </p>
       </div>
     </div>
   );
