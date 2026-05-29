@@ -308,7 +308,7 @@ export default function AdminMenuPage() {
                   </button>
                 </td>
                 <td className="p-3">
-                  <div className="flex gap-1">
+                  <div className="flex gap-3">
                     <button onClick={() => openEdit(item)} className="text-xs text-orange hover:underline">แก้ไข</button>
                     <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); }} className="text-xs text-navy/60 hover:text-navy">สูตร</button>
                     <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
