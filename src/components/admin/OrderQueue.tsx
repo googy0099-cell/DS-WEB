@@ -273,12 +273,12 @@ export default function OrderQueue() {
   const { data: orders, mutate } = useSWR<OrderWithItems[]>(
     "/api/orders?status=active",
     fetcher,
-    { refreshInterval: 8000 }
+    { refreshInterval: 2000 }
   );
   const { data: todayOrders, mutate: mutateTodayOrders } = useSWR<OrderWithItems[]>(
     "/api/orders?status=today",
     fetcher,
-    { refreshInterval: 30000 }
+    { refreshInterval: 10000 }
   );
 
   const prevIdsRef = useRef<Set<number>>(new Set());
