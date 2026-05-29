@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const all = req.nextUrl.searchParams.get("all") === "1";
   const section = req.nextUrl.searchParams.get("section");
   const session = all ? await auth() : null;
-  const isAdmin = session?.user && (session.user.role === "STAFF" || session.user.role === "OWNER");
+  const isAdmin = session?.user && ["STAFF", "CASHIER", "OWNER"].includes(session.user.role ?? "");
   const items = await db.galleryItem.findMany({
     where: {
       ...(isAdmin ? {} : { isActive: true }),
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
 async function requireAdmin() {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  if (!session?.user || !["STAFF", "CASHIER", "OWNER"].includes(session.user.role ?? "")) return null;
   return session;
 }
 

@@ -345,6 +345,8 @@ export default function AdminGamesPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const [search, setSearch] = useState("");
+
   // Derive all unique tags across every game + a base set
   const [extraTags, setExtraTags] = useState<string[]>([]);
   const allTags = Array.from(
@@ -406,9 +408,18 @@ export default function AdminGamesPage() {
     mutate();
   }
 
+  const q = search.toLowerCase().trim();
+  const filtered = q
+    ? items.filter((g) =>
+        g.nameTh.toLowerCase().includes(q) ||
+        (g.nameEn ?? "").toLowerCase().includes(q) ||
+        parseTags(g.tags).some((t) => t.toLowerCase().includes(q))
+      )
+    : items;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold text-navy">จัดการบอร์ดเกม</h1>
         <div className="flex gap-2">
           <button
@@ -426,8 +437,22 @@ export default function AdminGamesPage() {
         </div>
       </div>
 
+      <div className="relative mb-4">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="ค้นหาชื่อเกม หรือประเภท..."
+          className="w-full border border-sand rounded-2xl px-4 py-2.5 pl-9 text-sm focus:outline-none focus:border-orange"
+        />
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+        {search && (
+          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg leading-none">×</button>
+        )}
+      </div>
+
       <div className="space-y-3">
-        {items.map((game) => {
+        {filtered.map((game) => {
           const tags = parseTags(game.tags);
           return (
             <div key={game.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -472,7 +497,11 @@ export default function AdminGamesPage() {
             </div>
           );
         })}
-        {items.length === 0 && <p className="text-center text-gray-400 py-8">ยังไม่มีเกม</p>}
+        {filtered.length === 0 && (
+          <p className="text-center text-gray-400 py-8">
+            {search ? `ไม่พบเกมที่ตรงกับ "${search}"` : "ยังไม่มีเกม"}
+          </p>
+        )}
       </div>
 
       {/* Tag Manager */}

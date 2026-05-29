@@ -33,11 +33,17 @@ export default function AdminGalleryPage() {
     if (!editing) return;
     setSaving(true);
     const method = editing.id ? "PATCH" : "POST";
-    await fetch("/api/gallery", {
+    const res = await fetch("/api/gallery", {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ section: "gallery", ...editing }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert(err.error ?? "บันทึกไม่สำเร็จ");
+      setSaving(false);
+      return;
+    }
     await mutate();
     setShowModal(false);
     setSaving(false);
