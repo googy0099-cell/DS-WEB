@@ -731,46 +731,81 @@ export default function OrderQueue() {
       {cashOrder && (() => {
         const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
         const change = received - cashOrder.totalTHB;
+        function pressDigit(d: string) {
+          setCashInputStr((prev) => (prev === "" || prev === "0") ? d : prev + d);
+        }
+        function pressZero() {
+          setCashInputStr((prev) => prev === "" ? "" : prev + "0");
+        }
+        function pressBack() {
+          setCashInputStr((prev) => prev.slice(0, -1));
+        }
         return (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3">
               <h3 className="font-bold text-navy text-lg text-center">รับเงินสด</h3>
               <p className="text-sm text-center text-gray-500">{cashOrder.orderName}</p>
               <div className="text-center">
                 <p className="text-xs text-gray-400">ยอดที่ต้องชำระ</p>
                 <p className="text-3xl font-bold text-orange">฿{cashOrder.totalTHB.toLocaleString()}</p>
               </div>
-              <div>
-                <label className="text-xs font-semibold text-navy block mb-1">ลูกค้าจ่ายมา</label>
-                <input
-                  type="number" inputMode="numeric" autoFocus
-                  value={cashInputStr}
-                  onChange={(e) => setCashInputStr(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && received >= cashOrder.totalTHB) confirmCashPayment(); }}
-                  placeholder="0"
-                  className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center focus:outline-none focus:border-orange"
-                />
+
+              {/* Amount display */}
+              <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                {cashInputStr ? `฿${received.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
               </div>
+
+              {/* Change / shortfall */}
               {cashInputStr && (
-                <div className={`rounded-xl p-3 text-center ${received >= cashOrder.totalTHB ? "bg-green-50" : "bg-red-50"}`}>
+                <div className={`rounded-xl p-2.5 text-center ${received >= cashOrder.totalTHB ? "bg-green-50" : "bg-red-50"}`}>
                   {received >= cashOrder.totalTHB ? (
-                    <><p className="text-xs text-green-600">เงินทอน</p><p className="text-3xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
+                    <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
                   ) : (
-                    <p className="text-sm font-semibold text-red-500">ยอดไม่เพียงพอ — ขาดอีก ฿{(cashOrder.totalTHB - received).toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(cashOrder.totalTHB - received).toLocaleString()}</p>
                   )}
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-2">
+
+              {/* Numpad */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                  <button key={d} type="button" onClick={() => pressDigit(d)}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">
+                    {d}
+                  </button>
+                ))}
+                <button type="button"
+                  onClick={() => setCashInputStr((prev) => prev === "" ? "" : prev + "00")}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">
+                  00
+                </button>
+                <button type="button" onClick={pressZero}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">
+                  0
+                </button>
+                <button type="button" onClick={pressBack}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">
+                  ⌫
+                </button>
+              </div>
+
+              {/* Quick-add shortcuts */}
+              <div className="grid grid-cols-6 gap-1.5">
                 {[20, 50, 100, 500, 1000].map((amt) => (
                   <button key={amt} type="button"
                     onClick={() => setCashInputStr(String((parseInt(cashInputStr) || 0) + amt))}
-                    className="bg-sand/50 hover:bg-orange/10 border border-sand text-navy text-sm font-semibold py-2 rounded-xl">+{amt}</button>
+                    className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">
+                    +{amt}
+                  </button>
                 ))}
                 <button type="button" onClick={() => setCashInputStr("")}
-                  className="bg-sand/50 border border-sand text-gray-400 text-sm py-2 rounded-xl">ล้าง</button>
+                  className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">
+                  ล้าง
+                </button>
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => setCashOrder(null)}
+
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => { setCashOrder(null); setCashInputStr(""); }}
                   className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
                 <button onClick={confirmCashPayment}
                   disabled={!cashInputStr || received < cashOrder.totalTHB}

@@ -158,6 +158,11 @@ export default function Navbar() {
               <Link href="/profile" onClick={() => setMobileOpen(false)} className="block py-3 text-cream/80 text-base font-medium border-b border-cream/10">
                 👤 โปรไฟล์ ({session.user.memberCode})
               </Link>
+              {(session.user.role === "OWNER" || session.user.role === "STAFF" || session.user.role === "CASHIER") && (
+                <Link href="/admin" onClick={() => setMobileOpen(false)} className="block py-3 text-cream/80 text-base font-medium border-b border-cream/10">
+                  ⚙️ จัดการร้าน
+                </Link>
+              )}
               <button onClick={() => signOut({ callbackUrl: "/" })} className="text-red-400 text-base font-medium py-3">
                 ออกจากระบบ
               </button>

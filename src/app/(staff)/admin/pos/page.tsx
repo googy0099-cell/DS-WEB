@@ -626,7 +626,7 @@ export default function AdminTimePage() {
       body: JSON.stringify({ name: billName.trim(), tableId: billTableId }),
     });
     setSaving(false);
-    if (!res.ok) { window.alert("เปิดบิลไม่สำเร็จ"); return; }
+    if (!res.ok) { window.alert("เปิดตี้ไม่สำเร็จ"); return; }
     const bill = await res.json();
     setDraftBillId(bill.id);
     setPlayers([{ ...BLANK_DRAFT }]);
@@ -979,7 +979,7 @@ export default function AdminTimePage() {
             <button onClick={onDefer} disabled={saving}
               className="w-full flex items-center justify-center gap-2 bg-orange/10 border-2 border-orange/40 hover:border-orange py-3.5 rounded-2xl transition-all disabled:opacity-50">
               <span className="text-2xl">🧮</span>
-              <span className="font-bold text-orange text-sm">เปิดบิลเลย — ให้แคชเชียร์คิดเงิน</span>
+              <span className="font-bold text-orange text-sm">เปิดตี้เลย — ให้แคชเชียร์คิดเงิน</span>
             </button>
           </>
         )}
@@ -1044,11 +1044,11 @@ export default function AdminTimePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-navy">จัดการเวลา</h1>
-        <button onClick={openBillFlow} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">+ เปิดบิล</button>
+        <button onClick={openBillFlow} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">+ เปิดตี้</button>
       </div>
 
       {loading && <p className="text-gray-400 py-8 text-center">กำลังโหลด...</p>}
-      {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีบิลที่เปิดอยู่ — กด &quot;+ เปิดบิล&quot; เพื่อเริ่ม</p>}
+      {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีตี้ที่เปิดอยู่ — กด &quot;+ เปิดตี้&quot; เพื่อเริ่ม</p>}
 
       {/* Bills dashboard */}
       {bills.map((bill) => {
@@ -1101,7 +1101,7 @@ export default function AdminTimePage() {
 
       {/* Modal 1: Open Bill */}
       {step === 1 && (
-        <Modal onClose={() => setStep(0)} title="เปิดบิล">
+        <Modal onClose={() => setStep(0)} title="เปิดตี้">
           <Field label="ชื่อบิล">
             <input autoFocus value={billName} onChange={(e) => setBillName(e.target.value)} placeholder="เช่น โต๊ะพี่ปลา, กลุ่มวันศุกร์"
               className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm focus:border-orange focus:outline-none" />
@@ -1114,7 +1114,7 @@ export default function AdminTimePage() {
           </Field>
           <button onClick={confirmOpenBill} disabled={saving || !billName.trim() || !billTableId}
             className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
-            {saving ? "..." : "ยืนยันการเปิดบิล →"}
+            {saving ? "..." : "ยืนยันการเปิดตี้ →"}
           </button>
         </Modal>
       )}
