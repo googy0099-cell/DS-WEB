@@ -5,7 +5,7 @@ import { clearRoomCanvasLayout } from "@/lib/firebase-rtdb";
 
 async function requireGM(code: string) {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER" && session.user.role !== "CASHIER")) return null;
   const room = await db.werewolfRoom.findUnique({ where: { code } });
   if (!room || room.gmId !== Number(session.user.id)) return null;
   return { session, room };

@@ -5,7 +5,7 @@ import { generateUniqueRoomCode } from "@/lib/werewolf-room-code";
 
 async function requireGM() {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER" && session.user.role !== "CASHIER")) return null;
   return session;
 }
 
