@@ -17,7 +17,6 @@ const STAFF_NAV = [
   { href: "/admin/activities", label: "กิจกรรม", icon: "🎉" },
   { href: "/admin/gallery", label: "Gallery", icon: "🖼️" },
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
-  { href: "/admin/payment", label: "ยืนยันชำระ", icon: "💳" },
   { href: "/admin/cashier", label: "เก๊ะเงิน", icon: "🏧" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },

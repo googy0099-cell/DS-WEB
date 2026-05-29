@@ -293,6 +293,8 @@ export default function OrderQueue() {
   // Cash payment modal
   const [cashOrder, setCashOrder] = useState<OrderWithItems | null>(null);
   const [cashInputStr, setCashInputStr] = useState("");
+  // QR data URLs for scan-at-counter, keyed by order id
+  const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
   // Edit modal state
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
@@ -463,16 +465,18 @@ export default function OrderQueue() {
     const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
     if (received < cashOrder.totalTHB) return;
     const change = received - cashOrder.totalTHB;
-    setLoading(cashOrder.id, true);
-    await fetch(`/api/orders/${cashOrder.id}`, {
+    const order = cashOrder;
+    setLoading(order.id, true);
+    await fetch(`/api/orders/${order.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmCash: true, receivedAmount: received, changeAmount: change }),
     });
     setCashOrder(null);
     setCashInputStr("");
+    printReceipt(order, receiptSettings);
     await mutate();
-    setLoading(cashOrder.id, false);
+    setLoading(order.id, false);
   }
 
   async function confirmQrPayment(order: OrderWithItems) {
@@ -483,8 +487,28 @@ export default function OrderQueue() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentId: order.payment.id }),
     });
+    printReceipt(order, receiptSettings);
     await mutate();
     setLoading(order.id, false);
+  }
+
+  // Cashier picked "สแกน": generate an amount-embedded QR and lock method to PROMPTPAY
+  async function chooseScan(order: OrderWithItems) {
+    setLoading(order.id, true);
+    try {
+      const res = await fetch("/api/payment/qr", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.qrDataUrl) setQrMap((prev) => ({ ...prev, [order.id]: data.qrDataUrl }));
+      }
+      await mutate();
+    } finally {
+      setLoading(order.id, false);
+    }
   }
 
   function openEdit(order: OrderWithItems) {
@@ -590,6 +614,8 @@ export default function OrderQueue() {
                 kitchenEnabled={kitchenSettings.enabled}
                 onOpenCashModal={openCashModal}
                 onConfirmQr={confirmQrPayment}
+                onChooseScan={chooseScan}
+                qrUrl={qrMap[order.id]}
               />
             ))}
           </div>
@@ -615,6 +641,8 @@ export default function OrderQueue() {
                 kitchenEnabled={kitchenSettings.enabled}
                 onOpenCashModal={openCashModal}
                 onConfirmQr={confirmQrPayment}
+                onChooseScan={chooseScan}
+                qrUrl={qrMap[order.id]}
               />
             ))}
           </div>
@@ -896,6 +924,8 @@ function OrderCard({
   kitchenEnabled,
   onOpenCashModal,
   onConfirmQr,
+  onChooseScan,
+  qrUrl,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -908,14 +938,21 @@ function OrderCard({
   kitchenEnabled: boolean;
   onOpenCashModal: (order: OrderWithItems) => void;
   onConfirmQr: (order: OrderWithItems) => void;
+  onChooseScan: (order: OrderWithItems) => void;
+  qrUrl?: string;
 }) {
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
   const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
   const canEdit = order.status === "PENDING" || order.status === "CONFIRMED" || order.status === "PAID";
 
-  // Determine special primary action for CONFIRMED orders
-  const isConfirmedCash = order.status === "CONFIRMED" && (!order.payment || order.payment.method === "CASH");
-  const isConfirmedQr = order.status === "CONFIRMED" && order.payment?.method === "PROMPTPAY" && !!order.payment.slipUrl;
+  // Payment state machine for CONFIRMED orders awaiting payment
+  const isConfirmed = order.status === "CONFIRMED";
+  const method = order.payment?.method;
+  const hasSlip = !!order.payment?.slipUrl;
+  const needsMethod = isConfirmed && (!order.payment || method === "UNSET");
+  const isCashPay = isConfirmed && method === "CASH";
+  const isQrSlip = isConfirmed && method === "PROMPTPAY" && hasSlip;
+  const isQrNoSlip = isConfirmed && method === "PROMPTPAY" && !hasSlip;
 
   return (
     <div
@@ -1003,8 +1040,28 @@ function OrderCard({
           </div>
         )}
 
-        {/* Primary action */}
-        {isConfirmedCash ? (
+        {/* Primary action — payment state machine */}
+        {needsMethod ? (
+          <div className="mb-2">
+            <p className="text-xs text-gray-400 mb-1.5 text-center">เลือกวิธีชำระเงิน</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onOpenCashModal(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                <span className="text-xl">💵</span>เงินสด
+              </button>
+              <button
+                onClick={() => onChooseScan(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
+              </button>
+            </div>
+          </div>
+        ) : isCashPay ? (
           <button
             onClick={() => onOpenCashModal(order)}
             disabled={isLoading}
@@ -1012,7 +1069,32 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `💵 ชำระเงิน ฿${order.totalTHB.toLocaleString()}`}
           </button>
-        ) : isConfirmedQr ? (
+        ) : isQrNoSlip ? (
+          <div className="mb-2 space-y-2">
+            {qrUrl ? (
+              <div className="text-center bg-blue-50 border border-blue-200 rounded-xl p-3">
+                <p className="text-xs text-blue-600 mb-2">ให้ลูกค้าสแกนเพื่อจ่าย ฿{order.totalTHB.toLocaleString()}</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={qrUrl} alt="QR" className="w-44 h-44 mx-auto rounded-lg object-contain bg-white" />
+              </div>
+            ) : (
+              <button
+                onClick={() => onChooseScan(order)}
+                disabled={isLoading}
+                className="w-full text-sm font-bold py-3 rounded-xl bg-blue-600 text-white disabled:opacity-60"
+              >
+                {isLoading ? "กำลังโหลด QR..." : "📷 แสดง QR ให้ลูกค้าสแกน"}
+              </button>
+            )}
+            <button
+              onClick={() => onConfirmQr(order)}
+              disabled={isLoading}
+              className="w-full text-sm font-bold py-3 rounded-xl bg-sage text-white transition-opacity disabled:opacity-60"
+            >
+              {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
+            </button>
+          </div>
+        ) : isQrSlip ? (
           <button
             onClick={() => onConfirmQr(order)}
             disabled={isLoading}

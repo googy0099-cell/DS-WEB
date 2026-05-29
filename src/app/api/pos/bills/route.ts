@@ -13,7 +13,7 @@ export async function GET() {
         orderBy: { createdAt: "asc" },
       },
       orders: {
-        where: { status: "PENDING", payment: { status: "PENDING", method: "CASH" } },
+        where: { status: { in: ["PENDING", "CONFIRMED"] }, payment: { status: "PENDING" } },
         select: { id: true, totalTHB: true, payment: { select: { id: true, staffNote: true } } },
       },
     },

@@ -593,7 +593,7 @@ export default function AdminTimePage() {
     );
   }
 
-  async function createOrder(method: "CASH" | "PROMPTPAY", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[], opts?: { receivedAmount?: number; includePendingPlayers?: boolean }) {
+  async function createOrder(method: "CASH" | "PROMPTPAY" | "UNSET", billId: number, grandTotal: number, draftPlayers: PlayerDraft[], draftExtra: ExtraItem[], opts?: { receivedAmount?: number; includePendingPlayers?: boolean }) {
     const items = buildLineItems(draftPlayers, draftExtra);
     const pendingPlayers = opts?.includePendingPlayers
       ? draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty }))
@@ -674,6 +674,15 @@ export default function AdminTimePage() {
     closeFlow();
   }
 
+  async function chooseDefer() {
+    if (!draftBillId) return;
+    setSaving(true);
+    // Defer payment-method choice to the cashier dashboard
+    await createOrder("UNSET", draftBillId, grandTotal(), players, extraItems, { includePendingPlayers: true });
+    setSaving(false);
+    closeFlow();
+  }
+
   async function chooseQR() {
     if (!draftBillId) return;
     setSaving(true);
@@ -726,6 +735,14 @@ export default function AdminTimePage() {
     setSaving(true);
     // Sessions created AFTER cashier confirms — send player data with order
     await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, { includePendingPlayers: true });
+    setSaving(false);
+    closeAddBillFlow();
+  }
+
+  async function chooseAddBillDefer() {
+    if (!addToBill) return;
+    setSaving(true);
+    await createOrder("UNSET", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems, { includePendingPlayers: true });
     setSaving(false);
     closeAddBillFlow();
   }
@@ -934,14 +951,14 @@ export default function AdminTimePage() {
   }
 
   // ---- Payment method step ----
-  function renderMethodStep(total: number, onCash: () => void, onQR: () => void, onBack: () => void) {
+  function renderMethodStep(total: number, onCash: () => void, onQR: () => void, onBack: () => void, onDefer?: () => void) {
     return (
       <div className="space-y-4">
         <div className="text-center py-2">
           <p className="text-gray-500 text-sm">ยอดรวม</p>
           <p className="text-orange font-bold text-4xl">฿{total}</p>
         </div>
-        <p className="text-sm font-semibold text-navy text-center">เลือกวิธีชำระเงิน</p>
+        <p className="text-sm font-semibold text-navy text-center">ลูกค้าเลือกวิธีจ่าย</p>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={onCash} disabled={saving}
             className="flex flex-col items-center gap-2 bg-gray-50 border-2 border-gray-300 hover:border-gray-500 py-5 rounded-2xl transition-all disabled:opacity-50">
@@ -954,6 +971,18 @@ export default function AdminTimePage() {
             <span className="font-bold text-blue-700 text-sm">สแกน QR</span>
           </button>
         </div>
+        {onDefer && (
+          <>
+            <div className="flex items-center gap-2 text-gray-300">
+              <span className="flex-1 h-px bg-gray-200" /><span className="text-xs">หรือ</span><span className="flex-1 h-px bg-gray-200" />
+            </div>
+            <button onClick={onDefer} disabled={saving}
+              className="w-full flex items-center justify-center gap-2 bg-orange/10 border-2 border-orange/40 hover:border-orange py-3.5 rounded-2xl transition-all disabled:opacity-50">
+              <span className="text-2xl">🧮</span>
+              <span className="font-bold text-orange text-sm">เปิดบิลเลย — ให้แคชเชียร์คิดเงิน</span>
+            </button>
+          </>
+        )}
         <button onClick={onBack} className="w-full text-gray-400 text-xs py-1">← ย้อนกลับ</button>
       </div>
     );
@@ -1110,7 +1139,7 @@ export default function AdminTimePage() {
       {/* Modal 3: Payment Method */}
       {step === 3 && (
         <Modal onClose={closeFlow} title="ชำระเงิน">
-          {renderMethodStep(grandTotal(), chooseCash, chooseQR, () => setStep(2))}
+          {renderMethodStep(grandTotal(), chooseCash, chooseQR, () => setStep(2), chooseDefer)}
         </Modal>
       )}
 
@@ -1138,7 +1167,7 @@ export default function AdminTimePage() {
               </button>
             </>
           )}
-          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0))}
+          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0), chooseAddBillDefer)}
           {addBillStep === 2 && addBillQr && renderQRStep(addBillQr, addBillGrandTotal(), addBillSlipFile, addBillSlipPreview, addBillSlipUploading, addBillSlipInputRef,
             (f) => { setAddBillSlipFile(f); setAddBillSlipPreview(URL.createObjectURL(f)); }, submitAddBillSlip, () => setAddBillStep(1))}
         </Modal>

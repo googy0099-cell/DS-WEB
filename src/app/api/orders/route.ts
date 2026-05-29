@@ -16,8 +16,7 @@ export async function GET(req: NextRequest) {
 
   let whereClause: Record<string, unknown> = {};
   if (status === "active") {
-    // Exclude bill-linked orders — those are managed by POS/payment pages
-    whereClause = { status: { in: ["PENDING", "CONFIRMED", "PAID"] }, billId: null };
+    whereClause = { status: { in: ["PENDING", "CONFIRMED", "PAID"] } };
   } else if (status === "today") {
     whereClause = {
       status: { in: ["SERVED", "CANCELLED"] },
@@ -77,10 +76,13 @@ export async function POST(req: NextRequest) {
     ? { userId, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } }
     : { orderName: finalName, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } };
 
-  const existingUnpaid = await db.order.findFirst({
-    where: unpaidWhere,
-    include: { items: { include: { menuItem: true } } },
-  });
+  // Cashier orders are discrete transactions — never merge into an existing order
+  const existingUnpaid = isCashier
+    ? null
+    : await db.order.findFirst({
+        where: unpaidWhere,
+        include: { items: { include: { menuItem: true } } },
+      });
 
   const menuItems = await db.menuItem.findMany({
     where: { id: { in: items.map((i) => i.menuItemId) } },
@@ -160,6 +162,14 @@ export async function POST(req: NextRequest) {
     },
     include: { items: { include: { menuItem: true } } },
   });
+
+  // Cashier-initiated orders skip payment-method selection at order time —
+  // create an UNSET payment so the dashboard shows the [เงินสด|สแกน] picker.
+  if (isCashier) {
+    await db.payment.create({
+      data: { orderId: order.id, method: "UNSET", amountTHB: totalTHB, status: "PENDING" },
+    });
+  }
 
   const itemLines = itemsWithPrice
     .map((i) => {

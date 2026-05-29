@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { sendTelegramNotify } from "@/lib/telegram-notify";
+import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 
 const STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "✅ ยืนยันออเดอร์แล้ว",
@@ -85,11 +86,13 @@ export async function PATCH(
       receivedAmount,
       changeAmount: changeAmount ?? 0,
     };
-    await db.payment.upsert({
+    const payment = await db.payment.upsert({
       where: { orderId },
       create: { orderId, ...confirmData },
       update: confirmData,
     });
+    // Bill orders carry pending player data in staffNote — create sessions now
+    await createSessionsFromStaffNote(payment.staffNote);
     const pts = Math.floor(orderFull.totalTHB / 10);
     if (orderFull.userId && pts > 0) {
       await db.user.update({

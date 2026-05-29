@@ -59,16 +59,12 @@ export async function POST(req: NextRequest) {
 
   const existing = await db.payment.findUnique({ where: { orderId } });
   if (existing) {
-    await db.payment.update({ where: { orderId }, data: { slipUrl } });
+    // Uploading a slip means the customer chose to scan — lock method to PROMPTPAY
+    await db.payment.update({ where: { orderId }, data: { slipUrl, method: "PROMPTPAY" } });
   } else {
     await db.payment.create({
       data: { orderId, method: "PROMPTPAY", amountTHB: order.totalTHB, status: "PENDING", slipUrl },
     });
-  }
-
-  // Auto-advance order to CONFIRMED so it appears ready for cashier verification
-  if (order.status === "PENDING") {
-    await db.order.update({ where: { id: orderId }, data: { status: "CONFIRMED" } });
   }
 
   const msg = `💳 สลิปใหม่! 👤 ${order.orderName}\n฿${order.totalTHB}\nกรุณาตรวจสอบใน /admin/payment`;

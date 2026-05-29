@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const billId = Number(id);
   const { paymentMethod, items, pendingPlayers, pendingExtras } = (await req.json()) as {
-    paymentMethod: "CASH" | "PROMPTPAY";
+    paymentMethod: "CASH" | "PROMPTPAY" | "UNSET";
     items: LineItem[];
     pendingPlayers?: PendingPlayer[];
     pendingExtras?: PendingExtra[];
@@ -45,12 +45,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const validItems = items.filter((i) => i.menuItemId && i.qty > 0);
   const totalTHB = validItems.reduce((s, i) => s + i.unitPriceTHB * i.qty, 0);
 
+  // Deferred (UNSET) bills are placed by the cashier — skip the accept step and
+  // let them pick the payment method on the dashboard.
+  const isDeferred = paymentMethod === "UNSET";
+
   const order = await db.order.create({
     data: {
       orderName: `บิล ${bill.name} — โต๊ะ ${bill.table.number}`,
       tableId: bill.tableId,
       billId,
-      status: "PENDING",
+      status: isDeferred ? "CONFIRMED" : "PENDING",
       totalTHB,
       items: {
         create: validItems.map((i) => ({
@@ -65,12 +69,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
-  if (paymentMethod === "CASH" || (paymentMethod === "PROMPTPAY" && pendingPlayers?.length)) {
-    // Store pending player data in staffNote — cashier creates sessions after confirming
-    const staffNote = pendingPlayers?.length
-      ? JSON.stringify({ billId, tableId: bill.tableId, players: pendingPlayers, extraItems: pendingExtras ?? [] })
-      : null;
+  // Store pending player data in staffNote — cashier creates sessions after confirming
+  const staffNote = pendingPlayers?.length
+    ? JSON.stringify({ billId, tableId: bill.tableId, players: pendingPlayers, extraItems: pendingExtras ?? [] })
+    : null;
 
+  if (paymentMethod === "CASH" || paymentMethod === "UNSET" || (paymentMethod === "PROMPTPAY" && pendingPlayers?.length)) {
     await db.payment.create({
       data: {
         orderId: order.id,
