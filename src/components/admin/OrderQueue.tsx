@@ -346,7 +346,8 @@ export default function OrderQueue() {
       .catch(() => {});
   }, []);
 
-  const pendingOrders = orders?.filter((o) => o.status === "PENDING") ?? [];
+  const pendingOrders = (orders?.filter((o) => o.status === "PENDING") ?? [])
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   useEffect(() => {
     const getCtx = () => {
@@ -557,7 +558,8 @@ export default function OrderQueue() {
     }
   }
 
-  const activeOrders = orders?.filter((o) => o.status !== "PENDING") ?? [];
+  const activeOrders = (orders?.filter((o) => o.status !== "PENDING") ?? [])
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   if (!orders) return <div className="text-center py-8 text-gray-400">กำลังโหลด...</div>;
 
