@@ -412,19 +412,22 @@ export default function ProfilePage() {
                 <p className="text-center text-gray-400 text-sm py-8">ยังไม่มีรายการของแลก</p>
               ) : (
                 rewards.map((r) => (
-                  <div key={r.id} className="border-2 border-sand rounded-2xl p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p className="font-bold text-navy text-sm">{r.nameTh}</p>
-                        {r.description && <p className="text-xs text-gray-400 mt-0.5">{r.description}</p>}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-bold text-orange text-base">🎲 {r.cost}</p>
-                        <p className={`text-[10px] mt-0.5 ${profile.dicePoints >= r.cost ? "text-green-500" : "text-red-400"}`}>
-                          {profile.dicePoints >= r.cost ? "แลกได้" : `ขาดอีก ${r.cost - profile.dicePoints}`}
-                        </p>
-                      </div>
+                  <div key={r.id} className={`flex items-center gap-3 border-2 rounded-2xl p-2.5 ${profile.dicePoints >= r.cost ? "border-sand" : "border-sand opacity-60"}`}>
+                    <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-sand/40">
+                      {r.imageUrl ? (
+                        <Image src={r.imageUrl} alt={r.nameTh} fill className="object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-2xl">🎁</div>
+                      )}
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-navy text-sm leading-tight">{r.nameTh}</p>
+                      {r.description && <p className="text-xs text-gray-400 mt-0.5 leading-tight">{r.description}</p>}
+                      <p className={`text-[10px] mt-0.5 ${profile.dicePoints >= r.cost ? "text-green-500" : "text-red-400"}`}>
+                        {profile.dicePoints >= r.cost ? "แลกได้" : `ขาดอีก ${r.cost - profile.dicePoints}`}
+                      </p>
+                    </div>
+                    <p className="text-sm font-bold text-orange shrink-0">🎲 {r.cost}</p>
                   </div>
                 ))
               )}

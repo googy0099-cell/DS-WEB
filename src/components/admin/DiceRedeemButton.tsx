@@ -99,25 +99,25 @@ export default function DiceRedeemButton() {
                 {rewards.length === 0 ? (
                   <p className="text-gray-400 text-sm text-center py-6">ยังไม่มีรายการของแลก</p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     {rewards.map((r) => (
                       <button
                         key={r.id}
                         onClick={() => setSelected(selected?.id === r.id ? null : r)}
-                        className={`text-left rounded-2xl border-2 overflow-hidden transition-all ${selected?.id === r.id ? "border-orange" : "border-sand hover:border-orange/40"}`}
+                        className={`w-full text-left flex items-center gap-3 rounded-2xl border-2 p-2.5 transition-all ${selected?.id === r.id ? "border-orange bg-orange/5" : "border-sand hover:border-orange/40"}`}
                       >
-                        {r.imageUrl ? (
-                          <div className="relative w-full aspect-video bg-gray-100">
+                        <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-sand/40">
+                          {r.imageUrl ? (
                             <Image src={r.imageUrl} alt={r.nameTh} fill className="object-cover" />
-                          </div>
-                        ) : (
-                          <div className="w-full aspect-video bg-sand/40 flex items-center justify-center text-3xl">🎁</div>
-                        )}
-                        <div className="p-2.5">
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-2xl">🎁</div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
                           <p className="font-semibold text-navy text-sm leading-tight">{r.nameTh}</p>
                           {r.description && <p className="text-xs text-gray-400 mt-0.5 leading-tight">{r.description}</p>}
-                          <p className={`text-xs font-bold mt-1 ${selected?.id === r.id ? "text-orange" : "text-gray-500"}`}>🎲 {r.cost} แต้ม</p>
                         </div>
+                        <p className={`text-sm font-bold shrink-0 ${selected?.id === r.id ? "text-orange" : "text-gray-500"}`}>🎲 {r.cost}</p>
                       </button>
                     ))}
                   </div>

@@ -29,6 +29,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         timeRemaining: current,
       },
     });
+
+    // When linking a member for the first time, retroactively award dice for past SERVED orders
+    // that had no userId (cashier confirmed but member wasn't linked yet)
+    if (body.userId && !session.userId) {
+      const unlinkedOrders = await db.order.findMany({
+        where: { playerSessionId: Number(id), status: "SERVED", userId: null },
+        select: { id: true, totalTHB: true },
+      });
+      if (unlinkedOrders.length > 0) {
+        const totalSpend = unlinkedOrders.reduce((s, o) => s + o.totalTHB, 0);
+        const diceEarned = Math.floor(totalSpend / 49);
+        await Promise.all([
+          diceEarned > 0
+            ? db.user.update({ where: { id: body.userId }, data: { dicePoints: { increment: diceEarned } } })
+            : Promise.resolve(),
+          db.order.updateMany({
+            where: { id: { in: unlinkedOrders.map((o) => o.id) } },
+            data: { userId: body.userId },
+          }),
+        ]);
+      }
+    }
+
     return NextResponse.json(updated);
   }
 

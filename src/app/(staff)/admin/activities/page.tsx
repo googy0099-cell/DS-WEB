@@ -22,7 +22,7 @@ type Activity = {
 type Block =
   | { type: "heading"; value: string }
   | { type: "text"; value: string }
-  | { type: "image"; url: string; caption: string }
+  | { type: "image"; url: string; caption: string; size: "small" | "medium" | "full"; align: "left" | "center" | "right" }
   | { type: "button"; url: string; label: string }
   | { type: "highlight"; value: string; color: "orange" | "green" | "blue" }
   | { type: "divider" };
@@ -48,7 +48,15 @@ function parseBlocks(content: string | null): Block[] {
   if (!content) return [];
   try {
     const parsed = JSON.parse(content);
-    if (Array.isArray(parsed)) return parsed as Block[];
+    if (Array.isArray(parsed)) {
+      return (parsed as Block[]).map((b) => {
+        if (b.type === "image") {
+          const img = b as Extract<Block, { type: "image" }>;
+          return { ...img, size: img.size ?? "full", align: img.align ?? "center" };
+        }
+        return b;
+      });
+    }
   } catch {}
   return [{ type: "text", value: content }];
 }
@@ -72,7 +80,7 @@ function BlockEditor({ blocks, onChange }: { blocks: Block[]; onChange: (b: Bloc
     let newBlock: Block;
     if (type === "heading") newBlock = { type: "heading", value: "" };
     else if (type === "text") newBlock = { type: "text", value: "" };
-    else if (type === "image") newBlock = { type: "image", url: "", caption: "" };
+    else if (type === "image") newBlock = { type: "image", url: "", caption: "", size: "full", align: "center" };
     else if (type === "button") newBlock = { type: "button", url: "", label: "ดูรายละเอียด →" };
     else if (type === "highlight") newBlock = { type: "highlight", value: "", color: "orange" };
     else newBlock = { type: "divider" };
@@ -108,21 +116,41 @@ function BlockEditor({ blocks, onChange }: { blocks: Block[]; onChange: (b: Bloc
             />
           )}
 
-          {block.type === "image" && (
-            <div className="space-y-1.5">
-              <ImageUpload
-                value={(block as Extract<Block, { type: "image" }>).url}
-                onChange={(url) => update(i, { url: url || "" } as Partial<Block>)}
-              />
-              <input
-                type="text"
-                value={(block as Extract<Block, { type: "image" }>).caption}
-                onChange={(e) => update(i, { caption: e.target.value } as Partial<Block>)}
-                placeholder="คำบรรยายรูป (ไม่บังคับ)"
-                className="w-full border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none bg-white"
-              />
-            </div>
-          )}
+          {block.type === "image" && (() => {
+            const imgBlock = block as Extract<Block, { type: "image" }>;
+            return (
+              <div className="space-y-2">
+                <ImageUpload
+                  value={imgBlock.url}
+                  onChange={(url) => update(i, { url: url || "" } as Partial<Block>)}
+                />
+                <input
+                  type="text"
+                  value={imgBlock.caption}
+                  onChange={(e) => update(i, { caption: e.target.value } as Partial<Block>)}
+                  placeholder="คำบรรยายรูป (ไม่บังคับ)"
+                  className="w-full border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none bg-white"
+                />
+                {/* Size controls */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 shrink-0">ขนาด:</span>
+                  {(["small", "medium", "full"] as const).map((s) => (
+                    <button key={s} onClick={() => update(i, { size: s } as Partial<Block>)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${imgBlock.size === s ? "bg-navy text-white border-navy" : "border-sand text-gray-500 hover:border-navy"}`}>
+                      {s === "small" ? "เล็ก" : s === "medium" ? "กลาง" : "เต็ม"}
+                    </button>
+                  ))}
+                  <span className="text-xs text-gray-400 ml-2 shrink-0">ตำแหน่ง:</span>
+                  {(["left", "center", "right"] as const).map((a) => (
+                    <button key={a} onClick={() => update(i, { align: a } as Partial<Block>)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${imgBlock.align === a ? "bg-navy text-white border-navy" : "border-sand text-gray-500 hover:border-navy"}`}>
+                      {a === "left" ? "◀ ซ้าย" : a === "center" ? "▬ กลาง" : "ขวา ▶"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {block.type === "button" && (
             <div className="grid grid-cols-2 gap-2">
@@ -310,9 +338,9 @@ export default function AdminActivitiesPage() {
                 <ImageUpload
                   value={(editing as Activity).imageUrl ?? ""}
                   onChange={(url) => setEditing({ ...editing, imageUrl: url || null })}
-                  previewAspect="16/5"
+                  previewAspect="16/9"
                 />
-                <p className="text-xs text-gray-400 mt-1">Preview ตรงนี้ = ที่ลูกค้าเห็นบนหน้าแรก (crop 16:5)</p>
+                <p className="text-xs text-gray-400 mt-1">Preview ตรงนี้ = ที่ลูกค้าเห็น (crop 16:9)</p>
               </div>
 
               {/* Block editor */}
