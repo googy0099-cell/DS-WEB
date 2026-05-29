@@ -63,7 +63,7 @@ export default function NumpadInput({
           onClick={() => setOpen(false)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-xs p-5 shadow-2xl"
+            className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-sm p-5 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {label && (
@@ -71,21 +71,21 @@ export default function NumpadInput({
             )}
 
             {/* Display */}
-            <div className="bg-sand/30 rounded-2xl px-4 py-3 text-right mb-4 min-h-[60px] flex items-center justify-end">
+            <div className="bg-sand/30 rounded-2xl px-4 py-3 text-right mb-4 min-h-[64px] flex items-center justify-end">
               {draft ? (
-                <span className="text-3xl font-bold text-navy font-mono tracking-wide">{draft}</span>
+                <span className="text-4xl font-bold text-navy font-mono tracking-wide">{draft}</span>
               ) : (
-                <span className="text-xl text-gray-300">0</span>
+                <span className="text-2xl text-gray-300">0</span>
               )}
             </div>
 
             {/* Numpad grid */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-3">
               {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map((k) => (
                 <button
                   key={k}
                   onClick={() => press(k)}
-                  className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-xl py-4 rounded-2xl transition-all select-none"
+                  className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-2xl py-5 rounded-2xl transition-all select-none"
                 >
                   {k}
                 </button>
@@ -93,27 +93,27 @@ export default function NumpadInput({
               {allowDecimal ? (
                 <button
                   onClick={() => press(".")}
-                  className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-xl py-4 rounded-2xl transition-all select-none"
+                  className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-2xl py-5 rounded-2xl transition-all select-none"
                 >
                   .
                 </button>
               ) : (
                 <button
                   onClick={() => setDraft("")}
-                  className="bg-sand/20 hover:bg-sand/40 active:scale-95 text-gray-400 text-sm py-4 rounded-2xl transition-all select-none"
+                  className="bg-sand/20 hover:bg-sand/40 active:scale-95 text-gray-400 text-base py-5 rounded-2xl transition-all select-none"
                 >
                   ล้าง
                 </button>
               )}
               <button
                 onClick={() => press("0")}
-                className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-xl py-4 rounded-2xl transition-all select-none"
+                className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-2xl py-5 rounded-2xl transition-all select-none"
               >
                 0
               </button>
               <button
                 onClick={() => press("⌫")}
-                className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-xl py-4 rounded-2xl transition-all select-none"
+                className="bg-sand/40 hover:bg-sand active:scale-95 text-navy font-bold text-2xl py-5 rounded-2xl transition-all select-none"
               >
                 ⌫
               </button>
@@ -121,7 +121,7 @@ export default function NumpadInput({
 
             <button
               onClick={confirm}
-              className="w-full bg-orange text-white font-bold py-4 rounded-2xl text-base mt-3 active:scale-95 transition-transform select-none"
+              className="w-full bg-orange text-white font-bold py-5 rounded-2xl text-lg mt-3 active:scale-95 transition-transform select-none"
             >
               ✓ ยืนยัน
             </button>
