@@ -1,77 +1,62 @@
-"use client";
+import Link from "next/link";
 
-import useSWR from "swr";
+const MODULES = [
+  {
+    href: "/admin/analytics/sales",
+    icon: "💰",
+    title: "สรุปยอดขาย",
+    desc: "รายได้รายวัน, จำนวนบิล, ค่าเฉลี่ย, ออเดอร์ที่ยกเลิก",
+    color: "bg-green-50 border-green-200",
+    iconBg: "bg-green-100 text-green-700",
+  },
+  {
+    href: "/admin/analytics/menu",
+    icon: "🍽️",
+    title: "เมนูขายดี",
+    desc: "จัดอันดับเมนูตามจำนวนชิ้นและยอดเงิน",
+    color: "bg-orange/5 border-orange/20",
+    iconBg: "bg-orange/10 text-orange",
+  },
+  {
+    href: "/admin/analytics/drawer",
+    icon: "🗃️",
+    title: "รายงานลิ้นชัก",
+    desc: "ประวัติการเปิด/ปิดลิ้นชักเงินสด",
+    color: "bg-blue-50 border-blue-200",
+    iconBg: "bg-blue-100 text-blue-700",
+  },
+  {
+    href: "/admin/analytics/orders",
+    icon: "📋",
+    title: "ประวัติออเดอร์",
+    desc: "ค้นหาและกรองออเดอร์ตามวันที่, สถานะ, ประเภท",
+    color: "bg-purple-50 border-purple-200",
+    iconBg: "bg-purple-100 text-purple-700",
+  },
+];
 
-type AnalyticsData = {
-  todayOrders: number;
-  monthRevenue: number;
-  totalMembers: number;
-  newMembersMonth: number;
-  topMenu: { menuItemId: number; nameTh: string; quantity: number }[];
-};
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
-
-export default function AdminAnalyticsPage() {
-  const { data, isLoading } = useSWR<AnalyticsData>("/api/analytics", fetcher);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="bg-white rounded-2xl p-6 h-24 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!data) return <p className="text-gray-400">ไม่สามารถโหลดข้อมูลได้</p>;
-
-  const stats = [
-    { label: "ออเดอร์วันนี้", value: `${data.todayOrders} รายการ`, icon: "📋", color: "bg-blue-50 text-blue-700" },
-    { label: "รายได้เดือนนี้", value: `฿${data.monthRevenue.toLocaleString()}`, icon: "💰", color: "bg-green-50 text-green-700" },
-    { label: "สมาชิกทั้งหมด", value: `${data.totalMembers} คน`, icon: "👥", color: "bg-purple-50 text-purple-700" },
-    { label: "สมาชิกใหม่เดือนนี้", value: `${data.newMembersMonth} คน`, icon: "✨", color: "bg-orange/10 text-orange" },
-  ];
-
+export default function AnalyticsHubPage() {
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-navy">วิเคราะห์ข้อมูล</h1>
-        <p className="text-gray-400 text-sm">ภาพรวมธุรกิจ</p>
+        <p className="text-gray-400 text-sm">เลือกรายงานที่ต้องการดู</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-6">
-        {stats.map((stat) => (
-          <div key={stat.label} className="bg-white rounded-2xl p-4 shadow-sm">
-            <div className={`inline-flex items-center justify-center w-10 h-10 rounded-xl text-xl mb-3 ${stat.color}`}>
-              {stat.icon}
+      <div className="grid grid-cols-1 gap-3">
+        {MODULES.map((m) => (
+          <Link key={m.href} href={m.href}
+            className={`flex items-center gap-4 p-5 rounded-2xl border bg-white shadow-sm hover:shadow-md transition-shadow ${m.color}`}>
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${m.iconBg}`}>
+              {m.icon}
             </div>
-            <p className="text-2xl font-bold text-navy mb-1">{stat.value}</p>
-            <p className="text-xs text-gray-400">{stat.label}</p>
-          </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-navy text-base">{m.title}</p>
+              <p className="text-gray-400 text-xs mt-0.5 leading-relaxed">{m.desc}</p>
+            </div>
+            <span className="text-gray-300 text-xl shrink-0">›</span>
+          </Link>
         ))}
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-4 border-b border-sand">
-          <h2 className="font-bold text-navy">🏆 เมนูขายดี (Top 5)</h2>
-        </div>
-        {data.topMenu.length === 0 ? (
-          <p className="text-center text-gray-400 py-8 text-sm">ยังไม่มีข้อมูลออเดอร์</p>
-        ) : (
-          <div className="divide-y divide-sand/50">
-            {data.topMenu.map((item, idx) => (
-              <div key={item.menuItemId} className="flex items-center gap-3 p-4">
-                <span className="w-7 h-7 rounded-full bg-orange/10 text-orange text-xs font-bold flex items-center justify-center shrink-0">
-                  {idx + 1}
-                </span>
-                <span className="flex-1 font-medium text-navy text-sm">{item.nameTh}</span>
-                <span className="text-gray-500 text-sm font-semibold">{item.quantity} ชิ้น</span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

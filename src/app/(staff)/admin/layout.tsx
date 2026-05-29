@@ -10,14 +10,14 @@ const DASHBOARD_NAV = [
 ];
 
 const STAFF_NAV = [
-  { href: "/admin/pos", label: "จัดการเวลา", icon: "⏱️" },
+  { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "⏱️" },
+  { href: "/admin/cashier", label: "รอบการขาย", icon: "💲" },
   { href: "/admin/menu", label: "จัดการเมนู", icon: "🍜" },
   { href: "/admin/addon-groups", label: "Set Add-on", icon: "➕" },
   { href: "/admin/option-groups", label: "ตัวเลือก", icon: "🎛️" },
   { href: "/admin/activities", label: "กิจกรรม", icon: "🎉" },
   { href: "/admin/gallery", label: "Gallery", icon: "🖼️" },
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
-  { href: "/admin/cashier", label: "เก๊ะเงิน", icon: "🏧" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
 ];

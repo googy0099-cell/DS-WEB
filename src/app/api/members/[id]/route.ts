@@ -12,9 +12,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   const { id } = await params;
   const body = await req.json();
-  const { firstName, lastName, nickname, email, phone, instagram, facebook, birthday } = body;
+  const { firstName, lastName, nickname, email, phone, instagram, facebook, birthday, dicePoints } = body;
 
-  const data: Record<string, string | null | undefined> = {};
+  const data: Record<string, string | number | null | undefined> = {};
   if (firstName !== undefined) data.firstName = firstName;
   if (lastName !== undefined) data.lastName = lastName;
   if (nickname !== undefined) data.nickname = nickname || null;
@@ -23,11 +23,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (instagram !== undefined) data.instagram = instagram || null;
   if (facebook !== undefined) data.facebook = facebook || null;
   if (birthday !== undefined) data.birthday = birthday || null;
+  if (dicePoints !== undefined) data.dicePoints = Number(dicePoints);
 
   try {
     const user = await db.user.update({ where: { id: Number(id) }, data });
     return NextResponse.json({ ok: true, id: user.id });
   } catch {
     return NextResponse.json({ error: "อัพเดทไม่สำเร็จ" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
+  const { id } = await params;
+  try {
+    await db.user.delete({ where: { id: Number(id) } });
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "ลบไม่สำเร็จ" }, { status: 500 });
   }
 }

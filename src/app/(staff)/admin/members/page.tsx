@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Pencil } from "lucide-react";
+import { X, Pencil, Trash2 } from "lucide-react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 
@@ -19,6 +19,7 @@ interface Member {
   birthday: string | null;
   avatarUrl: string | null;
   points: number;
+  dicePoints: number;
   totalSpentTHB: number;
   visitCount: number;
   playMinutes: number;
@@ -35,11 +36,13 @@ export default function AdminMembersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  // Edit state
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<Member>>({});
+  const [editForm, setEditForm] = useState<Partial<Member & { dicePointsStr: string }>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     fetch("/api/members")
@@ -66,6 +69,7 @@ export default function AdminMembersPage() {
       instagram: m.instagram ?? "",
       facebook: m.facebook ?? "",
       birthday: m.birthday ?? "",
+      dicePointsStr: String(m.dicePoints),
     });
     setSaveError("");
     setEditing(true);
@@ -75,17 +79,30 @@ export default function AdminMembersPage() {
     if (!selected) return;
     setSaving(true);
     setSaveError("");
+    const { dicePointsStr, ...rest } = editForm;
+    const body = { ...rest, dicePoints: Number(dicePointsStr ?? selected.dicePoints) };
     const res = await fetch(`/api/members/${selected.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editForm),
+      body: JSON.stringify(body),
     });
     setSaving(false);
     if (!res.ok) { setSaveError("บันทึกไม่สำเร็จ"); return; }
-    const updated = { ...selected, ...editForm };
-    setMembers(prev => prev.map(m => m.id === selected.id ? { ...m, ...editForm } as Member : m));
-    setSelected(updated as Member);
+    const updated = { ...selected, ...rest, dicePoints: Number(dicePointsStr ?? selected.dicePoints) };
+    setMembers(prev => prev.map(m => m.id === selected.id ? updated : m));
+    setSelected(updated);
     setEditing(false);
+  }
+
+  async function deleteMember() {
+    if (!selected) return;
+    setDeleting(true);
+    const res = await fetch(`/api/members/${selected.id}`, { method: "DELETE" });
+    setDeleting(false);
+    if (!res.ok) return;
+    setMembers(prev => prev.filter(m => m.id !== selected.id));
+    setSelected(null);
+    setConfirmDelete(false);
   }
 
   return (
@@ -111,7 +128,7 @@ export default function AdminMembersPage() {
               <tr>
                 <th className="text-left p-3 text-navy font-semibold">สมาชิก</th>
                 <th className="text-left p-3 text-navy font-semibold">รหัส</th>
-                <th className="text-right p-3 text-navy font-semibold">คะแนน</th>
+                <th className="text-right p-3 text-navy font-semibold">แต้มเต๋า</th>
                 <th className="text-right p-3 text-navy font-semibold hidden md:table-cell">ใช้จ่าย</th>
                 <th className="text-right p-3 text-navy font-semibold hidden md:table-cell">เข้าร้าน</th>
               </tr>
@@ -127,7 +144,7 @@ export default function AdminMembersPage() {
                   <tr
                     key={m.id}
                     className="border-b border-sand/50 last:border-0 hover:bg-sand/20 cursor-pointer transition-colors"
-                    onClick={() => { setSelected(m); setEditing(false); }}
+                    onClick={() => { setSelected(m); setEditing(false); setConfirmDelete(false); }}
                   >
                     <td className="p-3">
                       <div className="flex items-center gap-2">
@@ -147,7 +164,7 @@ export default function AdminMembersPage() {
                     <td className="p-3">
                       <span className="font-mono font-bold text-orange bg-orange/10 px-2 py-0.5 rounded">{m.memberCode}</span>
                     </td>
-                    <td className="p-3 text-right font-bold text-navy">{m.points}</td>
+                    <td className="p-3 text-right font-bold text-navy">🎲 {m.dicePoints}</td>
                     <td className="p-3 text-right text-gray-500 hidden md:table-cell">฿{m.totalSpentTHB}</td>
                     <td className="p-3 text-right text-gray-500 hidden md:table-cell">{m.visitCount} ครั้ง</td>
                   </tr>
@@ -160,21 +177,43 @@ export default function AdminMembersPage() {
 
       {/* Detail / Edit modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false); }}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); }}>
           <div className="bg-white rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-sand">
               <h2 className="font-bold text-navy">{editing ? "แก้ไขข้อมูล" : "ข้อมูลสมาชิก"}</h2>
               <div className="flex items-center gap-2">
                 {isOwner && !editing && (
-                  <button onClick={() => openEdit(selected)} className="text-orange hover:text-orange/80">
-                    <Pencil size={16} />
-                  </button>
+                  <>
+                    <button onClick={() => openEdit(selected)} className="text-orange hover:text-orange/80 p-1">
+                      <Pencil size={16} />
+                    </button>
+                    <button onClick={() => setConfirmDelete(true)} className="text-red-400 hover:text-red-600 p-1">
+                      <Trash2 size={16} />
+                    </button>
+                  </>
                 )}
-                <button onClick={() => { setSelected(null); setEditing(false); }}><X size={20} className="text-gray-400" /></button>
+                <button onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); }}>
+                  <X size={20} className="text-gray-400" />
+                </button>
               </div>
             </div>
 
-            {editing ? (
+            {confirmDelete ? (
+              <div className="p-5 text-center space-y-4">
+                <p className="text-2xl">⚠️</p>
+                <p className="font-bold text-navy">ลบสมาชิก</p>
+                <p className="text-sm text-gray-500">
+                  ต้องการลบ <span className="font-semibold text-navy">{selected.firstName} {selected.lastName}</span> ออกจากระบบ?<br />
+                  การกระทำนี้ไม่สามารถย้อนกลับได้
+                </p>
+                <div className="flex gap-3">
+                  <button onClick={() => setConfirmDelete(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+                  <button onClick={deleteMember} disabled={deleting} className="flex-1 bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
+                    {deleting ? "กำลังลบ..." : "ลบสมาชิก"}
+                  </button>
+                </div>
+              </div>
+            ) : editing ? (
               <div className="p-5 space-y-3">
                 {([
                   { label: "ชื่อ", field: "firstName" },
@@ -196,6 +235,19 @@ export default function AdminMembersPage() {
                     />
                   </div>
                 ))}
+
+                {/* Dice points field */}
+                <div>
+                  <label className="text-xs font-medium text-navy block mb-1">🎲 แต้มเต๋า</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editForm.dicePointsStr ?? ""}
+                    onChange={e => setEditForm(f => ({ ...f, dicePointsStr: e.target.value }))}
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+
                 {saveError && <p className="text-sm text-red-500">{saveError}</p>}
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setEditing(false)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
@@ -230,10 +282,11 @@ export default function AdminMembersPage() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                <div className="grid grid-cols-2 gap-2 text-center">
                   {[
-                    { label: "คะแนน", value: selected.points, color: "text-orange" },
-                    { label: "ยอดใช้จ่าย", value: `฿${selected.totalSpentTHB}`, color: "text-navy" },
+                    { label: "แต้มเต๋า", value: `🎲 ${selected.dicePoints}`, color: "text-orange" },
+                    { label: "คะแนนสะสม", value: `⭐ ${selected.points}`, color: "text-yellow-600" },
+                    { label: "ยอดใช้จ่าย", value: `฿${selected.totalSpentTHB.toLocaleString()}`, color: "text-navy" },
                     { label: "เข้าร้าน", value: `${selected.visitCount} ครั้ง`, color: "text-sage" },
                     { label: "ชั่วโมงเล่นสะสม", value: `${Math.floor((selected.playMinutes ?? 0) / 60)} ชม. ${(selected.playMinutes ?? 0) % 60} น.`, color: "text-purple-500" },
                   ].map(s => (

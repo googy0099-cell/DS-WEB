@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       avatarUrl: true,
       googleId: true,
       points: true,
+      dicePoints: true,
       totalSpentTHB: true,
       visitCount: true,
       playMinutes: true,
