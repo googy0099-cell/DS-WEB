@@ -41,6 +41,14 @@ const MODULES = [
     color: "bg-purple-50 border-purple-200",
     iconBg: "bg-purple-100 text-purple-700",
   },
+  {
+    href: "/admin/analytics/parties",
+    icon: "🎉",
+    title: "ประวัติปาร์ตี้",
+    desc: "ข้อมูลตี้, ผู้เล่น, แพ็กเกจ, รายได้รวมแต่ละงาน",
+    color: "bg-rose-50 border-rose-200",
+    iconBg: "bg-rose-100 text-rose-600",
+  },
 ];
 
 export default function AnalyticsHubPage() {
