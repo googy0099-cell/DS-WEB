@@ -9,7 +9,7 @@ export async function GET() {
       table: { select: { number: true } },
       sessions: {
         where: { status: "ACTIVE" },
-        include: { user: { select: { id: true, username: true, memberCode: true } } },
+        include: { user: { select: { id: true, username: true, memberCode: true, firstName: true } } },
         orderBy: { createdAt: "asc" },
       },
     },

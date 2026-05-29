@@ -4,11 +4,15 @@ import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendFcmNotify } from "@/lib/fcm-notify";
 
 export async function PATCH(req: NextRequest) {
-  const { paymentId, userId } = await req.json();
+  const { paymentId, userId, receivedAmount, changeAmount } = await req.json();
 
   const payment = await db.payment.update({
     where: { id: Number(paymentId) },
-    data: { status: "CONFIRMED", confirmedAt: new Date() },
+    data: {
+      status: "CONFIRMED",
+      confirmedAt: new Date(),
+      ...(receivedAmount != null ? { receivedAmount, changeAmount: changeAmount ?? 0 } : {}),
+    },
     include: { order: { select: { orderName: true, userId: true, totalTHB: true } } },
   });
 

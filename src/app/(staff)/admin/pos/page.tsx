@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
-type MemberRef = { id: number; username: string; memberCode: string };
+type MemberRef = { id: number; username: string; memberCode: string; firstName: string };
 type PlayerSession = {
   id: number; nickname: string; packageType: string; packagePrice: number;
   timeRemaining: number; status: string; updatedAt: string;
@@ -79,9 +79,10 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend }: {
+function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdit }: {
   session: PlayerSession; bill: Bill; prepRemaining: number;
   onCheckout: (id: number) => void; onExtend: (session: PlayerSession, bill: Bill) => void;
+  onEdit: (session: PlayerSession) => void;
 }) {
   const prep = useCountdown(prepRemaining);
   const remaining = useCountdown(session.timeRemaining);
@@ -94,18 +95,24 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend }: {
   return (
     <div className="bg-navy/80 rounded-2xl p-4 space-y-3 border border-white/10">
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="flex-1 min-w-0">
           <p className="font-bold text-white text-base">{session.nickname}</p>
           <p className="text-white/50 text-xs">{PACKAGES[session.packageType]?.desc}</p>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : isAllDay ? "text-purple-300" : color.text} border border-current`}>
-          {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : color.label}
-        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={() => onEdit(session)}
+            className="text-white/40 hover:text-white/80 text-xs px-2 py-1 rounded-lg hover:bg-white/10 transition-colors">
+            ✏️
+          </button>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : isAllDay ? "text-purple-300" : color.text} border border-current`}>
+            {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : color.label}
+          </span>
+        </div>
       </div>
       {session.user && (
         <div className="bg-green-500/15 border border-green-400/30 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5">
           <span className="text-sm">🎯</span>
-          <span className="text-green-300 text-xs font-semibold">เก็บแต้มให้ {session.user.username}</span>
+          <span className="text-green-300 text-xs font-semibold">เก็บแต้มให้ {session.user.firstName} (@{session.user.username})</span>
         </div>
       )}
       {inPrep ? (
@@ -407,6 +414,52 @@ export default function AdminTimePage() {
   const [extendSlipUploading, setExtendSlipUploading] = useState(false);
   const extendSlipRef = useRef<HTMLInputElement>(null);
 
+  // edit session modal
+  const [editingSession, setEditingSession] = useState<PlayerSession | null>(null);
+  const [editNickname, setEditNickname] = useState("");
+  const [editMemberCode, setEditMemberCode] = useState("");
+  const [editMemberInfo, setEditMemberInfo] = useState<MemberRef | null>(null);
+  const [editMemberError, setEditMemberError] = useState("");
+  const [editMemberLoading, setEditMemberLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+
+  function openEditSession(session: PlayerSession) {
+    setEditingSession(session);
+    setEditNickname(session.nickname);
+    setEditMemberCode(session.user?.memberCode ?? "");
+    setEditMemberInfo(session.user ?? null);
+    setEditMemberError("");
+  }
+
+  async function lookupEditMember(code: string) {
+    setEditMemberCode(code);
+    setEditMemberError("");
+    if (!code.trim()) { setEditMemberInfo(null); return; }
+    setEditMemberLoading(true);
+    const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
+    setEditMemberLoading(false);
+    if (res.ok) { setEditMemberInfo(await res.json()); }
+    else { setEditMemberInfo(null); setEditMemberError("ไม่พบสมาชิก"); }
+  }
+
+  async function saveEditSession() {
+    if (!editingSession) return;
+    setEditSaving(true);
+    const body: Record<string, unknown> = {};
+    if (editNickname.trim() && editNickname.trim() !== editingSession.nickname) body.nickname = editNickname.trim();
+    if (editMemberInfo && editMemberInfo.id !== editingSession.userId) body.userId = editMemberInfo.id;
+    if (!editMemberInfo && editMemberCode === "" && editingSession.userId) body.userId = null;
+    if (Object.keys(body).length > 0) {
+      await fetch(`/api/pos/sessions/${editingSession.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      load();
+    }
+    setEditSaving(false);
+    setEditingSession(null);
+  }
+
   // cash amount input modal
   const [cashInputOpen, setCashInputOpen] = useState(false);
   const [cashInputStr, setCashInputStr] = useState("");
@@ -597,6 +650,8 @@ export default function AdminTimePage() {
   // ยืนยันผู้เล่น → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
   function confirmPlayers() {
     if (!draftBillId) return;
+    const needsDrink = players.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
+    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
     setStep(3);
   }
 
@@ -658,6 +713,8 @@ export default function AdminTimePage() {
   // ยืนยันผู้เล่น (เพิ่มในบิล) → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
   function submitAddPlayers() {
     if (!addToBill) return;
+    const needsDrink = addPlayers.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
+    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
     setAddBillStep(1);
   }
 
@@ -889,9 +946,9 @@ export default function AdminTimePage() {
         <p className="text-sm font-semibold text-navy text-center">เลือกวิธีชำระเงิน</p>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={onCash} disabled={saving}
-            className="flex flex-col items-center gap-2 bg-green-50 border-2 border-green-300 hover:border-green-500 py-5 rounded-2xl transition-all disabled:opacity-50">
-            <span className="text-3xl">💵</span>
-            <span className="font-bold text-green-700 text-sm">เงินสด</span>
+            className="flex flex-col items-center gap-2 bg-gray-50 border-2 border-gray-300 hover:border-gray-500 py-5 rounded-2xl transition-all disabled:opacity-50">
+            <span className="text-3xl">🧾</span>
+            <span className="font-bold text-gray-700 text-sm text-center leading-tight">ชำระที่เคาน์เตอร์</span>
           </button>
           <button onClick={onQR} disabled={saving}
             className="flex flex-col items-center gap-2 bg-blue-50 border-2 border-blue-300 hover:border-blue-500 py-5 rounded-2xl transition-all disabled:opacity-50">
@@ -987,7 +1044,7 @@ export default function AdminTimePage() {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} onEdit={openEditSession} />)}
             </div>
           </div>
         );
@@ -1033,7 +1090,7 @@ export default function AdminTimePage() {
       {/* Modal 3: Payment Method */}
       {step === 3 && (
         <Modal onClose={closeFlow} title="ชำระเงิน">
-          {renderMethodStep(grandTotal(), () => openCashInput(grandTotal(), "new"), chooseQR, () => setStep(2))}
+          {renderMethodStep(grandTotal(), chooseCash, chooseQR, () => setStep(2))}
         </Modal>
       )}
 
@@ -1061,7 +1118,7 @@ export default function AdminTimePage() {
               </button>
             </>
           )}
-          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), () => openCashInput(addBillGrandTotal(), "addBill"), chooseAddBillQR, () => setAddBillStep(0))}
+          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0))}
           {addBillStep === 2 && addBillQr && renderQRStep(addBillQr, addBillGrandTotal(), addBillSlipFile, addBillSlipPreview, addBillSlipUploading, addBillSlipInputRef,
             (f) => { setAddBillSlipFile(f); setAddBillSlipPreview(URL.createObjectURL(f)); }, submitAddBillSlip, () => setAddBillStep(1))}
         </Modal>
@@ -1134,7 +1191,7 @@ export default function AdminTimePage() {
 
       {extendSession && extendStep === 1 && (
         <Modal onClose={closeExtendFlow} title="ชำระเงิน">
-          {renderMethodStep(extendTotal(), () => openCashInput(extendTotal(), "extend"), chooseExtendQR, () => setExtendStep(0))}
+          {renderMethodStep(extendTotal(), chooseExtendCash, chooseExtendQR, () => setExtendStep(0))}
         </Modal>
       )}
 
@@ -1220,6 +1277,74 @@ export default function AdminTimePage() {
             บันทึก
           </button>
         </Modal>
+      )}
+
+      {/* Edit session modal */}
+      {editingSession && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg">แก้ไขผู้เล่น</h3>
+
+            <div>
+              <label className="text-xs font-semibold text-navy block mb-1">ชื่อผู้เล่น</label>
+              <input
+                type="text"
+                value={editNickname}
+                onChange={(e) => setEditNickname(e.target.value)}
+                className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-navy block mb-1">รหัสสมาชิก (ถ้ามี)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={editMemberCode}
+                  onChange={(e) => setEditMemberCode(e.target.value.toUpperCase())}
+                  placeholder="DS-XXXX"
+                  className="flex-1 border-2 border-sand rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-orange uppercase"
+                />
+                <button onClick={() => lookupEditMember(editMemberCode)} disabled={editMemberLoading || !editMemberCode.trim()}
+                  className="px-3 py-2 bg-navy text-white text-xs font-semibold rounded-xl disabled:opacity-40">
+                  {editMemberLoading ? "..." : "ค้นหา"}
+                </button>
+              </div>
+              {editMemberInfo && (
+                <div className="mt-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-green-700 font-semibold">✅ พบสมาชิก</p>
+                    <p className="text-sm font-bold text-navy">{editMemberInfo.firstName} (@{editMemberInfo.username})</p>
+                    <p className="text-xs text-gray-400">{editMemberInfo.memberCode}</p>
+                  </div>
+                  <button onClick={() => { setEditMemberInfo(null); setEditMemberCode(""); }}
+                    className="text-gray-300 hover:text-red-400 text-lg">×</button>
+                </div>
+              )}
+              {editMemberError && (
+                <p className="text-xs text-red-500 mt-1">{editMemberError}</p>
+              )}
+              {!editMemberInfo && !editMemberError && editingSession.userId && (
+                <p className="text-xs text-gray-400 mt-1">ล้างรหัสสมาชิกเพื่อยกเลิกการลิงค์</p>
+              )}
+            </div>
+
+            {editMemberInfo && editMemberInfo.id !== editingSession.userId && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-xs text-blue-700">
+                แต้มสะสมและเวลาเล่นจะถูกบันทึกให้สมาชิกนี้เมื่อ check out
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={() => setEditingSession(null)}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+              <button onClick={saveEditSession} disabled={editSaving || !editNickname.trim()}
+                className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                {editSaving ? "..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Cash amount input modal */}

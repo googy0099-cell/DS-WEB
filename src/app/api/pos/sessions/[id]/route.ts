@@ -4,13 +4,28 @@ import { remainingSeconds } from "@/lib/pos-time";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const body = (await req.json()) as { status?: string; addSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number };
+  const body = (await req.json()) as {
+    status?: string; addSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number;
+    nickname?: string; userId?: number | null;
+  };
 
   const session = await db.playerSession.findUnique({
     where: { id: Number(id) },
     include: { bill: true },
   });
   if (!session) return NextResponse.json({ error: "ไม่พบ Session" }, { status: 404 });
+
+  // Profile-only update (nickname / member link)
+  if (body.nickname !== undefined || body.userId !== undefined) {
+    const updated = await db.playerSession.update({
+      where: { id: Number(id) },
+      data: {
+        ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
+        ...(body.userId !== undefined ? { userId: body.userId } : {}),
+      },
+    });
+    return NextResponse.json(updated);
+  }
 
   const startsAt = session.bill?.startsAt ?? session.createdAt;
   const current = remainingSeconds(session.timeRemaining, startsAt, session.updatedAt);

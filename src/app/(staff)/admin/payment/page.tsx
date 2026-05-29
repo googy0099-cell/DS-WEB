@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import Image from "next/image";
 import Link from "next/link";
@@ -27,17 +28,34 @@ export default function AdminPaymentPage() {
     { refreshInterval: 8000 }
   );
 
-  async function confirm(paymentId: number) {
+  const [cashModal, setCashModal] = useState<PendingPayment | null>(null);
+  const [cashInputStr, setCashInputStr] = useState("");
+
+  async function confirm(paymentId: number, receivedAmount?: number) {
+    const changeAmount = receivedAmount != null
+      ? Math.max(0, receivedAmount - (cashModal?.amountTHB ?? 0))
+      : undefined;
     await fetch("/api/payment/confirm", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentId }),
+      body: JSON.stringify({ paymentId, receivedAmount, changeAmount }),
     });
     mutate();
+    setCashModal(null);
   }
 
-  const promptpay = payments?.filter((p) => p.method === "PROMPTPAY") ?? [];
+  function openCashModal(p: PendingPayment) {
+    setCashModal(p);
+    setCashInputStr("");
+  }
+
+  // Sort: PromptPay with slip first (ready to verify), then without slip
+  const promptpay = (payments?.filter((p) => p.method === "PROMPTPAY") ?? [])
+    .sort((a, b) => (b.slipUrl ? 1 : 0) - (a.slipUrl ? 1 : 0));
   const counter = payments?.filter((p) => p.method !== "PROMPTPAY") ?? [];
+
+  const cashReceived = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
+  const cashChange = cashModal ? cashReceived - cashModal.amountTHB : 0;
 
   return (
     <div>
@@ -55,7 +73,7 @@ export default function AdminPaymentPage() {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* PromptPay with slip */}
+          {/* PromptPay — with slip shown first */}
           {promptpay.length > 0 && (
             <div>
               <h2 className="text-sm font-bold text-navy mb-3 flex items-center gap-2">
@@ -64,7 +82,13 @@ export default function AdminPaymentPage() {
               </h2>
               <div className="space-y-4">
                 {promptpay.map((p) => (
-                  <div key={p.id} className="bg-white rounded-2xl p-4 shadow-sm">
+                  <div key={p.id} className={`bg-white rounded-2xl p-4 shadow-sm ${p.slipUrl ? "ring-2 ring-green-200" : ""}`}>
+                    {p.slipUrl && (
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        <span className="text-xs text-green-600 font-semibold">ลูกค้าส่งสลิปแล้ว — รอตรวจสอบ</span>
+                      </div>
+                    )}
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <p className="font-bold text-navy text-base">{p.order.orderName}</p>
@@ -108,7 +132,7 @@ export default function AdminPaymentPage() {
             </div>
           )}
 
-          {/* Counter payment */}
+          {/* Counter cash payment */}
           {counter.length > 0 && (
             <div>
               <h2 className="text-sm font-bold text-navy mb-3 flex items-center gap-2">
@@ -131,10 +155,10 @@ export default function AdminPaymentPage() {
                       ))}
                     </div>
                     <button
-                      onClick={() => confirm(p.id)}
-                      className="w-full bg-navy text-cream font-bold py-3 rounded-xl text-sm"
+                      onClick={() => openCashModal(p)}
+                      className="w-full bg-green-600 text-white font-bold py-3 rounded-xl text-sm"
                     >
-                      ✅ ยืนยันรับเงินสด ฿{p.amountTHB}
+                      💵 รับเงินสด ฿{p.amountTHB}
                     </button>
                   </div>
                 ))}
@@ -147,6 +171,72 @@ export default function AdminPaymentPage() {
       <div className="mt-8 text-center">
         <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับหน้า Dashboard</Link>
       </div>
+
+      {/* Cash amount modal */}
+      {cashModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg text-center">รับเงินสด</h3>
+            <p className="text-sm text-center text-gray-500">{cashModal.order.orderName}</p>
+            <div className="text-center">
+              <p className="text-xs text-gray-400">ยอดที่ต้องชำระ</p>
+              <p className="text-3xl font-bold text-orange">฿{cashModal.amountTHB.toLocaleString()}</p>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-navy block mb-1">ลูกค้าจ่ายมา</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                autoFocus
+                value={cashInputStr}
+                onChange={(e) => setCashInputStr(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && cashReceived >= cashModal.amountTHB) {
+                    confirm(cashModal.id, cashReceived);
+                  }
+                }}
+                placeholder="0"
+                className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center focus:outline-none focus:border-orange"
+              />
+            </div>
+            {cashInputStr && (
+              <div className={`rounded-xl p-3 text-center ${cashReceived >= cashModal.amountTHB ? "bg-green-50" : "bg-red-50"}`}>
+                {cashReceived >= cashModal.amountTHB ? (
+                  <>
+                    <p className="text-xs text-green-600">เงินทอน</p>
+                    <p className="text-3xl font-bold text-green-700">฿{cashChange.toLocaleString()}</p>
+                  </>
+                ) : (
+                  <p className="text-sm font-semibold text-red-500">
+                    ยอดไม่เพียงพอ — ขาดอีก ฿{(cashModal.amountTHB - cashReceived).toLocaleString()}
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {[20, 50, 100, 500, 1000].map((amt) => (
+                <button key={amt} type="button"
+                  onClick={() => setCashInputStr(String((parseInt(cashInputStr) || 0) + amt))}
+                  className="bg-sand/50 hover:bg-orange/10 border border-sand text-navy text-sm font-semibold py-2 rounded-xl">
+                  +{amt}
+                </button>
+              ))}
+              <button type="button" onClick={() => setCashInputStr("")}
+                className="bg-sand/50 border border-sand text-gray-400 text-sm py-2 rounded-xl">ล้าง</button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setCashModal(null)}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+              <button
+                onClick={() => confirm(cashModal.id, cashReceived)}
+                disabled={!cashInputStr || cashReceived < cashModal.amountTHB}
+                className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                ยืนยัน
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
