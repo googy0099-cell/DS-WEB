@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
+import bcrypt from "bcryptjs";
 
 async function requireOwner() {
   const session = await auth();
@@ -12,7 +13,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   const { id } = await params;
   const body = await req.json();
-  const { firstName, lastName, nickname, email, phone, instagram, facebook, birthday, dicePoints } = body;
+  const { firstName, lastName, nickname, email, phone, instagram, facebook, birthday, dicePoints, newPassword } = body;
 
   const data: Record<string, string | number | null | undefined> = {};
   if (firstName !== undefined) data.firstName = firstName;
@@ -24,6 +25,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (facebook !== undefined) data.facebook = facebook || null;
   if (birthday !== undefined) data.birthday = birthday || null;
   if (dicePoints !== undefined) data.dicePoints = Number(dicePoints);
+  if (newPassword && typeof newPassword === "string" && newPassword.length >= 6) {
+    data.passwordHash = await bcrypt.hash(newPassword, 10);
+  }
 
   try {
     const user = await db.user.update({ where: { id: Number(id) }, data });

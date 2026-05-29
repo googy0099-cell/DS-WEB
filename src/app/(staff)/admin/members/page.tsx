@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Pencil, Trash2 } from "lucide-react";
+import { X, Pencil, Trash2, KeyRound } from "lucide-react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 
@@ -43,6 +43,11 @@ export default function AdminMembersPage() {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  const [resetPwMode, setResetPwMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [resetSaving, setResetSaving] = useState(false);
+  const [resetMsg, setResetMsg] = useState("");
 
   useEffect(() => {
     fetch("/api/members")
@@ -103,6 +108,24 @@ export default function AdminMembersPage() {
     setMembers(prev => prev.filter(m => m.id !== selected.id));
     setSelected(null);
     setConfirmDelete(false);
+  }
+
+  async function resetPassword() {
+    if (!selected || newPassword.length < 6) return;
+    setResetSaving(true);
+    setResetMsg("");
+    const res = await fetch(`/api/members/${selected.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    setResetSaving(false);
+    if (res.ok) {
+      setResetMsg("✅ ตั้งรหัสผ่านใหม่สำเร็จ");
+      setNewPassword("");
+    } else {
+      setResetMsg("❌ ไม่สำเร็จ");
+    }
   }
 
   return (
@@ -177,28 +200,60 @@ export default function AdminMembersPage() {
 
       {/* Detail / Edit modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); }}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center p-4" onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); setResetPwMode(false); setResetMsg(""); }}>
           <div className="bg-white rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b border-sand">
-              <h2 className="font-bold text-navy">{editing ? "แก้ไขข้อมูล" : "ข้อมูลสมาชิก"}</h2>
+              <h2 className="font-bold text-navy">
+                {editing ? "แก้ไขข้อมูล" : resetPwMode ? "ตั้งรหัสผ่านใหม่" : "ข้อมูลสมาชิก"}
+              </h2>
               <div className="flex items-center gap-2">
-                {isOwner && !editing && (
+                {isOwner && !editing && !resetPwMode && (
                   <>
                     <button onClick={() => openEdit(selected)} className="text-orange hover:text-orange/80 p-1">
                       <Pencil size={16} />
+                    </button>
+                    <button onClick={() => { setResetPwMode(true); setResetMsg(""); setNewPassword(""); }} className="text-blue-400 hover:text-blue-600 p-1" title="ตั้งรหัสผ่านใหม่">
+                      <KeyRound size={16} />
                     </button>
                     <button onClick={() => setConfirmDelete(true)} className="text-red-400 hover:text-red-600 p-1">
                       <Trash2 size={16} />
                     </button>
                   </>
                 )}
-                <button onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); }}>
+                <button onClick={() => { setSelected(null); setEditing(false); setConfirmDelete(false); setResetPwMode(false); setResetMsg(""); }}>
                   <X size={20} className="text-gray-400" />
                 </button>
               </div>
             </div>
 
-            {confirmDelete ? (
+            {resetPwMode ? (
+              <div className="p-5 space-y-4">
+                {selected.googleId && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 text-xs text-blue-700">
+                    สมาชิกนี้เข้าสู่ระบบด้วย Google — ไม่จำเป็นต้องมีรหัสผ่าน สามารถกด "เข้าด้วย Google" ได้เลย
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-navy block mb-1">รหัสผ่านใหม่ (อย่างน้อย 6 ตัวอักษร)</label>
+                  <input
+                    type="text"
+                    value={newPassword}
+                    onChange={e => { setNewPassword(e.target.value); setResetMsg(""); }}
+                    placeholder="ตั้งรหัสผ่านใหม่"
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                </div>
+                {resetMsg && (
+                  <p className="text-sm font-medium text-center">{resetMsg}</p>
+                )}
+                <div className="flex gap-3">
+                  <button onClick={() => { setResetPwMode(false); setResetMsg(""); setNewPassword(""); }} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+                  <button onClick={resetPassword} disabled={resetSaving || newPassword.length < 6} className="flex-1 bg-blue-500 text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
+                    {resetSaving ? "กำลังบันทึก..." : "ตั้งรหัสผ่าน"}
+                  </button>
+                </div>
+              </div>
+            ) : confirmDelete ? (
               <div className="p-5 text-center space-y-4">
                 <p className="text-2xl">⚠️</p>
                 <p className="font-bold text-navy">ลบสมาชิก</p>
