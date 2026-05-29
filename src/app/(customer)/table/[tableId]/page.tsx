@@ -14,6 +14,18 @@ const CATEGORY_LABELS: Record<string, string> = {
   dessert: "🍦 ของหวาน",
 };
 
+function getBangkokHHMM(): string {
+  const now = new Date();
+  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
+  return `${String(bkk.getHours()).padStart(2, "0")}:${String(bkk.getMinutes()).padStart(2, "0")}`;
+}
+
+function isWithinSellHours(start: string | null | undefined, end: string | null | undefined): boolean {
+  if (!start || !end) return true;
+  const now = getBangkokHHMM();
+  return now >= start && now <= end;
+}
+
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId: tableIdParam } = use(params);
   const tableId = parseInt(tableIdParam);
@@ -30,8 +42,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       });
   }, [tableId]);
 
-  const categories = [...new Set(menu.map((m) => m.category))];
-  const filtered = menu.filter((m) => m.category === activeCategory);
+  const availableMenu = menu.filter((m) => m.isAvailable && isWithinSellHours(m.sellStartTime, m.sellEndTime));
+  const categories = [...new Set(availableMenu.map((m) => m.category))];
+  const filtered = availableMenu.filter((m) => m.category === activeCategory);
 
   return (
     <div className="min-h-screen bg-cream pb-32">

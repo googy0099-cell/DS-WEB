@@ -128,6 +128,11 @@ export default function MenuPage() {
 
   function confirmPicker() {
     if (!pickerItem) return;
+    if (!isWithinSellHours(pickerItem.sellStartTime, pickerItem.sellEndTime)) {
+      alert(`ไม่สามารถสั่งได้ตอนนี้ — รับออเดอร์ ${pickerItem.sellStartTime}–${pickerItem.sellEndTime} น. เท่านั้น`);
+      closePicker();
+      return;
+    }
     for (const og of pickerItem.optionGroups) {
       if (og.isRequired && !pickerOptions.find((o) => o.groupId === og.id)) {
         alert(`กรุณาเลือก ${og.nameTh}`);
