@@ -227,6 +227,12 @@ export default function AdminMenuPage() {
                     <div>
                       <p className="font-medium text-navy">{item.nameTh}</p>
                       <p className="text-gray-400 text-xs">{item.nameEn}</p>
+                      {item.category === "gametime" && (() => {
+                        const m = item.nameEn?.match(/^gametime-([A-D])$/i);
+                        return m
+                          ? <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full font-medium">⏱️ Package {m[1].toUpperCase()}</span>
+                          : <span className="text-[10px] bg-red-50 text-red-500 px-1.5 py-0.5 rounded-full font-medium">⚠️ ไม่ได้ลิงค์กับแพ็กเกจ</span>;
+                      })()}
                       {(item.addonGroups?.length > 0 || item.optionGroups?.length > 0) && (
                         <div className="flex flex-wrap gap-1 mt-0.5">
                           {item.addonGroups?.map((g) => (
@@ -345,6 +351,12 @@ export default function AdminMenuPage() {
                 <label className="text-xs font-medium text-navy block mb-1">ชื่อ (อังกฤษ)</label>
                 <input type="text" value={editing.nameEn ?? ""} onChange={(e) => setEditing({ ...editing, nameEn: e.target.value })}
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+                {editing.category === "gametime" && (() => {
+                  const key = (editing.nameEn ?? "").match(/^gametime-([A-D])$/i)?.[1]?.toUpperCase();
+                  return key
+                    ? <p className="text-xs text-blue-600 mt-1">✅ ลิงค์กับ Package {key} ในหน้าจัดการเวลา</p>
+                    : <p className="text-xs text-orange mt-1">⚠️ ต้องตั้งเป็น <b>gametime-A</b>, <b>gametime-B</b>, <b>gametime-C</b> หรือ <b>gametime-D</b> เพื่อลิงค์กับแพ็กเกจในหน้าจัดการเวลา</p>;
+                })()}
               </div>
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">หมวดหมู่</label>
