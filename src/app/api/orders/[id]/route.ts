@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -109,7 +108,6 @@ export async function PATCH(
       data: { status: "SERVED", ...(handledById ? { handledById } : {}) },
       select: { id: true, orderName: true, status: true },
     });
-    await sendTelegramNotify(`💸 รับเงินสดแล้ว\nชื่อ: ${served.orderName} | ฿${orderFull.totalTHB}\nออเดอร์ #${orderId}`);
     return NextResponse.json(served);
   }
 
@@ -145,11 +143,6 @@ export async function PATCH(
     });
   }
 
-  if (STATUS_LABELS[status]) {
-    await sendTelegramNotify(
-      `${STATUS_LABELS[status]}\nชื่อ: ${order.orderName} | ออเดอร์ #${order.id}`
-    );
-  }
 
   return NextResponse.json(order);
 }

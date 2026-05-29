@@ -135,8 +135,6 @@ export async function POST(req: NextRequest) {
       data: { totalTHB: existingUnpaid.totalTHB + newTotal, note: note || existingUnpaid.note },
       include: { items: { include: { menuItem: true } } },
     });
-    const addMsg = `\n➕ สั่งเพิ่ม! 👤 ${updatedOrder.orderName}\n${itemsWithPrice.map((i) => `  • ${i.nameTh} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`).join("\n")}\n💰 รวมใหม่ ฿${updatedOrder.totalTHB}`;
-    await Promise.allSettled([sendTelegramNotify(addMsg), sendPushToAll("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`), sendFcmNotify("➕ สั่งเพิ่ม!", `${updatedOrder.orderName} • รวม ฿${updatedOrder.totalTHB}`)]);
     return NextResponse.json(updatedOrder, { status: 200 });
   }
 

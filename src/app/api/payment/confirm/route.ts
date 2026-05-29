@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
-import { sendFcmNotify } from "@/lib/fcm-notify";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 
 export async function PATCH(req: NextRequest) {
@@ -44,10 +42,6 @@ export async function PATCH(req: NextRequest) {
   // If staffNote contains pending player data, create sessions now
   await createSessionsFromStaffNote(payment.staffNote);
 
-  await Promise.allSettled([
-    sendTelegramNotify(`💸 ได้รับเงินแล้ว\nชื่อ: ${order.orderName} | ฿${payment.amountTHB}\nออเดอร์ #${payment.orderId}`),
-    sendFcmNotify("💸 ได้รับเงินแล้ว!", `${order.orderName} • ฿${payment.amountTHB}`),
-  ]);
 
   return NextResponse.json(payment);
 }
