@@ -280,7 +280,6 @@ export default function OrderQueue() {
   );
 
   const prevIdsRef = useRef<Set<number>>(new Set());
-  const alertIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -349,46 +348,23 @@ export default function OrderQueue() {
   const pendingOrders = (orders?.filter((o) => o.status === "PENDING") ?? [])
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  useEffect(() => {
-    const getCtx = () => {
-      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-      return audioCtxRef.current;
-    };
-    if (!alertEnabled || pendingOrders.length === 0) {
-      if (alertIntervalRef.current) {
-        clearInterval(alertIntervalRef.current);
-        alertIntervalRef.current = null;
-      }
-      return;
-    }
-    if (!alertIntervalRef.current) {
-      try {
-        playBeep(getCtx());
-      } catch {}
-      alertIntervalRef.current = setInterval(() => {
-        try {
-          playBeep(getCtx());
-        } catch {}
-      }, 3000);
-    }
-    return () => {
-      if (alertIntervalRef.current) {
-        clearInterval(alertIntervalRef.current);
-        alertIntervalRef.current = null;
-      }
-    };
-  }, [pendingOrders.length, alertEnabled]);
-
+  // Fire beep + browser notification only when NEW pending orders arrive
   useEffect(() => {
     if (!orders) return;
     const incoming = orders.filter(
       (o) => o.status === "PENDING" && !prevIdsRef.current.has(o.id)
     );
-    incoming.forEach((o) =>
-      showBrowserNotification(o.orderName || `ออเดอร์ #${o.id}`, o.totalTHB)
-    );
+    if (incoming.length > 0 && alertEnabled) {
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        playBeep(audioCtxRef.current);
+      } catch {}
+      incoming.forEach((o) =>
+        showBrowserNotification(o.orderName || `ออเดอร์ #${o.id}`, o.totalTHB)
+      );
+    }
     prevIdsRef.current = new Set(orders.map((o) => o.id));
-  }, [orders]);
+  }, [orders, alertEnabled]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {
@@ -575,11 +551,7 @@ export default function OrderQueue() {
           <span className="text-lg">{alertEnabled ? "🔔" : "🔕"}</span>
           <div>
             <p className="text-sm font-medium text-navy">เสียงแจ้งเตือนออเดอร์ใหม่</p>
-            {alertEnabled && pendingOrders.length > 0 && (
-              <p className="text-xs text-red-500 font-medium animate-pulse">
-                กำลังดัง — กด "รับออเดอร์แล้ว" เพื่อหยุด
-              </p>
-            )}
+            <p className="text-xs text-gray-400">ดังเมื่อมีออเดอร์เข้าใหม่</p>
           </div>
         </div>
         <button
