@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
 
   let whereClause: Record<string, unknown> = {};
   if (status === "active") {
-    whereClause = { status: { in: ["PENDING", "CONFIRMED", "PAID"] } };
+    // Exclude bill-linked orders — those are managed by POS/payment pages
+    whereClause = { status: { in: ["PENDING", "CONFIRMED", "PAID"] }, billId: null };
   } else if (status === "today") {
     whereClause = {
       status: { in: ["SERVED", "CANCELLED"] },
