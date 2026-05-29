@@ -552,31 +552,44 @@ export default function AdminTimePage() {
     setStep(2);
   }
 
-  async function confirmPlayers() {
-    if (!draftBillId) return;
-    setSaving(true);
-    const res = await fetch(`/api/pos/bills/${draftBillId}/players`, {
+  // Calculate player total client-side (mirrors server logic in /api/pos/bills/[id]/players)
+  function calcPlayersTotal(draftPlayers: PlayerDraft[]): number {
+    return draftPlayers.reduce((sum, p) => {
+      const pkgPrice = (PACKAGES[p.pkg]?.price ?? 0) * (p.pkg === "B" ? p.qty : 1);
+      const drinkCharge = p.pkg === "A" ? Math.max(0, p.drinkPrice) : 0;
+      return sum + pkgPrice + drinkCharge;
+    }, 0);
+  }
+
+  // Create player sessions on the server — called AFTER cashier confirms payment method
+  async function createSessions(billId: number, draftPlayers: PlayerDraft[]): Promise<number[] | null> {
+    const res = await fetch(`/api/pos/bills/${billId}/players`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: players.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
+      body: JSON.stringify({ players: draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
     });
-    setSaving(false);
-    if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
+    if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return null; }
     const data = await res.json();
-    setPlayerTotal(data.totalTHB);
-    setPlayerSessionIds((data.sessions ?? []).map((s: { id: number }) => s.id));
+    return (data.sessions ?? []).map((s: { id: number }) => s.id);
+  }
+
+  // ยืนยันผู้เล่น → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
+  function confirmPlayers() {
+    if (!draftBillId) return;
     setStep(3);
-    load();
   }
 
   function grandTotal() {
-    return playerTotal + extraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
+    return calcPlayersTotal(players) + extraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
   async function chooseCash() {
     if (!draftBillId) return;
     setSaving(true);
+    const sessionIds = await createSessions(draftBillId, players);
+    if (!sessionIds) { setSaving(false); return; }
+    setPlayerSessionIds(sessionIds);
     await createOrder("CASH", draftBillId, grandTotal(), players, extraItems);
-    await patchExtraSpend(extraItems, playerSessionIds);
+    await patchExtraSpend(extraItems, sessionIds);
     setSaving(false);
     closeFlow();
   }
@@ -584,6 +597,9 @@ export default function AdminTimePage() {
   async function chooseQR() {
     if (!draftBillId) return;
     setSaving(true);
+    const sessionIds = await createSessions(draftBillId, players);
+    if (!sessionIds) { setSaving(false); return; }
+    setPlayerSessionIds(sessionIds);
     const result = await createOrder("PROMPTPAY", draftBillId, grandTotal(), players, extraItems);
     setSaving(false);
     if (!result) return;
@@ -617,31 +633,24 @@ export default function AdminTimePage() {
     setAddBillPlayerTotal(0); setAddBillSlipFile(null); setAddBillSlipPreview(null);
   }
 
-  async function submitAddPlayers() {
+  // ยืนยันผู้เล่น (เพิ่มในบิล) → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
+  function submitAddPlayers() {
     if (!addToBill) return;
-    setSaving(true);
-    const res = await fetch(`/api/pos/bills/${addToBill.id}/players`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: addPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
-    });
-    setSaving(false);
-    if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return; }
-    const data = await res.json();
-    setAddBillPlayerTotal(data.totalTHB);
-    setAddBillPlayerSessionIds((data.sessions ?? []).map((s: { id: number }) => s.id));
     setAddBillStep(1);
-    load();
   }
 
   function addBillGrandTotal() {
-    return addBillPlayerTotal + addExtraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
+    return calcPlayersTotal(addPlayers) + addExtraItems.reduce((s, e) => s + e.priceTHB * e.qty, 0);
   }
 
   async function chooseAddBillCash() {
     if (!addToBill) return;
     setSaving(true);
+    const sessionIds = await createSessions(addToBill.id, addPlayers);
+    if (!sessionIds) { setSaving(false); return; }
+    setAddBillPlayerSessionIds(sessionIds);
     await createOrder("CASH", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems);
-    await patchExtraSpend(addExtraItems, addBillPlayerSessionIds);
+    await patchExtraSpend(addExtraItems, sessionIds);
     setSaving(false);
     closeAddBillFlow();
   }
@@ -649,6 +658,9 @@ export default function AdminTimePage() {
   async function chooseAddBillQR() {
     if (!addToBill) return;
     setSaving(true);
+    const sessionIds = await createSessions(addToBill.id, addPlayers);
+    if (!sessionIds) { setSaving(false); return; }
+    setAddBillPlayerSessionIds(sessionIds);
     const result = await createOrder("PROMPTPAY", addToBill.id, addBillGrandTotal(), addPlayers, addExtraItems);
     setSaving(false);
     if (!result) return;
