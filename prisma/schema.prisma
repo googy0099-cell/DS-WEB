@@ -469,9 +469,10 @@ model MenuStockRecipe {
   menuItemId  Int       @map("menu_item_id")
   stockItemId Int       @map("stock_item_id")
   qtyUsed     Float     @map("qty_used")
+  size        String    @default("") @map("size")
   menuItem    MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
-  @@unique([menuItemId, stockItemId])
+  @@unique([menuItemId, stockItemId, size])
   @@map("menu_stock_recipes")
 }
 

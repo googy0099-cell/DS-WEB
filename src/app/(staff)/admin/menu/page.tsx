@@ -25,7 +25,7 @@ type MenuItem = {
 type AddonGroup = { id: number; nameTh: string; isActive: boolean };
 type OptionGroup = { id: number; nameTh: string; isRequired: boolean; isActive: boolean };
 type StockItem = { id: number; name: string; unit: string; currentQty: number };
-type Recipe = { id: number; stockItemId: number; qtyUsed: number; stockItem: StockItem };
+type Recipe = { id: number; stockItemId: number; qtyUsed: number; size: string; stockItem: StockItem };
 
 export type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; isBuiltin?: boolean };
 
@@ -87,6 +87,7 @@ export default function AdminMenuPage() {
   );
   const [newRecipeStockId, setNewRecipeStockId] = useState("");
   const [newRecipeQty, setNewRecipeQty] = useState("");
+  const [newRecipeSize, setNewRecipeSize] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
 
   // Category manager
@@ -194,10 +195,10 @@ export default function AdminMenuPage() {
     await fetch("/api/stock/recipes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ menuItemId: recipeMenuItem.id, stockItemId: Number(newRecipeStockId), qtyUsed: parseFloat(newRecipeQty) }),
+      body: JSON.stringify({ menuItemId: recipeMenuItem.id, stockItemId: Number(newRecipeStockId), qtyUsed: parseFloat(newRecipeQty), size: newRecipeSize }),
     });
     await mutateRecipes();
-    setNewRecipeStockId(""); setNewRecipeQty("");
+    setNewRecipeStockId(""); setNewRecipeQty(""); setNewRecipeSize("");
     setRecipeSaving(false);
   }
 
@@ -430,7 +431,12 @@ export default function AdminMenuPage() {
                 recipes.map((r) => (
                   <div key={r.id} className="flex items-center justify-between bg-sand/30 rounded-xl px-3 py-2.5">
                     <div>
-                      <p className="text-sm font-medium text-navy">{r.stockItem.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-medium text-navy">{r.stockItem.name}</p>
+                        {r.size && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${r.size === "S" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>{r.size}</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-400">{r.qtyUsed} {r.stockItem.unit} / จาน · คงเหลือ {r.stockItem.currentQty} {r.stockItem.unit}</p>
                     </div>
                     <button onClick={() => deleteRecipe(r.id)} className="text-gray-300 hover:text-red-400 text-lg ml-3">🗑️</button>
@@ -442,10 +448,18 @@ export default function AdminMenuPage() {
             {/* Add new recipe */}
             <div className="border-t border-sand pt-3 space-y-2">
               <p className="text-xs font-semibold text-navy">+ เพิ่มวัตถุดิบ</p>
+              {recipeMenuItem.priceS != null && recipeMenuItem.priceXL != null && (
+                <select value={newRecipeSize} onChange={(e) => setNewRecipeSize(e.target.value)}
+                  className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange">
+                  <option value="">ทุกขนาด (catch-all)</option>
+                  <option value="S">S</option>
+                  <option value="XL">XL</option>
+                </select>
+              )}
               <select value={newRecipeStockId} onChange={(e) => setNewRecipeStockId(e.target.value)}
                 className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange">
                 <option value="">เลือกวัตถุดิบ...</option>
-                {allStockItems.filter((s) => !recipes.find((r) => r.stockItemId === s.id)).map((s) => (
+                {allStockItems.filter((s) => !recipes.find((r) => r.stockItemId === s.id && r.size === newRecipeSize)).map((s) => (
                   <option key={s.id} value={s.id}>{s.name} ({s.unit})</option>
                 ))}
               </select>

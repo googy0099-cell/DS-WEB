@@ -20,9 +20,14 @@ export async function deductStockForOrder(orderId: number, performedById: number
   });
 
   // Aggregate: stockItemId → total deduction
+  // Per order item: prefer size-specific recipe, fall back to catch-all (size="")
   const deductMap = new Map<number, { qty: number; name: string; unit: string }>();
   for (const oi of orderItems) {
-    for (const r of oi.menuItem.stockRecipes) {
+    const size = oi.selectedSize ?? "";
+    const sizeSpecific = oi.menuItem.stockRecipes.filter((r) => r.size === size);
+    const catchAll = oi.menuItem.stockRecipes.filter((r) => r.size === "");
+    const applicable = sizeSpecific.length > 0 ? sizeSpecific : catchAll;
+    for (const r of applicable) {
       const total = r.qtyUsed * oi.quantity;
       const cur = deductMap.get(r.stockItemId);
       deductMap.set(r.stockItemId, {

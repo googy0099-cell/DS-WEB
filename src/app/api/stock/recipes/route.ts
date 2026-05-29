@@ -28,16 +28,16 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!(await requireStaff())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { menuItemId, stockItemId, qtyUsed } = await req.json() as {
-    menuItemId: number; stockItemId: number; qtyUsed: number;
+  const { menuItemId, stockItemId, qtyUsed, size = "" } = await req.json() as {
+    menuItemId: number; stockItemId: number; qtyUsed: number; size?: string;
   };
 
   if (!menuItemId || !stockItemId || !qtyUsed || qtyUsed <= 0)
     return NextResponse.json({ error: "menuItemId, stockItemId, qtyUsed จำเป็น" }, { status: 400 });
 
   const recipe = await db.menuStockRecipe.upsert({
-    where: { menuItemId_stockItemId: { menuItemId, stockItemId } },
-    create: { menuItemId, stockItemId, qtyUsed },
+    where: { menuItemId_stockItemId_size: { menuItemId, stockItemId, size } },
+    create: { menuItemId, stockItemId, qtyUsed, size },
     update: { qtyUsed },
     include: { stockItem: { select: { id: true, name: true, unit: true, currentQty: true } } },
   });
