@@ -61,6 +61,8 @@ export default function AdminSettingsPage() {
   const [rShopInfo, setRShopInfo] = useState(DEFAULT_RECEIPT_SETTINGS.shopInfo);
   const [rPaperWidth, setRPaperWidth] = useState(DEFAULT_RECEIPT_SETTINGS.paperWidth);
   const [rFooter, setRFooter] = useState(DEFAULT_RECEIPT_SETTINGS.footer);
+  const [rLogoUrl, setRLogoUrl] = useState("");
+  const [rLogoUploading, setRLogoUploading] = useState(false);
   const [rShowOrderId, setRShowOrderId] = useState(DEFAULT_RECEIPT_SETTINGS.showOrderId);
   const [rShowDate, setRShowDate] = useState(DEFAULT_RECEIPT_SETTINGS.showDate);
   const [rShowCustomer, setRShowCustomer] = useState(DEFAULT_RECEIPT_SETTINGS.showCustomer);
@@ -102,8 +104,8 @@ export default function AdminSettingsPage() {
     try {
       const r = { ...DEFAULT_RECEIPT_SETTINGS, ...JSON.parse(siteSettings.print_receipt ?? "{}") };
       setRShopName(r.shopName); setRShopInfo(r.shopInfo); setRPaperWidth(r.paperWidth);
-      setRFooter(r.footer); setRShowOrderId(r.showOrderId); setRShowDate(r.showDate);
-      setRShowCustomer(r.showCustomer); setRShowNote(r.showNote);
+      setRFooter(r.footer); setRLogoUrl(r.logoUrl ?? ""); setRShowOrderId(r.showOrderId);
+      setRShowDate(r.showDate); setRShowCustomer(r.showCustomer); setRShowNote(r.showNote);
       setRShowItemPrice(r.showItemPrice); setRShowTotal(r.showTotal);
     } catch {}
     try {
@@ -141,7 +143,7 @@ export default function AdminSettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal }),
+          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, logoUrl: rLogoUrl, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal }),
           print_kitchen: JSON.stringify({ enabled: kEnabled, paperWidth: kPaperWidth, showTable: kShowTable, showNote: kShowNote }),
         }),
       });
@@ -189,9 +191,10 @@ export default function AdminSettingsPage() {
   function testReceiptPrint() {
     const w = rPaperWidth === "A4" ? "210mm" : `${rPaperWidth}mm`;
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบเสร็จ</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:12px}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style></head>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}.logo{display:block;max-width:120px;max-height:60px;margin:0 auto 6px;object-fit:contain}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:12px}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style></head>
 <body>
-<h1>🎲 ${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
+${rLogoUrl ? `<img src="${rLogoUrl}" class="logo" alt="logo"/>` : ""}
+<h1>${rLogoUrl ? "" : "🎲 "}${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
 <div style="font-size:12px;margin-bottom:4px">
 ${rShowCustomer ? `<div><b>ออเดอร์:</b> ทดสอบ</div>` : ""}
 ${rShowOrderId ? `<div><b>เลขที่:</b> #999</div>` : ""}
@@ -511,6 +514,42 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
         {/* Receipt */}
         <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4 mb-4">
           <h2 className="font-semibold text-navy border-b border-sand pb-2">ใบเสร็จลูกค้า</h2>
+
+          {/* Logo upload */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">โลโก้บนใบเสร็จ <span className="font-normal text-gray-400">(ไม่บังคับ)</span></label>
+            <div className="flex items-center gap-4">
+              <div className="w-24 h-16 rounded-xl border-2 border-sand flex items-center justify-center overflow-hidden shrink-0 bg-sand/20">
+                {rLogoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={rLogoUrl} alt="logo" className="w-full h-full object-contain" />
+                ) : (
+                  <span className="text-2xl">🏪</span>
+                )}
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <label className={`cursor-pointer inline-block border-2 border-dashed rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${rLogoUploading ? "border-gray-200 text-gray-400" : "border-orange/40 text-orange hover:border-orange hover:bg-orange/5"}`}>
+                  {rLogoUploading ? "⏳ กำลังอัพโหลด..." : rLogoUrl ? "🔄 เปลี่ยนโลโก้" : "📷 อัพโหลดโลโก้"}
+                  <input type="file" accept="image/*" className="hidden" disabled={rLogoUploading}
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0]; if (!f) return;
+                      setRLogoUploading(true);
+                      const fd = new FormData(); fd.append("file", f);
+                      const res = await fetch("/api/upload", { method: "POST", body: fd });
+                      const d = await res.json();
+                      if (d.url) setRLogoUrl(d.url);
+                      else alert(d.error ?? "อัพโหลดไม่สำเร็จ");
+                      setRLogoUploading(false);
+                      e.target.value = "";
+                    }} />
+                </label>
+                {rLogoUrl && (
+                  <button onClick={() => setRLogoUrl("")} className="block text-xs text-red-400 hover:underline">ลบโลโก้</button>
+                )}
+                <p className="text-xs text-gray-400">PNG/JPG โปร่งใสได้ · แสดงบนสุดของใบเสร็จ</p>
+              </div>
+            </div>
+          </div>
 
           <div>
             <label className="text-sm font-semibold text-navy block mb-1">ชื่อร้านบนใบเสร็จ</label>
