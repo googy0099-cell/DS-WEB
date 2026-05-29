@@ -68,6 +68,8 @@ export interface MenuItemType {
   priceXL: number | null;
   imageUrl: string | null;
   isAvailable: boolean;
+  sellStartTime: string | null;
+  sellEndTime: string | null;
   addonGroups: AddonGroupType[];
   optionGroups: OptionGroupType[];
 }

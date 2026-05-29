@@ -9,6 +9,18 @@ import CartDrawer from "@/components/orders/CartDrawer";
 import { useOrderStore, makeCartKey } from "@/store/orderStore";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 
+function getBangkokHHMM(): string {
+  const now = new Date();
+  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
+  return `${String(bkk.getHours()).padStart(2, "0")}:${String(bkk.getMinutes()).padStart(2, "0")}`;
+}
+
+function isWithinSellHours(start: string | null, end: string | null): boolean {
+  if (!start || !end) return true;
+  const now = getBangkokHHMM();
+  return now >= start && now <= end;
+}
+
 const CATEGORIES = [
   { id: "gametime", label: "ค่าชั่วโมงเกม", icon: "🎲" },
   { id: "milktea", label: "Milk & Tea", icon: "🧋" },
@@ -245,6 +257,7 @@ export default function MenuPage() {
                       ))
                     : catItems.map((item) => {
                         const hasSizes = item.priceS != null || item.priceXL != null;
+                        const canOrder = isWithinSellHours(item.sellStartTime, item.sellEndTime);
                         return (
                           <div key={item.id} className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col">
                             {item.imageUrl ? (
@@ -259,6 +272,11 @@ export default function MenuPage() {
                             <div className="p-3 flex-1 flex flex-col">
                               <p className="font-bold text-navy text-sm leading-tight mb-0.5">{item.nameTh}</p>
                               <p className="text-gray-400 text-xs mb-2">{item.nameEn}</p>
+                              {!canOrder && (
+                                <p className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-lg mb-2">
+                                  ⏰ รับออเดอร์ {item.sellStartTime}–{item.sellEndTime} น.
+                                </p>
+                              )}
                               <div className="flex items-center justify-between mt-auto">
                                 <div>
                                   {hasSizes ? (
@@ -270,8 +288,9 @@ export default function MenuPage() {
                                   )}
                                 </div>
                                 <button
-                                  onClick={() => handleAddDirect(item)}
-                                  className="bg-orange text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-orange/90 transition-colors"
+                                  onClick={() => canOrder && handleAddDirect(item)}
+                                  disabled={!canOrder}
+                                  className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${canOrder ? "bg-orange text-white hover:bg-orange/90" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
                                 >
                                   + เพิ่ม
                                 </button>

@@ -5,6 +5,79 @@ import useSWR from "swr";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
 
+function printReceipt(order: OrderWithItems) {
+  const dateStr = formatThaiDateTime(order.createdAt);
+  const items = order.items
+    .map((item) => {
+      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+      const subtotal = item.unitPriceTHB * item.quantity;
+      const extras = [
+        item.selectedSize ? `ไซส์: ${item.selectedSize}` : "",
+        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
+        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
+      ].filter(Boolean).join(" | ");
+      return `
+        <tr>
+          <td style="padding:4px 2px;vertical-align:top">
+            ${item.menuItem.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
+            ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
+          </td>
+          <td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8"/>
+<title>ใบเสร็จ #${order.id}</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Sarabun', 'Helvetica Neue', Arial, sans-serif; font-size:13px; color:#111; width:80mm; margin:0 auto; padding:8px; }
+  h1 { font-size:18px; font-weight:900; text-align:center; margin-bottom:2px; }
+  .sub { font-size:11px; text-align:center; color:#555; margin-bottom:8px; }
+  .divider { border:none; border-top:1px dashed #aaa; margin:6px 0; }
+  table { width:100%; border-collapse:collapse; }
+  .total-row td { font-weight:bold; font-size:15px; padding-top:6px; border-top:1px dashed #aaa; }
+  .note { background:#fff8e7; border:1px solid #f5a623; border-radius:4px; padding:5px 8px; margin-top:6px; font-size:12px; }
+  .footer { text-align:center; font-size:11px; color:#777; margin-top:10px; }
+  @media print { body { width:100%; } }
+</style>
+</head>
+<body>
+  <h1>🎲 ร้านลูกเต๋า</h1>
+  <div class="sub">The Dice Shop • ใบเสร็จรับเงิน</div>
+  <hr class="divider"/>
+  <div style="font-size:12px;margin-bottom:4px">
+    <div><b>ออเดอร์:</b> ${order.orderName || `#${order.id}`}</div>
+    <div><b>วันที่:</b> ${dateStr}</div>
+    <div><b>เลขที่:</b> #${order.id}</div>
+  </div>
+  <hr class="divider"/>
+  <table>
+    <tbody>${items}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td>รวมทั้งหมด</td>
+        <td style="text-align:right">฿${order.totalTHB}</td>
+      </tr>
+    </tfoot>
+  </table>
+  ${order.note ? `<div class="note">📝 หมายเหตุ: ${order.note}</div>` : ""}
+  <div class="footer">ขอบคุณที่ใช้บริการ 🎲</div>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=400,height=600");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const STATUS_CONFIG = {
@@ -26,7 +99,7 @@ const STATUS_CONFIG = {
     label: "✅ ชำระแล้ว",
     color: "bg-green-100 text-green-800 border-green-300",
     next: "SERVED",
-    nextLabel: "🖥️ คีย์ลง Wongnai แล้ว",
+    nextLabel: "🖨️ พิมพ์ใบเสร็จ",
     nextColor: "bg-orange text-white",
   },
   SERVED: {
@@ -356,6 +429,7 @@ export default function OrderQueue() {
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onPrint={printReceipt}
               />
             ))}
           </div>
@@ -376,6 +450,7 @@ export default function OrderQueue() {
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onPrint={printReceipt}
               />
             ))}
           </div>
@@ -438,13 +513,21 @@ export default function OrderQueue() {
                       <span>฿{order.totalTHB}</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDelete(order.id)}
-                    disabled={loadingIds.has(order.id)}
-                    className="mt-2 text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
-                  >
-                    🗑️ ลบ
-                  </button>
+                  <div className="mt-2 flex gap-3">
+                    <button
+                      onClick={() => printReceipt(order)}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      🖨️ พิมพ์ใบเสร็จ
+                    </button>
+                    <button
+                      onClick={() => handleDelete(order.id)}
+                      disabled={loadingIds.has(order.id)}
+                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
+                    >
+                      🗑️ ลบ
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -588,6 +671,7 @@ function OrderCard({
   onUpdate,
   onEdit,
   onDelete,
+  onPrint,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -595,6 +679,7 @@ function OrderCard({
   onUpdate: (id: number, status: string) => void;
   onEdit: (order: OrderWithItems) => void;
   onDelete: (id: number) => void;
+  onPrint: (order: OrderWithItems) => void;
 }) {
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
   const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
@@ -689,7 +774,10 @@ function OrderCard({
         {/* Primary action */}
         {cfg.next && (
           <button
-            onClick={() => onUpdate(order.id, cfg.next!)}
+            onClick={() => {
+              if (cfg.next === "SERVED") onPrint(order);
+              onUpdate(order.id, cfg.next!);
+            }}
             disabled={isLoading}
             className={`w-full text-sm font-bold py-3 rounded-xl mb-2 transition-opacity disabled:opacity-60 ${cfg.nextColor}`}
           >
@@ -717,6 +805,13 @@ function OrderCard({
               ❌ ยกเลิก
             </button>
           )}
+          <button
+            onClick={() => onPrint(order)}
+            className="bg-gray-50 text-gray-500 border border-gray-200 text-sm px-3 py-2 rounded-xl hover:bg-gray-100"
+            title="พิมพ์ใบเสร็จ"
+          >
+            🖨️
+          </button>
           <button
             onClick={() => onDelete(order.id)}
             disabled={isLoading}

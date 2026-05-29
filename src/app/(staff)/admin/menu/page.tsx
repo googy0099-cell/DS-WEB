@@ -15,6 +15,8 @@ type MenuItem = {
   imageUrl: string | null;
   isAvailable: boolean;
   isFeatured: boolean;
+  sellStartTime: string | null;
+  sellEndTime: string | null;
   addonGroups: { id: number; nameTh: string }[];
   optionGroups: { id: number; nameTh: string; isRequired: boolean }[];
 };
@@ -37,6 +39,7 @@ const EMPTY = {
   nameTh: "", nameEn: "", category: "milktea", priceTHB: 0,
   priceS: null as number | null, priceXL: null as number | null,
   imageUrl: null as string | null, isAvailable: true, isFeatured: false,
+  sellStartTime: null as string | null, sellEndTime: null as string | null,
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -148,6 +151,7 @@ export default function AdminMenuPage() {
               <th className="text-left p-3 text-navy font-semibold hidden md:table-cell">หมวด</th>
               <th className="text-right p-3 text-navy font-semibold">ราคา</th>
               <th className="text-center p-3 text-navy font-semibold">สถานะ</th>
+              <th className="text-center p-3 text-navy font-semibold hidden md:table-cell">เวลาขาย</th>
               <th className="text-center p-3 text-navy font-semibold">หน้าแรก</th>
               <th className="p-3"></th>
             </tr>
@@ -189,6 +193,15 @@ export default function AdminMenuPage() {
                   <button onClick={() => toggleAvailable(item)} className={`text-xs px-2 py-1 rounded-full font-medium ${item.isAvailable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
                     {item.isAvailable ? "เปิด" : "ปิด"}
                   </button>
+                </td>
+                <td className="p-3 text-center hidden md:table-cell">
+                  {item.sellStartTime && item.sellEndTime ? (
+                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                      ⏰ {item.sellStartTime}–{item.sellEndTime}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-300">ตลอดเวลา</span>
+                  )}
                 </td>
                 <td className="p-3 text-center">
                   <button
@@ -258,6 +271,35 @@ export default function AdminMenuPage() {
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">รูปเมนู</label>
                 <ImageUpload value={editing.imageUrl ?? ""} onChange={(url) => setEditing({ ...editing, imageUrl: url || null })} />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">⏰ เวลารับออเดอร์ <span className="font-normal text-gray-400">(เว้นว่าง = รับตลอดเวลา)</span></label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={(editing as { sellStartTime?: string | null }).sellStartTime ?? ""}
+                    onChange={(e) => setEditing({ ...editing, sellStartTime: e.target.value || null })}
+                    className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                  <span className="text-gray-400 text-sm shrink-0">ถึง</span>
+                  <input
+                    type="time"
+                    value={(editing as { sellEndTime?: string | null }).sellEndTime ?? ""}
+                    onChange={(e) => setEditing({ ...editing, sellEndTime: e.target.value || null })}
+                    className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                  />
+                  {((editing as { sellStartTime?: string | null }).sellStartTime || (editing as { sellEndTime?: string | null }).sellEndTime) && (
+                    <button
+                      type="button"
+                      onClick={() => setEditing({ ...editing, sellStartTime: null, sellEndTime: null })}
+                      className="text-xs text-red-400 hover:text-red-600 shrink-0"
+                    >
+                      ล้าง
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">เช่น 15:00 ถึง 22:00 — นอกเวลานี้จะขึ้น "ไม่รับออเดอร์ตอนนี้" ในเมนูลูกค้า</p>
               </div>
 
               {/* Addon Groups */}

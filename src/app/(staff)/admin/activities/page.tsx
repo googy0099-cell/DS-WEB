@@ -310,8 +310,9 @@ export default function AdminActivitiesPage() {
                 <ImageUpload
                   value={(editing as Activity).imageUrl ?? ""}
                   onChange={(url) => setEditing({ ...editing, imageUrl: url || null })}
+                  previewAspect="16/5"
                 />
-                <p className="text-xs text-gray-400 mt-1">แนะนำ: 320 × 100 px (แสดงเป็นแบนเนอร์บนการ์ด)</p>
+                <p className="text-xs text-gray-400 mt-1">Preview ตรงนี้ = ที่ลูกค้าเห็นบนหน้าแรก (crop 16:5)</p>
               </div>
 
               {/* Block editor */}

@@ -1,4 +1,5 @@
 import OrderQueue from "@/components/admin/OrderQueue";
+import { DashboardClock } from "@/components/admin/DashboardClock";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 
@@ -26,7 +27,7 @@ export default async function AdminPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         <div className="bg-white rounded-2xl p-4 shadow-sm">
           <p className="text-gray-400 text-xs">ออเดอร์วันนี้</p>
           <p className="text-2xl font-bold text-navy">{todayOrders}</p>
@@ -35,10 +36,11 @@ export default async function AdminPage() {
           <p className="text-gray-400 text-xs">สมาชิกทั้งหมด</p>
           <p className="text-2xl font-bold text-orange">{totalMembers}</p>
         </div>
-        <div className="bg-orange rounded-2xl p-4 shadow-sm col-span-2 md:col-span-1">
+        <div className="bg-orange rounded-2xl p-4 shadow-sm">
           <p className="text-white/70 text-xs">เวลาเปิดทำการ</p>
           <p className="text-lg font-bold text-white">15:00 – 23:00</p>
         </div>
+        <DashboardClock />
       </div>
 
       <div className="flex items-center justify-between mb-3">

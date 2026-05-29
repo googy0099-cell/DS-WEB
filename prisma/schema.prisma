@@ -82,19 +82,21 @@ model PlayerSession {
 }
 
 model MenuItem {
-  id           Int                   @id @default(autoincrement())
-  nameTh       String
-  nameEn       String
-  category     String
-  priceTHB     Int
-  priceS       Int?
-  priceXL      Int?
-  imageUrl     String?
-  isAvailable  Boolean               @default(true)
-  isFeatured   Boolean               @default(false)
-  orderItems   OrderItem[]
-  addonGroups  MenuItemAddonGroup[]
-  optionGroups MenuItemOptionGroup[]
+  id            Int                   @id @default(autoincrement())
+  nameTh        String
+  nameEn        String
+  category      String
+  priceTHB      Int
+  priceS        Int?
+  priceXL       Int?
+  imageUrl      String?
+  isAvailable   Boolean               @default(true)
+  isFeatured    Boolean               @default(false)
+  sellStartTime String?
+  sellEndTime   String?
+  orderItems    OrderItem[]
+  addonGroups   MenuItemAddonGroup[]
+  optionGroups  MenuItemOptionGroup[]
 }
 
 model MiniGame {

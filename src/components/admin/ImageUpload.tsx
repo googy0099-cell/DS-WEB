@@ -6,9 +6,11 @@ import Image from "next/image";
 interface Props {
   value: string;
   onChange: (url: string) => void;
+  /** CSS aspect-ratio value shown in preview, e.g. "16/5". Default: image proportions (object-contain) */
+  previewAspect?: string;
 }
 
-export default function ImageUpload({ value, onChange }: Props) {
+export default function ImageUpload({ value, onChange, previewAspect }: Props) {
   const [uploading, setUploading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -41,8 +43,16 @@ export default function ImageUpload({ value, onChange }: Props) {
         onDragOver={(e) => e.preventDefault()}
       >
         {value ? (
-          <div className="relative h-32 w-full">
-            <Image src={value} alt="preview" fill className="object-contain rounded-lg" />
+          <div
+            className="relative w-full overflow-hidden rounded-lg"
+            style={previewAspect ? { aspectRatio: previewAspect } : { height: "128px" }}
+          >
+            <Image
+              src={value}
+              alt="preview"
+              fill
+              className={previewAspect ? "object-cover" : "object-contain"}
+            />
           </div>
         ) : (
           <div className="text-gray-400 py-4">
