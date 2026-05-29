@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { X, Pencil, Trash2, KeyRound } from "lucide-react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
+import NumpadInput from "@/components/admin/NumpadInput";
 
 interface Member {
   id: number;
@@ -130,72 +131,112 @@ export default function AdminMembersPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-navy">สมาชิกทั้งหมด</h1>
-          <p className="text-gray-400 text-sm">{members.length} คน</p>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h1 className="text-xl font-bold text-navy">สมาชิกทั้งหมด</h1>
+            <p className="text-gray-400 text-sm">{members.length} คน</p>
+          </div>
         </div>
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="ค้นหา..."
-          className="border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none w-44"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="ค้นหาชื่อ, อีเมล, รหัสสมาชิก..."
+            className="w-full border border-sand rounded-2xl px-4 py-2.5 pl-9 text-sm focus:border-orange focus:outline-none"
+          />
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          {search && (
+            <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg leading-none">×</button>
+          )}
+        </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-sand/40 border-b border-sand">
-              <tr>
-                <th className="text-left p-3 text-navy font-semibold">สมาชิก</th>
-                <th className="text-left p-3 text-navy font-semibold">รหัส</th>
-                <th className="text-right p-3 text-navy font-semibold">แต้มเต๋า</th>
-                <th className="text-right p-3 text-navy font-semibold hidden md:table-cell">ใช้จ่าย</th>
-                <th className="text-right p-3 text-navy font-semibold hidden md:table-cell">เข้าร้าน</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={5} className="text-center text-gray-400 py-8">กำลังโหลด...</td></tr>
-              ) : filtered.length === 0 ? (
-                <tr><td colSpan={5} className="text-center text-gray-400 py-8">ไม่พบสมาชิก</td></tr>
-              ) : filtered.map(m => {
-                const avatar = m.avatarUrl || googleAvatarUrl(m.googleId);
-                return (
-                  <tr
-                    key={m.id}
-                    className="border-b border-sand/50 last:border-0 hover:bg-sand/20 cursor-pointer transition-colors"
-                    onClick={() => { setSelected(m); setEditing(false); setConfirmDelete(false); }}
-                  >
-                    <td className="p-3">
-                      <div className="flex items-center gap-2">
-                        {avatar ? (
-                          <Image src={avatar} alt="" width={32} height={32} className="rounded-full object-cover w-8 h-8 shrink-0" />
-                        ) : (
-                          <div className="w-8 h-8 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm shrink-0">
-                            {m.firstName[0]?.toUpperCase()}
-                          </div>
-                        )}
-                        <div>
-                          <p className="font-medium text-navy">{m.nickname || `${m.firstName} ${m.lastName}`}</p>
-                          <p className="text-gray-400 text-xs">{m.email}</p>
+      {/* Mobile card list */}
+      <div className="md:hidden bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/50">
+        {loading && <p className="text-center text-gray-400 py-8">กำลังโหลด...</p>}
+        {!loading && filtered.length === 0 && <p className="text-center text-gray-400 py-8">ไม่พบสมาชิก</p>}
+        {filtered.map(m => {
+          const avatar = m.avatarUrl || googleAvatarUrl(m.googleId);
+          return (
+            <div
+              key={m.id}
+              className="flex items-center gap-3 p-3 active:bg-sand/20 cursor-pointer"
+              onClick={() => { setSelected(m); setEditing(false); setConfirmDelete(false); }}
+            >
+              {avatar ? (
+                <Image src={avatar} alt="" width={44} height={44} className="rounded-full object-cover w-11 h-11 shrink-0" />
+              ) : (
+                <div className="w-11 h-11 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-lg shrink-0">
+                  {m.firstName[0]?.toUpperCase()}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-navy text-sm truncate">{m.nickname || `${m.firstName} ${m.lastName}`}</p>
+                <p className="text-gray-400 text-xs truncate">{m.email}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-mono text-[10px] font-bold text-orange bg-orange/10 px-1.5 py-0.5 rounded">{m.memberCode}</span>
+                  <span className="text-xs text-navy font-medium">🎲 {m.dicePoints}</span>
+                </div>
+              </div>
+              <span className="text-gray-300 text-lg shrink-0">›</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table */}
+      <div className="hidden md:block bg-white rounded-2xl shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-sand/40 border-b border-sand">
+            <tr>
+              <th className="text-left p-3 text-navy font-semibold">สมาชิก</th>
+              <th className="text-left p-3 text-navy font-semibold">รหัส</th>
+              <th className="text-right p-3 text-navy font-semibold">แต้มเต๋า</th>
+              <th className="text-right p-3 text-navy font-semibold">ใช้จ่าย</th>
+              <th className="text-right p-3 text-navy font-semibold">เข้าร้าน</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="text-center text-gray-400 py-8">กำลังโหลด...</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={5} className="text-center text-gray-400 py-8">ไม่พบสมาชิก</td></tr>
+            ) : filtered.map(m => {
+              const avatar = m.avatarUrl || googleAvatarUrl(m.googleId);
+              return (
+                <tr
+                  key={m.id}
+                  className="border-b border-sand/50 last:border-0 hover:bg-sand/20 cursor-pointer transition-colors"
+                  onClick={() => { setSelected(m); setEditing(false); setConfirmDelete(false); }}
+                >
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      {avatar ? (
+                        <Image src={avatar} alt="" width={32} height={32} className="rounded-full object-cover w-8 h-8 shrink-0" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm shrink-0">
+                          {m.firstName[0]?.toUpperCase()}
                         </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-navy">{m.nickname || `${m.firstName} ${m.lastName}`}</p>
+                        <p className="text-gray-400 text-xs">{m.email}</p>
                       </div>
-                    </td>
-                    <td className="p-3">
-                      <span className="font-mono font-bold text-orange bg-orange/10 px-2 py-0.5 rounded">{m.memberCode}</span>
-                    </td>
-                    <td className="p-3 text-right font-bold text-navy">🎲 {m.dicePoints}</td>
-                    <td className="p-3 text-right text-gray-500 hidden md:table-cell">฿{m.totalSpentTHB}</td>
-                    <td className="p-3 text-right text-gray-500 hidden md:table-cell">{m.visitCount} ครั้ง</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <span className="font-mono font-bold text-orange bg-orange/10 px-2 py-0.5 rounded">{m.memberCode}</span>
+                  </td>
+                  <td className="p-3 text-right font-bold text-navy">🎲 {m.dicePoints}</td>
+                  <td className="p-3 text-right text-gray-500">฿{m.totalSpentTHB}</td>
+                  <td className="p-3 text-right text-gray-500">{m.visitCount} ครั้ง</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* Detail / Edit modal */}
@@ -294,11 +335,10 @@ export default function AdminMembersPage() {
                 {/* Dice points field */}
                 <div>
                   <label className="text-xs font-medium text-navy block mb-1">🎲 แต้มเต๋า</label>
-                  <input
-                    type="number"
-                    min={0}
+                  <NumpadInput
                     value={editForm.dicePointsStr ?? ""}
-                    onChange={e => setEditForm(f => ({ ...f, dicePointsStr: e.target.value }))}
+                    onChange={v => setEditForm(f => ({ ...f, dicePointsStr: String(v) }))}
+                    placeholder="0"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
                 </div>
