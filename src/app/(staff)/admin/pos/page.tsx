@@ -140,23 +140,29 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend }: {
 }
 
 // ---- Package picker ----
-function PackagePicker({ value, onChange, drinkName, drinkPrice, onOpenDrinkPicker, qty, onQtyChange }: {
+function PackagePicker({ value, onChange, drinkName, drinkPrice, onOpenDrinkPicker, qty, onQtyChange, blockedPkgs = new Set() }: {
   value: PkgKey; onChange: (k: PkgKey) => void;
   drinkName: string; drinkPrice: number; onOpenDrinkPicker: () => void;
   qty: number; onQtyChange: (q: number) => void;
+  blockedPkgs?: Set<PkgKey>;
 }) {
   const totalPrice = value === "B" ? PACKAGES.B.price * qty : PACKAGES[value].price + (value === "A" ? drinkPrice : 0);
   const totalHours = value === "B" ? 2 * qty : value === "A" ? 1 : "∞";
   return (
     <div className="space-y-2">
       <div className="flex gap-1">
-        {PKG_KEYS.map((k) => (
-          <button key={k} type="button" onClick={() => onChange(k)}
-            className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold border-2 transition-all ${value === k ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-400 hover:border-orange/40"}`}
-            title={PACKAGES[k].desc}>
-            {k}<span className="block text-[10px] font-normal">{PACKAGES[k].price === 0 ? "ฟรี" : `฿${PACKAGES[k].price}`}</span>
-          </button>
-        ))}
+        {PKG_KEYS.map((k) => {
+          const blocked = blockedPkgs.has(k);
+          return (
+            <button key={k} type="button" onClick={() => !blocked && onChange(k)} disabled={blocked}
+              className={`flex-1 px-2 py-2 rounded-lg text-xs font-bold border-2 transition-all ${
+                blocked ? "border-sand bg-gray-50 text-gray-300 cursor-not-allowed opacity-50" :
+                value === k ? "border-orange bg-orange/10 text-navy" : "border-sand text-gray-400 hover:border-orange/40"}`}
+              title={blocked ? "ไม่รับออเดอร์ตอนนี้" : PACKAGES[k].desc}>
+              {k}<span className="block text-[10px] font-normal">{blocked ? "ปิด" : PACKAGES[k].price === 0 ? "ฟรี" : `฿${PACKAGES[k].price}`}</span>
+            </button>
+          );
+        })}
       </div>
       {(value === "A" || value === "C") && (
         <button type="button" onClick={onOpenDrinkPicker}
@@ -341,6 +347,7 @@ export default function AdminTimePage() {
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [allMenuItems, setAllMenuItems] = useState<DrinkItem[]>([]);
   const [gametimeItems, setGametimeItems] = useState<DrinkItem[]>([]);
+  const [allGametimeItems, setAllGametimeItems] = useState<DrinkItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   // new-bill flow: step 0=dashboard, 1=bill, 2=players, 3=method, 4=QR+slip
@@ -416,7 +423,9 @@ export default function AdminTimePage() {
     const menu = Array.isArray(m) ? (m as DrinkItem[]) : [];
     setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category) && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
     setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
-    setGametimeItems(menu.filter((item) => item.category === "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+    const allGt = menu.filter((item) => item.category === "gametime" && item.isAvailable);
+    setAllGametimeItems(allGt);
+    setGametimeItems(allGt.filter((item) => isWithinSellHours(item.sellStartTime, item.sellEndTime)));
     setLoading(false);
   }, []);
 
@@ -777,6 +786,15 @@ export default function AdminTimePage() {
     setEditBill(null); load();
   }
 
+  // Packages whose gametime menu item exists but is currently outside sell hours
+  const blockedPkgKeys = new Set(
+    (["A", "B", "C", "D"] as PkgKey[]).filter((k) => {
+      const exists = allGametimeItems.some((g) => g.nameEn === `gametime-${k}`);
+      const available = gametimeItems.some((g) => g.nameEn === `gametime-${k}`);
+      return exists && !available;
+    })
+  );
+
   // ---- Player row shared render ----
   function renderPlayerRow(p: PlayerDraft, i: number, isAdd: boolean) {
     const allPlayers = isAdd ? addPlayers : players;
@@ -801,7 +819,8 @@ export default function AdminTimePage() {
             onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
             drinkName={p.drinkName} drinkPrice={p.drinkPrice}
             onOpenDrinkPicker={() => openPickerList({ list: ctxList as "players" | "addPlayers", idx: i })}
-            qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))} />
+            qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))}
+            blockedPkgs={blockedPkgKeys} />
         </div>
       </SwipeableRow>
     );
@@ -1033,13 +1052,17 @@ export default function AdminTimePage() {
         <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
           <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
           <div className="space-y-2">
-            {(["A", "B", "D"] as PkgKey[]).map((key) => (
-              <button key={key} onClick={() => { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); }}
-                className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
-                <p className="font-bold text-navy text-sm">{PACKAGES[key].label}</p>
-                <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
-              </button>
-            ))}
+            {(["A", "B", "D"] as PkgKey[]).map((key) => {
+              const blocked = blockedPkgKeys.has(key);
+              return (
+                <button key={key} disabled={blocked}
+                  onClick={() => { if (!blocked) { setExtendPkg(key); setExtendQty(1); setExtendDrinkName(""); setExtendDrinkPrice(0); setExtendDrinkMenuItemId(null); } }}
+                  className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${blocked ? "border-sand opacity-40 cursor-not-allowed" : extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
+                  <p className="font-bold text-navy text-sm">{PACKAGES[key].label} {blocked ? "— ปิดรับออเดอร์ตอนนี้" : ""}</p>
+                  <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
+                </button>
+              );
+            })}
           </div>
 
           {(extendPkg === "A" || extendPkg === "D") && (
