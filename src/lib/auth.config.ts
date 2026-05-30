@@ -3,7 +3,7 @@ import type { NextAuthConfig } from "next-auth";
 export const authConfig: NextAuthConfig = {
   secret: process.env.NEXTAUTH_SECRET ?? "dice-shop-dev-secret-change-in-prod",
   trustHost: true,
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 }, // 30 days
   pages: {
     signIn: "/login",
   },

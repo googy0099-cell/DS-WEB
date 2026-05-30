@@ -68,13 +68,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           token.picture = user.image ?? null;
         }
       }
-      // Subsequent requests — always sync role from DB so changes take effect immediately
+      // Subsequent requests — sync role from DB so role changes take effect immediately
+      // Wrapped in try/catch: a DB error must NOT kill the session
       if (!user && token.id) {
-        const fresh = await db.user.findUnique({
-          where: { id: parseInt(token.id as string) },
-          select: { role: true },
-        });
-        if (fresh) token.role = fresh.role;
+        try {
+          const fresh = await db.user.findUnique({
+            where: { id: parseInt(token.id as string) },
+            select: { role: true },
+          });
+          if (fresh) token.role = fresh.role;
+        } catch {
+          // DB unreachable — keep existing token role, do not invalidate session
+        }
       }
       return token;
     },
