@@ -45,9 +45,10 @@ function getBangkokHHMM(): string {
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { orderName, userId, items, note, source } = body as {
+  const { orderName, userId, items, note, source, billId } = body as {
     orderName: string;
     userId?: number | null;
+    billId?: number | null;
     items: {
       menuItemId: number;
       quantity: number;
@@ -140,10 +141,19 @@ export async function POST(req: NextRequest) {
 
   const totalTHB = newTotal;
 
+  // Resolve tableId from bill if provided
+  let resolvedTableId: number | null = null;
+  if (billId) {
+    const bill = await db.bill.findUnique({ where: { id: billId, status: "ACTIVE" }, select: { tableId: true } });
+    resolvedTableId = bill?.tableId ?? null;
+  }
+
   const order = await db.order.create({
     data: {
       orderName: finalName,
       userId: userId ?? null,
+      billId: billId ?? null,
+      tableId: resolvedTableId,
       totalTHB,
       note: note || null,
       status: isCashier ? "CONFIRMED" : "PENDING",
@@ -183,7 +193,8 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   if (!isCashier) {
-    const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
+    const billTag = billId ? ` [ตี้ ${(await db.bill.findUnique({ where: { id: billId }, select: { name: true } }))?.name ?? ""}]` : "";
+    const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}${billTag}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
     await Promise.allSettled([
       sendTelegramNotify(lineMsg),
       sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),

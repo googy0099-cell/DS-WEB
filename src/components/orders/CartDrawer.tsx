@@ -7,11 +7,15 @@ import { useSession } from "next-auth/react";
 import ThaiPrice from "@/components/shared/ThaiPrice";
 import { useOrderStore } from "@/store/orderStore";
 
+type PublicBill = { id: number; name: string; tableNumber: number };
+
 export default function CartDrawer() {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [nameInput, setNameInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bills, setBills] = useState<PublicBill[]>([]);
+  const [selectedBillId, setSelectedBillId] = useState<number | "">("");
   const { data: session } = useSession();
   const { cart, total, removeItem, clearCart, setOrderName, setUserId } = useOrderStore();
   const router = useRouter();
@@ -20,7 +24,6 @@ export default function CartDrawer() {
   useEffect(() => {
     if (session?.user) {
       setUserId(parseInt(session.user.id));
-      // ตั้งค่า default name สำหรับ logged-in user ถ้ายังไม่ได้พิมพ์
       if (!nameInput) {
         const defaultName = `${session.user.username} (${session.user.memberCode})`;
         setNameInput(defaultName);
@@ -28,6 +31,12 @@ export default function CartDrawer() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
+
+  useEffect(() => {
+    if (open) {
+      fetch("/api/pos/bills/public").then((r) => r.json()).then(setBills).catch(() => setBills([]));
+    }
+  }, [open]);
 
   async function submitOrder() {
     const finalName = nameInput.trim() || (session?.user ? `${session.user.username} (${session.user.memberCode})` : "");
@@ -45,6 +54,7 @@ export default function CartDrawer() {
           orderName: finalName,
           userId: session?.user ? parseInt(session.user.id) : null,
           note,
+          billId: selectedBillId || null,
           items: cart.map((c) => ({
             menuItemId: c.menuItemId,
             quantity: c.quantity,
@@ -104,17 +114,34 @@ export default function CartDrawer() {
         </div>
 
         <div className="p-4 flex-1 overflow-y-auto space-y-3">
-          <div className="bg-sand/40 rounded-xl p-3">
-            <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
-            <input
-              type="text"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              placeholder={session?.user ? `${session.user.username} (${session.user.memberCode})` : "กรอกชื่อของคุณ"}
-              className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
-            />
-            {session?.user && (
-              <p className="text-[10px] text-gray-400 mt-1">login แล้ว — แก้ชื่อได้ตามต้องการ</p>
+          <div className="bg-sand/40 rounded-xl p-3 space-y-2">
+            <div>
+              <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder={session?.user ? `${session.user.username} (${session.user.memberCode})` : "กรอกชื่อของคุณ"}
+                className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
+              />
+              {session?.user && (
+                <p className="text-[10px] text-gray-400 mt-1">login แล้ว — แก้ชื่อได้ตามต้องการ</p>
+              )}
+            </div>
+            {bills.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-navy mb-1">เพิ่มเข้าตี้ (ถ้ามี)</p>
+                <select
+                  value={selectedBillId}
+                  onChange={(e) => setSelectedBillId(e.target.value ? Number(e.target.value) : "")}
+                  className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
+                >
+                  <option value="">— ไม่ระบุตี้ —</option>
+                  {bills.map((b) => (
+                    <option key={b.id} value={b.id}>โต๊ะ {b.tableNumber} — {b.name}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
 
