@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { PACKAGES, type PackageKey } from "@/app/api/pos/sessions/route";
-import { generatePromptPayQR } from "@/lib/promptpay";
 
-type PlayerInput = { nameOrCode?: string; packageType: PackageKey; drinkName?: string; drinkPrice?: number; qty?: number };
+type PlayerInput = { nameOrCode?: string };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,17 +16,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "ต้องมีผู้เล่นอย่างน้อย 1 คน" }, { status: 400 });
   }
 
-  // Find current player count in this bill (so labels continue)
   const existingCount = await db.playerSession.count({ where: { billId } });
 
-  let total = 0;
   const createdSessions: { id: number; nickname: string }[] = [];
   for (let i = 0; i < players.length; i++) {
     const p = players[i];
-    const pkg = PACKAGES[p.packageType];
-    if (!pkg) return NextResponse.json({ error: "แพ็กเกจไม่ถูกต้อง" }, { status: 400 });
-
-    const qty = p.packageType === "B" ? Math.max(1, p.qty ?? 1) : 1;
     const raw = p.nameOrCode?.trim() ?? "";
     let userId: number | null = null;
     let nickname = raw || `Player ${existingCount + i + 1}`;
@@ -44,38 +36,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
-    const drinkNote = p.drinkName?.trim();
-    if (drinkNote) nickname = `${nickname} (${drinkNote})`;
-
-    const drinkCharge = p.packageType === "A" ? Math.max(0, p.drinkPrice ?? 0) : 0;
-    const price = pkg.price * qty + drinkCharge;
-    const timeSeconds = pkg.timeSeconds * qty;
-
     const created = await db.playerSession.create({
       data: {
         tableId: bill.tableId,
         billId,
         nickname,
-        packageType: p.packageType,
-        packagePrice: price,
-        timeRemaining: timeSeconds,
+        packageType: "MANUAL",
+        packagePrice: 0,
+        timeRemaining: 0,
         userId,
       },
     });
     createdSessions.push({ id: created.id, nickname });
-    total += price;
   }
 
-  const config = await db.paymentConfig.findUnique({ where: { id: 1 } });
-  const promptPayId = config?.promptPayId ?? process.env.PROMPTPAY_ID ?? "";
-  const qrDataUrl = total > 0 && promptPayId
-    ? await generatePromptPayQR(total, promptPayId)
-    : (config?.qrImageUrl ?? null);
-  return NextResponse.json({
-    totalTHB: total,
-    sessions: createdSessions,
-    qrDataUrl,
-    accountName: config?.accountName ?? "",
-    bankName: config?.bankName ?? "",
-  });
+  return NextResponse.json({ sessions: createdSessions });
 }

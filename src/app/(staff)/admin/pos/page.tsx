@@ -115,9 +115,9 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdit }: {
+function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onEdit }: {
   session: PlayerSession; bill: Bill; prepRemaining: number;
-  onCheckout: (id: number) => void; onExtend: (session: PlayerSession, bill: Bill) => void;
+  onCheckout: (id: number) => void; onEditTime: (session: PlayerSession) => void;
   onEdit: (session: PlayerSession) => void;
 }) {
   const prep = useCountdown(prepRemaining);
@@ -145,7 +145,7 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdi
       }
     }
   }, [remaining, isAllDay, inPrep, session.nickname]);
-  const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? 3600;
+  const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? (session.timeRemaining || 3600);
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
 
   return (
@@ -187,14 +187,12 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdi
         </div>
       )}
       <div className="flex gap-2 pt-1">
-        {!isAllDay && (
-          <button
-            onClick={() => onExtend(session, bill)}
-            className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
-          >
-            ⏱️ ต่อเวลา
-          </button>
-        )}
+        <button
+          onClick={() => onEditTime(session)}
+          className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
+        >
+          ⏱️ แก้ไขเวลา
+        </button>
         <button onClick={() => onCheckout(session.id)}
           className="flex-1 text-xs bg-orange hover:bg-orange/80 text-white font-bold py-2 rounded-xl transition-colors">ปิด</button>
       </div>
@@ -522,6 +520,46 @@ export default function AdminTimePage() {
     setEditingSession(null);
   }
 
+  // edit time modal
+  const [editTimeTarget, setEditTimeTarget] = useState<{ type: "session"; session: PlayerSession } | { type: "bill"; bill: Bill } | null>(null);
+  const [editTimeHours, setEditTimeHours] = useState("1");
+  const [editTimeMinutes, setEditTimeMinutes] = useState("0");
+  const [editTimeSaving, setEditTimeSaving] = useState(false);
+
+  function openEditTimeSession(session: PlayerSession) {
+    const h = Math.floor(session.timeRemaining / 3600);
+    const m = Math.floor((session.timeRemaining % 3600) / 60);
+    setEditTimeHours(String(h));
+    setEditTimeMinutes(String(m));
+    setEditTimeTarget({ type: "session", session });
+  }
+
+  function openEditTimeBill(bill: Bill) {
+    setEditTimeHours("1");
+    setEditTimeMinutes("0");
+    setEditTimeTarget({ type: "bill", bill });
+  }
+
+  async function saveEditTime() {
+    if (!editTimeTarget) return;
+    const seconds = (parseInt(editTimeHours) || 0) * 3600 + (parseInt(editTimeMinutes) || 0) * 60;
+    setEditTimeSaving(true);
+    if (editTimeTarget.type === "session") {
+      await fetch(`/api/pos/sessions/${editTimeTarget.session.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setSeconds: seconds }),
+      });
+    } else {
+      await fetch(`/api/pos/bills/${editTimeTarget.bill.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ setTimeAll: seconds }),
+      });
+    }
+    setEditTimeSaving(false);
+    setEditTimeTarget(null);
+    load();
+  }
+
   // cash amount input modal
   const [cashInputOpen, setCashInputOpen] = useState(false);
   const [cashInputStr, setCashInputStr] = useState("");
@@ -704,7 +742,7 @@ export default function AdminTimePage() {
   async function createSessions(billId: number, draftPlayers: PlayerDraft[]): Promise<number[] | null> {
     const res = await fetch(`/api/pos/bills/${billId}/players`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
+      body: JSON.stringify({ players: draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode })) }),
     });
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return null; }
     const data = await res.json();
@@ -714,8 +752,6 @@ export default function AdminTimePage() {
   // ยืนยันผู้เล่น → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
   function confirmPlayers() {
     if (!draftBillId) return;
-    const needsDrink = players.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
-    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
     setStep(3);
   }
 
@@ -776,12 +812,13 @@ export default function AdminTimePage() {
     setAddBillPlayerTotal(0); setAddBillSlipFile(null); setAddBillSlipPreview(null);
   }
 
-  // ยืนยันผู้เล่น (เพิ่มในบิล) → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
-  function submitAddPlayers() {
+  // ยืนยันผู้เล่น (เพิ่มในบิล) → สร้าง sessions ทันที
+  async function submitAddPlayers() {
     if (!addToBill) return;
-    const needsDrink = addPlayers.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
-    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
-    setAddBillStep(1);
+    setSaving(true);
+    await createSessions(addToBill.id, addPlayers);
+    setSaving(false);
+    closeAddBillFlow();
   }
 
   function addBillGrandTotal() {
@@ -1070,12 +1107,6 @@ export default function AdminTimePage() {
               </button>
             )}
           </div>
-          <PackagePicker value={p.pkg}
-            onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
-            drinkName={p.drinkName} drinkPrice={p.drinkPrice}
-            onOpenDrinkPicker={() => openPickerList({ list: ctxList as "players" | "addPlayers", idx: i })}
-            qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))}
-            blockedPkgs={blockedPkgKeys} />
         </div>
       </SwipeableRow>
     );
@@ -1217,7 +1248,7 @@ export default function AdminTimePage() {
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
                 {bill.sessions.length > 0 && (
-                  <button onClick={() => openExtendAll(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ ต่อยกตี้</button>
+                  <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
                 )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
@@ -1245,7 +1276,7 @@ export default function AdminTimePage() {
               );
             })}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} onEdit={openEditSession} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onEditTime={openEditTimeSession} onEdit={openEditSession} />)}
             </div>
           </div>
         );
@@ -1305,23 +1336,15 @@ export default function AdminTimePage() {
 
       {/* Add players to existing bill */}
       {addToBill && (
-        <Modal onClose={closeAddBillFlow} title={addBillStep === 0 ? `เพิ่มผู้เล่น — ${addToBill.name}` : addBillStep === 1 ? "ชำระเงิน" : "สแกน QR"} wide>
-          {addBillStep === 0 && (
-            <>
-              <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
-                {addPlayers.map((p, i) => renderPlayerRow(p, i, true))}
-                <button onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
-                  className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">+ อีกคน</button>
-                {renderExtraSection(addExtraItems, setAddExtraItems, "addExtraItems", addPlayers)}
-              </div>
-              <button onClick={submitAddPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
-                {saving ? "..." : "ยืนยันผู้เล่น →"}
-              </button>
-            </>
-          )}
-          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0), chooseAddBillDefer)}
-          {addBillStep === 2 && addBillQr && renderQRStep(addBillQr, addBillGrandTotal(), addBillSlipFile, addBillSlipPreview, addBillSlipUploading, addBillSlipInputRef,
-            (f) => { setAddBillSlipFile(f); setAddBillSlipPreview(URL.createObjectURL(f)); }, submitAddBillSlip, () => setAddBillStep(1))}
+        <Modal onClose={closeAddBillFlow} title={`เพิ่มผู้เล่น — ${addToBill.name}`} wide>
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+            {addPlayers.map((p, i) => renderPlayerRow(p, i, true))}
+            <button onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
+              className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">+ อีกคน</button>
+          </div>
+          <button onClick={submitAddPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
+            {saving ? "..." : "เพิ่มผู้เล่น"}
+          </button>
         </Modal>
       )}
 
@@ -1605,6 +1628,46 @@ export default function AdminTimePage() {
               <button onClick={saveEditSession} disabled={editSaving || !editNickname.trim()}
                 className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                 {editSaving ? "..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit time modal */}
+      {editTimeTarget && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg text-center">
+              {editTimeTarget.type === "session"
+                ? `⏱️ แก้ไขเวลา — ${editTimeTarget.session.nickname}`
+                : `⏱️ แก้ไขเวลายกตี้ — ${editTimeTarget.bill.name}`}
+            </h3>
+            <div className="flex items-center gap-3 justify-center">
+              <div className="text-center">
+                <label className="text-xs text-gray-400 block mb-1">ชั่วโมง</label>
+                <input
+                  type="number" min="0" max="24" value={editTimeHours}
+                  onChange={(e) => setEditTimeHours(e.target.value)}
+                  className="w-20 text-center text-2xl font-bold text-navy border-2 border-sand rounded-xl py-2 focus:border-orange focus:outline-none"
+                />
+              </div>
+              <span className="text-2xl font-bold text-gray-300 mt-4">:</span>
+              <div className="text-center">
+                <label className="text-xs text-gray-400 block mb-1">นาที</label>
+                <input
+                  type="number" min="0" max="59" value={editTimeMinutes}
+                  onChange={(e) => setEditTimeMinutes(e.target.value)}
+                  className="w-20 text-center text-2xl font-bold text-navy border-2 border-sand rounded-xl py-2 focus:border-orange focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditTimeTarget(null)}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+              <button onClick={saveEditTime} disabled={editTimeSaving}
+                className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                {editTimeSaving ? "..." : "บันทึก"}
               </button>
             </div>
           </div>

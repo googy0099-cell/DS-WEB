@@ -5,7 +5,7 @@ import { remainingSeconds } from "@/lib/pos-time";
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const billId = Number(id);
-  const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string };
+  const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string; setTimeAll?: number };
 
   const bill = await db.bill.findUnique({
     where: { id: billId },
@@ -28,6 +28,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await db.bill.update({ where: { id: billId }, data: { tableId: body.tableId } });
     await db.playerSession.updateMany({ where: { billId }, data: { tableId: body.tableId } });
     await db.table.update({ where: { id: body.tableId }, data: { isOccupied: true } });
+  }
+
+  // Set time for all active sessions (staff manual override)
+  if (body.setTimeAll !== undefined) {
+    await db.playerSession.updateMany({
+      where: { billId, status: "ACTIVE" },
+      data: { timeRemaining: body.setTimeAll },
+    });
   }
 
   // Close bill → close all sessions, credit member hours, free table

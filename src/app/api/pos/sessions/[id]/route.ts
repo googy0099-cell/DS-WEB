@@ -5,7 +5,7 @@ import { remainingSeconds } from "@/lib/pos-time";
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const body = (await req.json()) as {
-    status?: string; addSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number;
+    status?: string; addSeconds?: number; setSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number;
     nickname?: string; userId?: number | null;
   };
 
@@ -64,7 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ...(body.status ? { status: body.status } : {}),
       ...(body.upgradeToAllDay
         ? { packageType: "C", timeRemaining: 86400 }
-        : { timeRemaining: body.addSeconds !== undefined ? current + body.addSeconds : current }
+        : body.setSeconds !== undefined
+          ? { timeRemaining: body.setSeconds }
+          : { timeRemaining: body.addSeconds !== undefined ? current + body.addSeconds : current }
       ),
       ...(body.addExtraSpend && body.addExtraSpend > 0 ? { packagePrice: { increment: body.addExtraSpend } } : {}),
     },
