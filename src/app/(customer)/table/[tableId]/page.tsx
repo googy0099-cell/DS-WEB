@@ -7,12 +7,31 @@ import CartDrawer from "@/components/orders/CartDrawer";
 import type { MenuItemType } from "@/types";
 import Image from "next/image";
 
-const CATEGORY_LABELS: Record<string, string> = {
-  food: "🍛 อาหาร",
-  drink: "🥤 เครื่องดื่ม",
-  snack: "🍟 ของทานเล่น",
-  dessert: "🍦 ของหวาน",
-};
+type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean };
+
+const DEFAULT_CATEGORIES: MenuCategory[] = [
+  { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true },
+  { id: "coffee", label: "Coffee", icon: "☕", isActive: true },
+  { id: "soda", label: "Soda Zaa", icon: "🥤", isActive: true },
+  { id: "drink", label: "เครื่องดื่ม", icon: "🧊", isActive: true },
+  { id: "food", label: "อาหารจานเดียว", icon: "🍜", isActive: true },
+  { id: "snack", label: "ของทานเล่น", icon: "🍿", isActive: true },
+  { id: "dessert", label: "ของหวาน", icon: "🍮", isActive: true },
+];
+
+function parseCategories(saved: string | undefined): MenuCategory[] {
+  try {
+    const custom: MenuCategory[] = saved ? JSON.parse(saved) : [];
+    const merged = DEFAULT_CATEGORIES.map((b) => {
+      const found = custom.find((c) => c.id === b.id);
+      return found ? { ...b, isActive: found.isActive, staffOnly: found.staffOnly ?? false } : { ...b, staffOnly: false };
+    });
+    custom
+      .filter((c) => !DEFAULT_CATEGORIES.find((b) => b.id === c.id) && c.isActive && !c.staffOnly)
+      .forEach((c) => merged.push({ ...c, staffOnly: c.staffOnly ?? false }));
+    return merged.filter((c) => !c.staffOnly);
+  } catch { return DEFAULT_CATEGORIES; }
+}
 
 function getBangkokHHMM(): string {
   const now = new Date();
@@ -30,20 +49,25 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const { tableId: tableIdParam } = use(params);
   const tableId = parseInt(tableIdParam);
   const [menu, setMenu] = useState<MenuItemType[]>([]);
-  const [activeCategory, setActiveCategory] = useState<string>("food");
+  const [categories, setCategories] = useState<MenuCategory[]>(DEFAULT_CATEGORIES);
+  const [activeCategory, setActiveCategory] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/menu")
-      .then((r) => r.json())
-      .then((data) => {
-        setMenu(data);
-        setLoading(false);
-      });
+    Promise.all([
+      fetch("/api/menu").then((r) => r.json()),
+      fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
+    ]).then(([menuData, settings]) => {
+      setMenu(menuData);
+      const cats = parseCategories(settings?.menu_categories);
+      setCategories(cats);
+      if (cats.length > 0) setActiveCategory(cats[0].id);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [tableId]);
 
-  const availableMenu = menu.filter((m) => m.isAvailable && isWithinSellHours(m.sellStartTime, m.sellEndTime));
-  const categories = [...new Set(availableMenu.map((m) => m.category))];
+  const availableMenu = menu.filter((m) => m.isAvailable && m.category !== "gametime" && isWithinSellHours(m.sellStartTime, m.sellEndTime));
+  const visibleCategories = categories.filter((c) => c.isActive && availableMenu.some((m) => m.category === c.id));
   const filtered = availableMenu.filter((m) => m.category === activeCategory);
 
   return (
@@ -63,17 +87,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       {/* Category tabs */}
       <div className="sticky top-0 bg-cream border-b border-sand z-30">
         <div className="flex gap-2 px-4 py-2 overflow-x-auto no-scrollbar">
-          {categories.map((cat) => (
+          {visibleCategories.map((cat) => (
             <button
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.id)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                activeCategory === cat
+                activeCategory === cat.id
                   ? "bg-navy text-cream"
                   : "bg-sand text-navy"
               }`}
             >
-              {CATEGORY_LABELS[cat] ?? cat}
+              {cat.icon} {cat.label}
             </button>
           ))}
         </div>

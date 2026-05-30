@@ -34,13 +34,15 @@ const DEFAULT_CATEGORIES = [
 
 function parseSavedCategories(saved: string | undefined) {
   try {
-    const custom: { id: string; label: string; icon: string; isActive: boolean }[] = saved ? JSON.parse(saved) : [];
+    const custom: { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean }[] = saved ? JSON.parse(saved) : [];
     const merged = DEFAULT_CATEGORIES.map((b) => {
       const found = custom.find((c) => c.id === b.id);
-      return found ? { ...b, isActive: found.isActive } : b;
+      return found ? { ...b, isActive: found.isActive, staffOnly: found.staffOnly ?? false } : { ...b, staffOnly: false };
     });
-    custom.filter((c) => !DEFAULT_CATEGORIES.find((b) => b.id === c.id) && c.isActive).forEach((c) => merged.push(c));
-    return merged;
+    custom
+      .filter((c) => !DEFAULT_CATEGORIES.find((b) => b.id === c.id) && c.isActive && !c.staffOnly)
+      .forEach((c) => merged.push({ ...c, staffOnly: c.staffOnly ?? false }));
+    return merged.filter((c) => !c.staffOnly);
   } catch { return DEFAULT_CATEGORIES; }
 }
 
