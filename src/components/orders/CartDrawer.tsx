@@ -8,6 +8,7 @@ import ThaiPrice from "@/components/shared/ThaiPrice";
 import { useOrderStore } from "@/store/orderStore";
 
 type PublicBill = { id: number; name: string; tableNumber: number };
+type SessionLink = { id: number; nickname: string } | null;
 
 export default function CartDrawer({ tableId }: { tableId?: number }) {
   const [open, setOpen] = useState(false);
@@ -16,6 +17,7 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
   const [loading, setLoading] = useState(false);
   const [bills, setBills] = useState<PublicBill[]>([]);
   const [selectedBillId, setSelectedBillId] = useState<number | "">("");
+  const [sessionLink, setSessionLink] = useState<SessionLink>(null);
   const { data: session } = useSession();
   const { cart, total, removeItem, clearCart, setOrderName, setUserId } = useOrderStore();
   const router = useRouter();
@@ -44,6 +46,21 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
         .catch(() => setBills([]));
     }
   }, [open, tableId]);
+
+  useEffect(() => {
+    if (!selectedBillId || !session?.user) {
+      setSessionLink(null);
+      return;
+    }
+    fetch(`/api/pos/sessions/lookup?billId=${selectedBillId}&userId=${session.user.id}`)
+      .then((r) => r.json())
+      .then((data: SessionLink) => {
+        setSessionLink(data);
+        if (data?.nickname) setNameInput(data.nickname);
+      })
+      .catch(() => setSessionLink(null));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBillId, session?.user?.id]);
 
   async function submitOrder() {
     const finalName = nameInput.trim() || (session?.user ? `${session.user.username} (${session.user.memberCode})` : "");
@@ -135,9 +152,11 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
                 placeholder={session?.user ? `${session.user.username} (${session.user.memberCode})` : "กรอกชื่อของคุณ"}
                 className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
               />
-              {session?.user && (
+              {sessionLink ? (
+                <p className="text-[10px] text-green-600 mt-1">✅ เชื่อมกับตี้แล้ว — แต้มจะเข้าบัญชีสมาชิก</p>
+              ) : session?.user ? (
                 <p className="text-[10px] text-gray-400 mt-1">login แล้ว — แก้ชื่อได้ตามต้องการ</p>
-              )}
+              ) : null}
             </div>
             {bills.length > 0 && (
               <div>

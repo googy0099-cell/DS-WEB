@@ -148,12 +148,23 @@ export async function POST(req: NextRequest) {
     resolvedTableId = bill?.tableId ?? null;
   }
 
+  // Auto-link to the member's active PlayerSession in this bill
+  let resolvedPlayerSessionId: number | null = null;
+  if (billId && userId) {
+    const ps = await db.playerSession.findFirst({
+      where: { billId, userId, status: "ACTIVE" },
+      select: { id: true },
+    });
+    resolvedPlayerSessionId = ps?.id ?? null;
+  }
+
   const order = await db.order.create({
     data: {
       orderName: finalName,
       userId: userId ?? null,
       billId: billId ?? null,
       tableId: resolvedTableId,
+      playerSessionId: resolvedPlayerSessionId,
       totalTHB,
       note: note || null,
       status: isCashier ? "CONFIRMED" : "PENDING",

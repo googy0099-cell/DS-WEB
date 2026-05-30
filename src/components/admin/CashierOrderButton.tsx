@@ -127,6 +127,7 @@ function ItemDetail({ item, onClose, onAdd }: {
 
 type MemberInfo = { id: number; firstName: string; username: string; memberCode: string; dicePoints: number };
 type PublicBill = { id: number; name: string; tableNumber: number };
+type SessionLink = { id: number; nickname: string } | null;
 
 export default function CashierOrderButton({ onCreated }: { onCreated?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -141,6 +142,7 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   // Bill selector
   const [bills, setBills] = useState<PublicBill[]>([]);
   const [selectedBillId, setSelectedBillId] = useState<number | "">("");
+  const [sessionLink, setSessionLink] = useState<SessionLink>(null);
 
   // Member code for dice points
   const [memberCode, setMemberCode] = useState("");
@@ -148,6 +150,17 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   const [memberError, setMemberError] = useState("");
   const [memberLoading, setMemberLoading] = useState(false);
   const memberTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!selectedBillId || !memberInfo) { setSessionLink(null); return; }
+    fetch(`/api/pos/sessions/lookup?billId=${selectedBillId}&userId=${memberInfo.id}`)
+      .then((r) => r.json())
+      .then((data: SessionLink) => {
+        setSessionLink(data);
+        if (data?.nickname) setOrderName(data.nickname);
+      })
+      .catch(() => setSessionLink(null));
+  }, [selectedBillId, memberInfo]);
 
   const loadMenu = useCallback(async () => {
     const res = await fetch("/api/menu").then((r) => r.json()).catch(() => []);
@@ -166,7 +179,7 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   function closeModal() {
     setOpen(false); setCart([]); setOrderName(""); setOrderNote(""); setSearch("");
     setMemberCode(""); setMemberInfo(null); setMemberError("");
-    setBills([]); setSelectedBillId("");
+    setBills([]); setSelectedBillId(""); setSessionLink(null);
   }
 
   function onMemberCodeChange(code: string) {
@@ -300,6 +313,9 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
                     <div>
                       <p className="text-xs text-green-700 font-semibold">✅ {memberInfo.firstName} (@{memberInfo.username})</p>
                       <p className="text-[11px] text-gray-400">{memberInfo.memberCode} · 🎲 {memberInfo.dicePoints} แต้ม</p>
+                      {sessionLink && (
+                        <p className="text-[11px] text-blue-600 mt-0.5">🔗 เชื่อมกับตี้แล้ว — ออเดอร์จะลิงค์กับ session นี้</p>
+                      )}
                     </div>
                     <button onClick={() => { setMemberInfo(null); setMemberCode(""); }} className="text-gray-300 hover:text-red-400 text-lg ml-2">×</button>
                   </div>

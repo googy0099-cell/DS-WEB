@@ -53,8 +53,8 @@ const PACKAGES: Record<string, { label: string; price: number; timeSeconds: numb
   D: { label: "Package D", price: 80, timeSeconds: 86400, desc: "80฿ — อัพเกรดเป็นเหมาวัน" },
 };
 const DRINK_CATS = ["coffee", "milktea", "soda"];
-const PKG_KEYS = ["A", "B", "C"] as const;
-type PkgKey = (typeof PKG_KEYS)[number] | "D";
+const PKG_KEYS = ["B", "C"] as const;
+type PkgKey = (typeof PKG_KEYS)[number] | "A" | "D";
 
 // ---- Timer Hooks ----
 function useCountdown(initial: number) {
@@ -252,7 +252,7 @@ function PackagePicker({ value, onChange, drinkName, drinkPrice, onOpenDrinkPick
 }
 
 type PlayerDraft = { nameOrCode: string; pkg: PkgKey; drinkName: string; drinkPrice: number; drinkMenuItemId: number | null; qty: number };
-const BLANK_DRAFT: PlayerDraft = { nameOrCode: "", pkg: "A", drinkName: "", drinkPrice: 0, drinkMenuItemId: null, qty: 1 };
+const BLANK_DRAFT: PlayerDraft = { nameOrCode: "", pkg: "B", drinkName: "", drinkPrice: 0, drinkMenuItemId: null, qty: 1 };
 
 // ---- Item Detail Picker (shared for drink + extra items) ----
 function ItemDetailPicker({ item, onClose, onConfirm, confirmLabel }: {
@@ -687,10 +687,8 @@ export default function AdminTimePage() {
     });
     setSaving(false);
     if (!res.ok) { window.alert("เปิดตี้ไม่สำเร็จ"); return; }
-    const bill = await res.json();
-    setDraftBillId(bill.id);
-    setPlayers([{ ...BLANK_DRAFT }]);
-    setStep(2);
+    setStep(0);
+    load();
   }
 
   // Calculate player total client-side (mirrors server logic in /api/pos/bills/[id]/players)
@@ -1268,7 +1266,7 @@ export default function AdminTimePage() {
           </Field>
           <button onClick={confirmOpenBill} disabled={saving || !billName.trim() || !billTableId}
             className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
-            {saving ? "..." : "ยืนยันการเปิดตี้ →"}
+            {saving ? "..." : "เปิดตี้"}
           </button>
         </Modal>
       )}
@@ -1346,7 +1344,7 @@ export default function AdminTimePage() {
         <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
           <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
           <div className="space-y-2">
-            {(["A", "B", "D"] as PkgKey[]).map((key) => {
+            {(["B", "D"] as PkgKey[]).map((key) => {
               const blocked = blockedPkgKeys.has(key);
               return (
                 <button key={key} disabled={blocked}
