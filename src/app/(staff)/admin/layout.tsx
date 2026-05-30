@@ -20,7 +20,6 @@ const STAFF_NAV = [
   { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
   { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
   { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
-  { href: "/admin/dice-redeem", label: "แลกแต้ม", icon: "🎲" },
   { href: "/admin/stock", label: "สต็อก", icon: "📦" },
   { href: "/admin/sop", label: "สูตรอาหาร", icon: "📋" },
 ];
