@@ -9,7 +9,7 @@ import { useOrderStore } from "@/store/orderStore";
 
 type PublicBill = { id: number; name: string; tableNumber: number };
 
-export default function CartDrawer() {
+export default function CartDrawer({ tableId }: { tableId?: number }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -34,9 +34,16 @@ export default function CartDrawer() {
 
   useEffect(() => {
     if (open) {
-      fetch("/api/pos/bills/public").then((r) => r.json()).then(setBills).catch(() => setBills([]));
+      const url = tableId ? `/api/pos/bills/public?tableId=${tableId}` : "/api/pos/bills/public";
+      fetch(url)
+        .then((r) => r.json())
+        .then((data: PublicBill[]) => {
+          setBills(data);
+          if (data.length === 1) setSelectedBillId(data[0].id);
+        })
+        .catch(() => setBills([]));
     }
-  }, [open]);
+  }, [open, tableId]);
 
   async function submitOrder() {
     const finalName = nameInput.trim() || (session?.user ? `${session.user.username} (${session.user.memberCode})` : "");

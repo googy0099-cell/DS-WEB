@@ -90,7 +90,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         )}
       </div>
 
-      <CartDrawer />
+      <CartDrawer tableId={tableId} />
     </div>
   );
 }
