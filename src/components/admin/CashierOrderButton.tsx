@@ -126,6 +126,7 @@ function ItemDetail({ item, onClose, onAdd }: {
 }
 
 type MemberInfo = { id: number; firstName: string; username: string; memberCode: string; dicePoints: number };
+type PublicBill = { id: number; name: string; tableNumber: number };
 
 export default function CashierOrderButton({ onCreated }: { onCreated?: () => void }) {
   const [open, setOpen] = useState(false);
@@ -136,6 +137,10 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [detailItem, setDetailItem] = useState<MenuItemType | null>(null);
+
+  // Bill selector
+  const [bills, setBills] = useState<PublicBill[]>([]);
+  const [selectedBillId, setSelectedBillId] = useState<number | "">("");
 
   // Member code for dice points
   const [memberCode, setMemberCode] = useState("");
@@ -150,10 +155,18 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
     setMenuItems(items.filter((m) => m.isAvailable && m.category !== "gametime"));
   }, []);
 
-  function openModal() { setOpen(true); loadMenu(); }
+  function openModal() {
+    setOpen(true);
+    loadMenu();
+    fetch("/api/pos/bills/public").then((r) => r.json()).then((data: PublicBill[]) => {
+      setBills(data);
+      if (data.length === 1) setSelectedBillId(data[0].id);
+    }).catch(() => setBills([]));
+  }
   function closeModal() {
     setOpen(false); setCart([]); setOrderName(""); setOrderNote(""); setSearch("");
     setMemberCode(""); setMemberInfo(null); setMemberError("");
+    setBills([]); setSelectedBillId("");
   }
 
   function onMemberCodeChange(code: string) {
@@ -200,6 +213,10 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
 
   async function submit() {
     if (!orderName.trim() || cart.length === 0) return;
+    if (bills.length > 0 && !selectedBillId) {
+      alert("กรุณาเลือกตี้ก่อนส่งออเดอร์");
+      return;
+    }
     setSaving(true);
     await fetch("/api/orders", {
       method: "POST",
@@ -209,6 +226,7 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
         note: orderNote.trim() || undefined,
         source: "cashier",
         userId: memberInfo?.id ?? null,
+        billId: selectedBillId || null,
         items: cart.map((c) => ({
           menuItemId: c.menuItemId,
           quantity: c.qty,
@@ -246,6 +264,26 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
                 <input value={orderName} onChange={(e) => setOrderName(e.target.value)}
                   placeholder="เช่น คุณสมชาย หรือ โต๊ะ 3"
                   className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange" />
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-navy block mb-1">
+                  เลือกตี้ {bills.length > 0 && <span className="text-red-500">*</span>}
+                </label>
+                {bills.length === 0 ? (
+                  <p className="text-xs text-gray-400 bg-sand/30 rounded-xl px-3 py-2.5">ไม่มีตี้ที่เปิดอยู่ในขณะนี้</p>
+                ) : (
+                  <select
+                    value={selectedBillId}
+                    onChange={(e) => setSelectedBillId(e.target.value ? Number(e.target.value) : "")}
+                    className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange ${!selectedBillId ? "border-red-300" : "border-sand"}`}
+                  >
+                    <option value="">— กรุณาเลือกตี้ —</option>
+                    {bills.map((b) => (
+                      <option key={b.id} value={b.id}>โต๊ะ {b.tableNumber} — {b.name}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>
@@ -315,7 +353,7 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
                 className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
               <div className="flex items-center justify-between">
                 <span className="font-bold text-navy">รวม ฿{total.toLocaleString()}</span>
-                <button onClick={submit} disabled={!orderName.trim() || cart.length === 0 || saving}
+                <button onClick={submit} disabled={!orderName.trim() || cart.length === 0 || saving || (bills.length > 0 && !selectedBillId)}
                   className="bg-green-600 text-white font-bold px-6 py-2.5 rounded-xl text-sm disabled:opacity-40">
                   {saving ? "กำลังบันทึก..." : "✅ ส่งออเดอร์"}
                 </button>
