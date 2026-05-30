@@ -11,10 +11,13 @@ type PlayerSession = {
   userId: number | null; user: MemberRef | null;
 };
 type PendingCash = { orderId: number; totalTHB: number; paymentId: number | null; staffNote: string | null };
+type TabOrder = { id: number; orderName: string; totalTHB: number; createdAt: string };
 type Bill = {
   id: number; name: string; color: string; tableId: number; startsAt: string; prepRemaining: number;
   table: { number: number }; sessions: PlayerSession[];
   pendingCash: PendingCash[];
+  tabOrders: TabOrder[];
+  tabTotal: number;
 };
 
 const BILL_COLORS: Record<string, { gradient: string; accent: string }> = {
@@ -559,6 +562,46 @@ export default function AdminTimePage() {
     setEditTimeSaving(false);
     setEditTimeTarget(null);
     load();
+  }
+
+  // tab checkout modal
+  const [tabCheckoutBill, setTabCheckoutBill] = useState<Bill | null>(null);
+  const [tabMemberCode, setTabMemberCode] = useState("");
+  const [tabMember, setTabMember] = useState<MemberRef | null>(null);
+  const [tabMemberError, setTabMemberError] = useState("");
+  const [tabMemberLoading, setTabMemberLoading] = useState(false);
+  const [tabConfirming, setTabConfirming] = useState(false);
+  const [tabDone, setTabDone] = useState<{ total: number; pointsAwarded: number } | null>(null);
+
+  async function lookupTabMember(code: string) {
+    setTabMemberCode(code);
+    setTabMemberError("");
+    if (!code.trim()) { setTabMember(null); return; }
+    setTabMemberLoading(true);
+    const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
+    setTabMemberLoading(false);
+    if (res.ok) { setTabMember(await res.json()); }
+    else { setTabMember(null); setTabMemberError("ไม่พบสมาชิก"); }
+  }
+
+  async function confirmTabCheckout() {
+    if (!tabCheckoutBill) return;
+    setTabConfirming(true);
+    const res = await fetch(`/api/pos/bills/${tabCheckoutBill.id}/tab-checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ memberUserId: tabMember?.id ?? null }),
+    });
+    setTabConfirming(false);
+    if (!res.ok) { window.alert("เกิดข้อผิดพลาด"); return; }
+    const data = await res.json();
+    setTabDone({ total: data.tabTotal, pointsAwarded: data.pointsAwarded });
+    load();
+  }
+
+  function closeTabCheckout() {
+    setTabCheckoutBill(null); setTabMemberCode(""); setTabMember(null);
+    setTabMemberError(""); setTabDone(null);
   }
 
   // cash amount input modal
@@ -1252,6 +1295,12 @@ export default function AdminTimePage() {
                 {bill.sessions.length > 0 && (
                   <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
                 )}
+                {bill.tabTotal > 0 && (
+                  <button onClick={() => { setTabCheckoutBill(bill); setTabMemberCode(""); setTabMember(null); setTabMemberError(""); setTabDone(null); }}
+                    className="bg-amber-400/80 hover:bg-amber-400 text-navy text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                    💳 เช็คเอาท์ ฿{bill.tabTotal}
+                  </button>
+                )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>
@@ -1277,6 +1326,22 @@ export default function AdminTimePage() {
                 </div>
               );
             })}
+            {bill.tabOrders.length > 0 && (
+              <div className="mb-3 bg-amber-400/15 border border-amber-400/40 rounded-xl px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-amber-200 text-xs font-bold flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    แท็บเปิดอยู่ — {bill.tabOrders.length} ออเดอร์ · รวม ฿{bill.tabTotal}
+                  </p>
+                </div>
+                {bill.tabOrders.map((to) => (
+                  <div key={to.id} className="flex items-center justify-between text-[11px] text-amber-300/80">
+                    <span>{to.orderName}</span>
+                    <span>฿{to.totalTHB}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onEditTime={openEditTimeSession} onEdit={openEditSession} />)}
             </div>
@@ -1731,6 +1796,78 @@ export default function AdminTimePage() {
                 {saving ? "..." : "ยืนยัน"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab Checkout Modal */}
+      {tabCheckoutBill && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            {tabDone ? (
+              <>
+                <div className="text-center py-2">
+                  <div className="text-5xl mb-3">✅</div>
+                  <p className="font-bold text-navy text-xl mb-1">ชำระเงินเรียบร้อย!</p>
+                  <p className="text-gray-400 text-sm">รวมทั้งหมด</p>
+                  <p className="text-3xl font-bold text-orange">฿{tabDone.total.toLocaleString()}</p>
+                  {tabDone.pointsAwarded > 0 && (
+                    <p className="text-sm text-green-600 font-semibold mt-2">🎲 +{tabDone.pointsAwarded} แต้มสมาชิก</p>
+                  )}
+                </div>
+                <button onClick={closeTabCheckout} className="w-full bg-navy text-cream font-bold py-3 rounded-2xl text-sm">ปิด</button>
+              </>
+            ) : (
+              <>
+                <h3 className="font-bold text-navy text-lg">💳 เช็คเอาท์บิล — {tabCheckoutBill.name}</h3>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                  {tabCheckoutBill.tabOrders.map((to) => (
+                    <div key={to.id} className="flex items-center justify-between text-sm">
+                      <span className="text-navy font-medium">{to.orderName}</span>
+                      <span className="font-bold text-orange">฿{to.totalTHB}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-amber-200 pt-2 mt-1 flex items-center justify-between">
+                    <span className="font-bold text-navy">รวมทั้งหมด</span>
+                    <span className="font-bold text-orange text-xl">฿{tabCheckoutBill.tabTotal}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-navy block mb-1">สะสมแต้มสมาชิก? (ไม่บังคับ)</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={tabMemberCode}
+                      onChange={(e) => lookupTabMember(e.target.value.toUpperCase())}
+                      placeholder="DS-XXXX"
+                      className="flex-1 border-2 border-sand rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:border-orange uppercase"
+                    />
+                  </div>
+                  {tabMemberLoading && <p className="text-xs text-gray-400 mt-1">กำลังค้นหา...</p>}
+                  {tabMember && (
+                    <div className="mt-2 bg-green-50 border border-green-200 rounded-xl px-3 py-2 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-green-700 font-semibold">✅ พบสมาชิก</p>
+                        <p className="text-sm font-bold text-navy">{tabMember.firstName} (@{tabMember.username})</p>
+                        <p className="text-xs text-gray-400">{tabMember.memberCode} · จะได้รับ +{Math.floor(tabCheckoutBill.tabTotal / 10)} แต้ม</p>
+                      </div>
+                      <button onClick={() => { setTabMember(null); setTabMemberCode(""); }} className="text-gray-300 hover:text-red-400 text-lg">×</button>
+                    </div>
+                  )}
+                  {tabMemberError && <p className="text-xs text-red-500 mt-1">{tabMemberError}</p>}
+                </div>
+
+                <div className="flex gap-2">
+                  <button onClick={closeTabCheckout} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                  <button onClick={confirmTabCheckout} disabled={tabConfirming}
+                    className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                    {tabConfirming ? "..." : "ยืนยันชำระเงิน ✓"}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

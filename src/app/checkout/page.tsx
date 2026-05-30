@@ -56,7 +56,7 @@ export default async function CheckoutPage({ searchParams }: Props) {
             {order.note && <p className="text-xs text-gray-400 mt-2">หมายเหตุ: {order.note}</p>}
           </div>
 
-          <PaymentSection orderId={order.id} totalTHB={order.totalTHB} orderName={order.orderName} />
+          <PaymentSection orderId={order.id} totalTHB={order.totalTHB} orderName={order.orderName} billId={order.billId} />
 
           <div className="flex gap-3 mt-5">
             <Link href="/menu" className="flex-1 text-center border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">

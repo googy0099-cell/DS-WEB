@@ -28,7 +28,7 @@ type OptionGroup = { id: number; nameTh: string; isRequired: boolean; isActive: 
 type StockItem = { id: number; name: string; unit: string; currentQty: number };
 type Recipe = { id: number; stockItemId: number; qtyUsed: number; size: string; stockItem: StockItem };
 
-export type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; isBuiltin?: boolean };
+export type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; isBuiltin?: boolean; staffOnly?: boolean };
 
 const BUILTIN_CATEGORIES: MenuCategory[] = [
   { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true, isBuiltin: true },
@@ -401,6 +401,13 @@ export default function AdminMenuPage() {
                 <div key={cat.id} className="flex items-center gap-2 p-2 rounded-xl border border-sand">
                   <span className="text-xl w-7 text-center">{cat.icon}</span>
                   <span className={`flex-1 text-sm font-medium ${cat.isActive ? "text-navy" : "text-gray-400 line-through"}`}>{cat.label}</span>
+                  <button
+                    onClick={() => saveCategories(categories.map((c) => c.id === cat.id ? { ...c, staffOnly: !c.staffOnly } : c))}
+                    className={`text-xs px-2 py-1 rounded-lg font-medium border ${cat.staffOnly ? "border-purple-200 text-purple-700 bg-purple-50" : "border-gray-200 text-gray-400"}`}
+                    title="เฉพาะพนักงาน — ลูกค้าจะไม่เห็นหมวดนี้"
+                  >
+                    {cat.staffOnly ? "พนักงาน" : "ทุกคน"}
+                  </button>
                   <button
                     onClick={() => toggleCategoryActive(cat)}
                     className={`text-xs px-2 py-1 rounded-lg font-medium border ${cat.isActive ? "border-green-200 text-green-700 bg-green-50" : "border-gray-200 text-gray-400"}`}

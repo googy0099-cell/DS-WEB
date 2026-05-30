@@ -12,11 +12,12 @@ interface Props {
   orderId: number;
   totalTHB: number;
   orderName: string;
+  billId?: number | null;
 }
 
-type Step = "select" | "qr" | "counter" | "done";
+type Step = "select" | "qr" | "counter" | "tab" | "done";
 
-export default function PaymentSection({ orderId, totalTHB, orderName }: Props) {
+export default function PaymentSection({ orderId, totalTHB, orderName, billId }: Props) {
   const [step, setStep] = useState<Step>("select");
   const [slipFile, setSlipFile] = useState<File | null>(null);
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
@@ -71,6 +72,17 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
     setStep("counter");
   }
 
+  async function selectTab() {
+    try {
+      await fetch("/api/payment/tab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+    } catch {}
+    setStep("tab");
+  }
+
   async function submitSlip() {
     if (!slipFile) { setError("กรุณาเลือกรูปสลิปก่อน"); return; }
     setUploading(true);
@@ -120,6 +132,20 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
             <p className="text-xs text-gray-400">จ่ายเงินสดหรือบัตรที่เคาน์เตอร์</p>
           </div>
         </button>
+        {billId && (
+          <button
+            onClick={selectTab}
+            className="w-full flex items-center gap-4 bg-amber-50 border-2 border-amber-200 hover:border-amber-400 rounded-2xl p-4 transition-all text-left"
+          >
+            <div className="w-12 h-12 rounded-xl bg-amber-100 flex items-center justify-center text-2xl shrink-0">
+              🧾
+            </div>
+            <div>
+              <p className="font-bold text-navy">เปิดแท็บ</p>
+              <p className="text-xs text-gray-400">บันทึกในบิลโต๊ะ — จ่ายรวมตอนเช็คเอาท์</p>
+            </div>
+          </button>
+        )}
       </div>
     );
   }
@@ -226,6 +252,17 @@ export default function PaymentSection({ orderId, totalTHB, orderName }: Props) 
         <p className="font-bold text-navy text-lg mb-1">กรุณาชำระที่เคาน์เตอร์</p>
         <p className="text-gray-400 text-sm mb-3">แจ้งชื่อ <span className="font-semibold text-navy">{orderName}</span> กับพนักงาน</p>
         <p className="text-3xl font-bold text-orange">฿{totalTHB}</p>
+      </div>
+    );
+  }
+
+  if (step === "tab") {
+    return (
+      <div className="text-center py-2">
+        <div className="text-5xl mb-3">🧾</div>
+        <p className="font-bold text-navy text-lg mb-1">บันทึกในบิลแล้ว!</p>
+        <p className="text-gray-400 text-sm mb-1">ออเดอร์ถูกส่งครัวแล้ว</p>
+        <p className="text-gray-400 text-sm">ชำระเงินรวมตอนเช็คเอาท์กับพนักงาน</p>
       </div>
     );
   }
