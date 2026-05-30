@@ -129,7 +129,12 @@ type MemberInfo = { id: number; firstName: string; username: string; memberCode:
 type PublicBill = { id: number; name: string; tableNumber: number };
 type SessionLink = { id: number; nickname: string } | null;
 
-export default function CashierOrderButton({ onCreated }: { onCreated?: () => void }) {
+export default function CashierOrderButton({ onCreated, initialBillId, initialBillName, triggerClassName }: {
+  onCreated?: () => void;
+  initialBillId?: number;
+  initialBillName?: string;
+  triggerClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([]);
   const [cart, setCart] = useState<CartEntry[]>([]);
@@ -171,10 +176,16 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
   function openModal() {
     setOpen(true);
     loadMenu();
-    fetch("/api/pos/bills/public").then((r) => r.json()).then((data: PublicBill[]) => {
-      setBills(data);
-      if (data.length === 1) setSelectedBillId(data[0].id);
-    }).catch(() => setBills([]));
+    if (initialBillId) {
+      // Bill is fixed — no need to fetch
+      setSelectedBillId(initialBillId);
+      setBills([]);
+    } else {
+      fetch("/api/pos/bills/public").then((r) => r.json()).then((data: PublicBill[]) => {
+        setBills(data);
+        if (data.length === 1) setSelectedBillId(data[0].id);
+      }).catch(() => setBills([]));
+    }
   }
   function closeModal() {
     setOpen(false); setCart([]); setOrderName(""); setOrderNote(""); setSearch("");
@@ -259,8 +270,8 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
 
   return (
     <>
-      <button onClick={openModal} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">
-        🛒 สั่งอาหาร (เคาน์เตอร์)
+      <button onClick={openModal} className={triggerClassName ?? "bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors"}>
+        🛒 สั่งอาหาร{!initialBillId ? " (เคาน์เตอร์)" : ""}
       </button>
 
       {open && (
@@ -279,25 +290,32 @@ export default function CashierOrderButton({ onCreated }: { onCreated?: () => vo
                   className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange" />
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-navy block mb-1">
-                  เลือกตี้ {bills.length > 0 && <span className="text-red-500">*</span>}
-                </label>
-                {bills.length === 0 ? (
-                  <p className="text-xs text-gray-400 bg-sand/30 rounded-xl px-3 py-2.5">ไม่มีตี้ที่เปิดอยู่ในขณะนี้</p>
-                ) : (
-                  <select
-                    value={selectedBillId}
-                    onChange={(e) => setSelectedBillId(e.target.value ? Number(e.target.value) : "")}
-                    className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange ${!selectedBillId ? "border-red-300" : "border-sand"}`}
-                  >
-                    <option value="">— กรุณาเลือกตี้ —</option>
-                    {bills.map((b) => (
-                      <option key={b.id} value={b.id}>โต๊ะ {b.tableNumber} — {b.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
+              {initialBillId ? (
+                <div>
+                  <label className="text-xs font-semibold text-navy block mb-1">ตี้</label>
+                  <p className="bg-sand/30 rounded-xl px-3 py-2.5 text-sm font-semibold text-navy">{initialBillName ?? `ตี้ #${initialBillId}`}</p>
+                </div>
+              ) : (
+                <div>
+                  <label className="text-xs font-semibold text-navy block mb-1">
+                    เลือกตี้ {bills.length > 0 && <span className="text-red-500">*</span>}
+                  </label>
+                  {bills.length === 0 ? (
+                    <p className="text-xs text-gray-400 bg-sand/30 rounded-xl px-3 py-2.5">ไม่มีตี้ที่เปิดอยู่ในขณะนี้</p>
+                  ) : (
+                    <select
+                      value={selectedBillId}
+                      onChange={(e) => setSelectedBillId(e.target.value ? Number(e.target.value) : "")}
+                      className={`w-full border-2 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange ${!selectedBillId ? "border-red-300" : "border-sand"}`}
+                    >
+                      <option value="">— กรุณาเลือกตี้ —</option>
+                      {bills.map((b) => (
+                        <option key={b.id} value={b.id}>โต๊ะ {b.tableNumber} — {b.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">รหัสสมาชิก <span className="text-gray-400 font-normal">(ไม่บังคับ — เพื่อสะสมแต้ม)</span></label>
