@@ -9,6 +9,9 @@ import { useOrderStore } from "@/store/orderStore";
 
 type PublicBill = { id: number; name: string; tableNumber: number };
 type SessionLink = { id: number; nickname: string } | null;
+type StaffMember = { id: number; firstName: string; username: string; memberCode: string } | null;
+
+const STAFF_ROLES = ["CASHIER", "STAFF", "OWNER"];
 
 export default function CartDrawer({ tableId }: { tableId?: number }) {
   const [open, setOpen] = useState(false);
@@ -18,13 +21,20 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
   const [bills, setBills] = useState<PublicBill[]>([]);
   const [selectedBillId, setSelectedBillId] = useState<number | "">("");
   const [sessionLink, setSessionLink] = useState<SessionLink>(null);
+  // Staff-mode member lookup (for staff ordering on behalf of customer)
+  const [staffMemberCode, setStaffMemberCode] = useState("");
+  const [staffMember, setStaffMember] = useState<StaffMember>(null);
+  const [staffMemberError, setStaffMemberError] = useState("");
+  const [staffMemberLoading, setStaffMemberLoading] = useState(false);
   const { data: session } = useSession();
   const { cart, total, removeItem, clearCart, setOrderName, setUserId } = useOrderStore();
   const router = useRouter();
   const itemCount = cart.reduce((s, c) => s + c.quantity, 0);
+  const isStaff = STAFF_ROLES.includes(session?.user?.role ?? "");
 
   useEffect(() => {
-    if (session?.user) {
+    // Only auto-fill for regular customers, not staff
+    if (session?.user && !isStaff) {
       setUserId(parseInt(session.user.id));
       if (!nameInput) {
         const defaultName = `${session.user.username} (${session.user.memberCode})`;
@@ -32,7 +42,7 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [session, isStaff]);
 
   useEffect(() => {
     if (open) {
@@ -46,6 +56,25 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
         .catch(() => setBills([]));
     }
   }, [open, tableId]);
+
+  function onStaffMemberCodeChange(code: string) {
+    setStaffMemberCode(code);
+    setStaffMemberError("");
+    if (!code.trim()) { setStaffMember(null); return; }
+    setStaffMemberLoading(true);
+    fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`)
+      .then(async (r) => {
+        setStaffMemberLoading(false);
+        if (r.ok) {
+          const m: StaffMember = await r.json();
+          setStaffMember(m);
+          if (m) setNameInput(m.firstName);
+        } else {
+          setStaffMember(null);
+          setStaffMemberError("ไม่พบสมาชิก");
+        }
+      }).catch(() => { setStaffMemberLoading(false); setStaffMember(null); });
+  }
 
   useEffect(() => {
     if (!selectedBillId || !session?.user) {
@@ -80,7 +109,7 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderName: finalName,
-          userId: session?.user ? parseInt(session.user.id) : null,
+          userId: isStaff ? (staffMember?.id ?? null) : (session?.user ? parseInt(session.user.id) : null),
           note,
           billId: selectedBillId || null,
           items: cart.map((c) => ({
@@ -152,7 +181,26 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
                 placeholder={session?.user ? `${session.user.username} (${session.user.memberCode})` : "กรอกชื่อของคุณ"}
                 className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:border-orange focus:outline-none"
               />
-              {sessionLink ? (
+              {isStaff ? (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[10px] text-gray-400">ลูกค้าต้องการเก็บแต้มสมาชิก? กรอกรหัสด้านล่าง</p>
+                  <input
+                    type="text"
+                    value={staffMemberCode}
+                    onChange={(e) => onStaffMemberCodeChange(e.target.value.toUpperCase())}
+                    placeholder="DS-XXXX (ไม่บังคับ)"
+                    className="w-full bg-white border border-sand rounded-lg px-3 py-1.5 text-sm font-mono focus:border-orange focus:outline-none uppercase"
+                  />
+                  {staffMemberLoading && <p className="text-[10px] text-gray-400">กำลังค้นหา...</p>}
+                  {staffMember && (
+                    <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
+                      <p className="text-[11px] text-green-700 font-semibold">✅ {staffMember.firstName} ({staffMember.memberCode}) — แต้มจะเข้าบัญชีนี้</p>
+                      <button onClick={() => { setStaffMember(null); setStaffMemberCode(""); setNameInput(""); }} className="text-gray-300 hover:text-red-400 ml-1">×</button>
+                    </div>
+                  )}
+                  {staffMemberError && <p className="text-[10px] text-red-400">{staffMemberError}</p>}
+                </div>
+              ) : sessionLink ? (
                 <p className="text-[10px] text-green-600 mt-1">✅ เชื่อมกับตี้แล้ว — แต้มจะเข้าบัญชีสมาชิก</p>
               ) : session?.user ? (
                 <p className="text-[10px] text-gray-400 mt-1">login แล้ว — แก้ชื่อได้ตามต้องการ</p>

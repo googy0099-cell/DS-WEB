@@ -90,7 +90,7 @@ export default function AdminMenuPage() {
   const [newRecipeQty, setNewRecipeQty] = useState("");
   const [newRecipeSize, setNewRecipeSize] = useState("");
   const [recipeSaving, setRecipeSaving] = useState(false);
-  const [recipeNote, setRecipeNote] = useState("");
+  const [recipeNotes, setRecipeNotes] = useState<Record<string, string>>({});
   const [noteSaving, setNoteSaving] = useState(false);
 
   // Category manager
@@ -210,13 +210,20 @@ export default function AdminMenuPage() {
     await mutateRecipes();
   }
 
+  function parseRecipeNote(raw: string | null): Record<string, string> {
+    if (!raw) return {};
+    try { return JSON.parse(raw); } catch { return { "": raw }; }
+  }
+
   async function saveRecipeNote() {
     if (!recipeMenuItem) return;
     setNoteSaving(true);
+    const trimmed = Object.fromEntries(Object.entries(recipeNotes).filter(([, v]) => v.trim()));
+    const serialized = Object.keys(trimmed).length ? JSON.stringify(trimmed) : null;
     await fetch("/api/menu", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: recipeMenuItem.id, recipeNote: recipeNote || null }),
+      body: JSON.stringify({ id: recipeMenuItem.id, recipeNote: serialized }),
     });
     await mutate();
     setNoteSaving(false);
@@ -285,7 +292,7 @@ export default function AdminMenuPage() {
               </div>
               <div className="flex gap-4 mt-2">
                 <button onClick={() => openEdit(item)} className="text-xs text-orange font-medium">แก้ไข</button>
-                <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNote(item.recipeNote ?? ""); setNewRecipeSize(""); }} className="text-xs text-navy/60">สูตร</button>
+                <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNotes(parseRecipeNote(item.recipeNote ?? null)); setNewRecipeSize(""); }} className="text-xs text-navy/60">สูตร</button>
                 <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400">ลบ</button>
               </div>
             </div>
@@ -372,7 +379,7 @@ export default function AdminMenuPage() {
                 <td className="p-3">
                   <div className="flex gap-3">
                     <button onClick={() => openEdit(item)} className="text-xs text-orange hover:underline">แก้ไข</button>
-                    <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNote(item.recipeNote ?? ""); setNewRecipeSize(""); }} className="text-xs text-navy/60 hover:text-navy">สูตร</button>
+                    <button onClick={() => { setRecipeMenuItem(item); setNewRecipeStockId(""); setNewRecipeQty(""); setRecipeNotes(parseRecipeNote(item.recipeNote ?? null)); setNewRecipeSize(""); }} className="text-xs text-navy/60 hover:text-navy">สูตร</button>
                     <button onClick={() => deleteItem(item.id)} className="text-xs text-red-400 hover:underline">ลบ</button>
                   </div>
                 </td>
@@ -493,16 +500,32 @@ export default function AdminMenuPage() {
               ℹ️ ระบบจะตัดสต็อกตามสูตรนี้ทุกครั้งที่ออเดอร์ถูก SERVED
             </p>
 
-            {/* Recipe instructions */}
-            <div className="border-t border-sand pt-3 space-y-2">
+            {/* Recipe instructions — per size */}
+            <div className="border-t border-sand pt-3 space-y-3">
               <p className="text-xs font-semibold text-navy">📝 วิธีทำ / SOP</p>
-              <textarea
-                value={recipeNote}
-                onChange={(e) => setRecipeNote(e.target.value)}
-                placeholder="ขั้นตอนการทำ เช่น&#10;1. ต้มน้ำ 200ml&#10;2. ใส่ผง..."
-                rows={5}
-                className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange resize-none"
-              />
+              {(recipeMenuItem.priceS != null || recipeMenuItem.priceXL != null
+                ? (["", "S", "XL"] as const)
+                : ([""] as const)
+              ).map((sizeKey) => (
+                <div key={sizeKey}>
+                  {sizeKey !== "" && (
+                    <p className={`text-[11px] font-bold mb-1 px-2 py-0.5 rounded-full inline-block
+                      ${sizeKey === "S" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+                      ขนาด {sizeKey}
+                    </p>
+                  )}
+                  {sizeKey === "" && (recipeMenuItem.priceS != null || recipeMenuItem.priceXL != null) && (
+                    <p className="text-[11px] text-gray-400 mb-1">ทั่วไป (ใช้ทุกขนาด)</p>
+                  )}
+                  <textarea
+                    value={recipeNotes[sizeKey] ?? ""}
+                    onChange={(e) => setRecipeNotes((prev) => ({ ...prev, [sizeKey]: e.target.value }))}
+                    placeholder={`ขั้นตอนการทำ${sizeKey ? ` (${sizeKey})` : ""}...`}
+                    rows={4}
+                    className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange resize-none"
+                  />
+                </div>
+              ))}
               <button onClick={saveRecipeNote} disabled={noteSaving}
                 className="w-full bg-navy text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-40">
                 {noteSaving ? "กำลังบันทึก..." : "💾 บันทึกวิธีทำ"}

@@ -1247,6 +1247,7 @@ export default function AdminTimePage() {
               </div>
               <div className="flex gap-2 flex-wrap">
                 <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
+                <a href={`/table/${bill.table.number}`} target="_blank" rel="noopener noreferrer" className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">🛒 สั่งอาหาร</a>
                 {bill.sessions.length > 0 && (
                   <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
                 )}

@@ -26,6 +26,11 @@ type SOPItem = {
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function parseRecipeNote(raw: string | null): Record<string, string> {
+  if (!raw) return {};
+  try { return JSON.parse(raw); } catch { return { "": raw }; }
+}
+
 function groupRecipesBySize(recipes: Recipe[]) {
   const catchAll = recipes.filter((r) => r.size === "");
   const sized = recipes.filter((r) => r.size !== "");
@@ -103,7 +108,9 @@ export default function SOPPage() {
         {filtered.map((item) => {
           const isOpen = expanded === item.id;
           const recipeGroups = groupRecipesBySize(item.stockRecipes);
-          const hasContent = recipeGroups.length > 0 || item.recipeNote;
+          const noteMap = parseRecipeNote(item.recipeNote);
+          const hasNotes = Object.values(noteMap).some((v) => v.trim());
+          const hasContent = recipeGroups.length > 0 || hasNotes;
 
           return (
             <div key={item.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -128,7 +135,7 @@ export default function SOPPage() {
                         {item.stockRecipes.length} วัตถุดิบ
                       </span>
                     )}
-                    {item.recipeNote && (
+                    {hasNotes && (
                       <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-full">มีวิธีทำ</span>
                     )}
                   </div>
@@ -179,12 +186,28 @@ export default function SOPPage() {
                     </div>
                   )}
 
-                  {/* Method */}
-                  {item.recipeNote && (
+                  {/* Method — per size */}
+                  {hasNotes && (
                     <div>
                       <p className="text-xs font-bold text-navy mb-2">📝 วิธีทำ</p>
-                      <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-navy whitespace-pre-wrap leading-relaxed">
-                        {item.recipeNote}
+                      <div className="space-y-2">
+                        {(["", "S", "XL"] as const).map((k) => {
+                          const note = noteMap[k];
+                          if (!note?.trim()) return null;
+                          return (
+                            <div key={k}>
+                              {k !== "" && (
+                                <p className={`text-[11px] font-bold mb-1 px-2 py-0.5 rounded-full inline-block
+                                  ${k === "S" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}`}>
+                                  ขนาด {k}
+                                </p>
+                              )}
+                              <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-sm text-navy whitespace-pre-wrap leading-relaxed">
+                                {note}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
