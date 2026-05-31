@@ -125,7 +125,7 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
       const order = await res.json();
       clearCart();
       setOpen(false);
-      router.push(`/checkout?orderId=${order.id}`);
+      router.push(`/checkout?token=${order.checkoutToken}`);
     } catch {
       alert("เกิดข้อผิดพลาด กรุณาลองใหม่");
     } finally {

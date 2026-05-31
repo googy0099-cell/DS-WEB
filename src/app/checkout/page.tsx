@@ -1,23 +1,30 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/shared/Navbar";
 import PaymentSection from "@/components/orders/PaymentSection";
 import db from "@/lib/db";
+import { verifyCheckoutToken } from "@/lib/checkout-token";
 
 export const dynamic = "force-dynamic";
 
-type Props = { searchParams: Promise<{ orderId?: string }> };
+type Props = { searchParams: Promise<{ token?: string }> };
 
 export default async function CheckoutPage({ searchParams }: Props) {
-  const { orderId } = await searchParams;
+  const { token } = await searchParams;
+  if (!token) notFound();
+
+  const orderId = verifyCheckoutToken(token);
   if (!orderId) notFound();
 
   const order = await db.order.findUnique({
-    where: { id: Number(orderId) },
-    include: { items: { include: { menuItem: true } } },
+    where: { id: orderId },
+    include: { items: { include: { menuItem: true } }, payment: true },
   });
 
   if (!order) notFound();
+
+  // One-time use: if payment method already selected, redirect home
+  if (order.payment && order.payment.method !== "UNSET") redirect("/");
 
   return (
     <>

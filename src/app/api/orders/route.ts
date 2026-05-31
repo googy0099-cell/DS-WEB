@@ -4,6 +4,7 @@ import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
 import { sendFcmNotify } from "@/lib/fcm-notify";
 import { formatThaiTime } from "@/lib/thai-datetime";
+import { signCheckoutToken } from "@/lib/checkout-token";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -213,5 +214,5 @@ export async function POST(req: NextRequest) {
     ]);
   }
 
-  return NextResponse.json(order, { status: 201 });
+  return NextResponse.json({ ...order, checkoutToken: signCheckoutToken(order.id) }, { status: 201 });
 }
