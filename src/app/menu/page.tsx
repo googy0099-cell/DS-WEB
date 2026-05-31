@@ -111,13 +111,11 @@ export default function MenuPage() {
             <h2 className="text-xl font-bold text-navy mb-4 flex items-center gap-2">🎲 ค่าชั่วโมงเกม</h2>
             <div className="grid grid-cols-3 gap-3">
               {GAME_PACKAGES.map((pkg) => (
-                <div key={pkg.title} className="aspect-square bg-orange/10 border-2 border-orange/30 rounded-2xl p-2 sm:p-3 flex flex-col justify-between">
-                  <span className="text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded-full bg-orange text-white self-start leading-tight">{pkg.tag}</span>
-                  <div>
-                    <p className="font-bold text-navy text-[11px] sm:text-sm leading-tight">{pkg.title}</p>
-                    <p className="text-orange font-bold text-base sm:text-xl mt-0.5">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
-                  </div>
-                  <p className="text-gray-500 text-[10px] sm:text-xs leading-snug">{pkg.desc}</p>
+                <div key={pkg.title} className="bg-orange/10 border-2 border-orange/30 rounded-2xl p-4 flex flex-col gap-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange text-white self-start">{pkg.tag}</span>
+                  <p className="font-bold text-navy text-sm leading-tight">{pkg.title}</p>
+                  <p className="text-orange font-bold text-2xl">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
+                  <p className="text-gray-500 text-xs leading-snug mt-auto">{pkg.desc}</p>
                 </div>
               ))}
             </div>
