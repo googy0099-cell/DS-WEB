@@ -8,11 +8,10 @@ const DRINK_CATEGORIES = ["milktea", "coffee", "soda", "drink"];
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-// Pleasant two-note chime — distinct from the alert beep
 function playDoneChime() {
   try {
     const ctx = new AudioContext();
-    const notes = [880, 1108]; // A5 → C#6 (major third)
+    const notes = [880, 1108];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -64,55 +63,81 @@ function isReadyForKitchen(order: OrderWithItems) {
 }
 
 function getLocationLabel(order: OrderWithItems) {
-  if (order.bill) {
-    return `${order.bill.name} · โต๊ะ ${order.bill.table.number}`;
-  }
-  if (order.tableId) {
-    return `โต๊ะ ${order.tableId}`;
-  }
+  if (order.bill) return `${order.bill.name} · โต๊ะ ${order.bill.table.number}`;
+  if (order.tableId) return `โต๊ะ ${order.tableId}`;
   return order.orderName || `#${order.id}`;
+}
+
+// Flat item entry for the queue
+interface QueueItem {
+  itemId: number;
+  orderId: number;
+  orderCreatedAt: string;
+  location: string;
+  orderName: string;
+  isTab: boolean;
+  nameTh: string;
+  selectedSize: string | null;
+  selectedAddons: string | null;
+  selectedOptions: string | null;
+  quantity: number;
 }
 
 export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   const { data: allOrders, mutate } = useSWR<OrderWithItems[]>(
     "/api/orders?status=active",
     fetcher,
-    { refreshInterval: 8000 }
+    { refreshInterval: 4000 }
   );
 
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const prevCountRef = useRef(0);
 
-  const queueOrders = (allOrders ?? [])
-    .filter((o) => isReadyForKitchen(o) && !o.kitchenServedAt)
-    .map((order) => {
-      const relevantItems = order.items.filter((item) =>
-        type === "drink"
-          ? DRINK_CATEGORIES.includes(item.menuItem.category)
-          : !DRINK_CATEGORIES.includes(item.menuItem.category)
-      );
-      return { ...order, relevantItems };
-    })
-    .filter((o) => o.relevantItems.length > 0)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Build a flat list of pending items, one entry per item
+  const queueItems: QueueItem[] = [];
+  for (const order of allOrders ?? []) {
+    if (!isReadyForKitchen(order)) continue;
+    for (const item of order.items) {
+      const isRelevant = type === "drink"
+        ? DRINK_CATEGORIES.includes(item.menuItem.category)
+        : !DRINK_CATEGORIES.includes(item.menuItem.category);
+      if (!isRelevant) continue;
+      if (item.kitchenServedAt) continue; // already done
+      queueItems.push({
+        itemId: item.id,
+        orderId: order.id,
+        orderCreatedAt: order.createdAt,
+        location: getLocationLabel(order),
+        orderName: order.orderName,
+        isTab: order.status === "CONFIRMED",
+        nameTh: item.menuItem.nameTh,
+        selectedSize: item.selectedSize,
+        selectedAddons: item.selectedAddons,
+        selectedOptions: item.selectedOptions,
+        quantity: item.quantity,
+      });
+    }
+  }
+  // FIFO: sort by order creation time
+  queueItems.sort((a, b) => new Date(a.orderCreatedAt).getTime() - new Date(b.orderCreatedAt).getTime());
 
-  // Flash tab title when new orders arrive
+  // Flash tab title when new items arrive
   useEffect(() => {
-    if (queueOrders.length > prevCountRef.current && prevCountRef.current !== 0) {
-      document.title = `🔔 ออเดอร์ใหม่! (${queueOrders.length})`;
+    if (queueItems.length > prevCountRef.current && prevCountRef.current !== 0) {
+      document.title = `🔔 รายการใหม่! (${queueItems.length})`;
       const t = setTimeout(() => {
         document.title = type === "food" ? "🍳 คิวครัว" : "🥤 คิวบาร์";
       }, 5000);
       return () => clearTimeout(t);
     }
-    prevCountRef.current = queueOrders.length;
-  }, [queueOrders.length, type]);
+    prevCountRef.current = queueItems.length;
+  }, [queueItems.length, type]);
 
-  async function markDone(orderId: number) {
-    if (loadingIds.has(orderId)) return;
-    setLoadingIds((prev) => { const s = new Set(prev); s.add(orderId); return s; });
+  async function markItemDone(itemId: number) {
+    if (loadingIds.has(itemId)) return;
+    setLoadingIds((prev) => { const s = new Set(prev); s.add(itemId); return s; });
     try {
-      const res = await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch(`/api/orders/items/${itemId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kitchenDone: true }),
@@ -120,7 +145,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
       if (res.ok) playDoneChime();
       await mutate();
     } finally {
-      setLoadingIds((prev) => { const s = new Set(prev); s.delete(orderId); return s; });
+      setLoadingIds((prev) => { const s = new Set(prev); s.delete(itemId); return s; });
     }
   }
 
@@ -135,13 +160,13 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
     );
   }
 
-  if (queueOrders.length === 0) {
+  if (queueItems.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
           <div className="text-6xl mb-4">{type === "drink" ? "🥤" : "🍳"}</div>
-          <p className="text-xl font-bold text-gray-400">ไม่มีออเดอร์ในคิว</p>
-          <p className="text-sm text-gray-300 mt-1">รีเฟรชทุก 8 วินาที</p>
+          <p className="text-xl font-bold text-gray-400">ไม่มีรายการในคิว</p>
+          <p className="text-sm text-gray-300 mt-1">รีเฟรชทุก 4 วินาที</p>
         </div>
       </div>
     );
@@ -149,20 +174,25 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {queueOrders.map((order, idx) => {
-        const isLoading = loadingIds.has(order.id);
+      {queueItems.map((qi, idx) => {
+        const isLoading = loadingIds.has(qi.itemId);
         const isFirst = idx === 0;
-        const isTab = order.status === "CONFIRMED";
+        const addons: { nameTh: string }[] = qi.selectedAddons ? JSON.parse(qi.selectedAddons) : [];
+        const options: { groupName: string; choiceName: string }[] = qi.selectedOptions ? JSON.parse(qi.selectedOptions) : [];
+        const extras = [
+          qi.selectedSize ?? "",
+          addons.map((a) => a.nameTh).join(", "),
+          options.map((o) => o.choiceName).join(", "),
+        ].filter(Boolean).join(" · ");
+
         return (
           <div
-            key={order.id}
+            key={qi.itemId}
             className={`rounded-2xl shadow flex flex-col overflow-hidden transition-all ${
-              isFirst
-                ? "ring-4 ring-orange shadow-orange/20 shadow-xl"
-                : "bg-white border border-gray-100"
+              isFirst ? "ring-4 ring-orange shadow-orange/20 shadow-xl" : "bg-white border border-gray-100"
             }`}
           >
-            {/* Header bar */}
+            {/* Header */}
             <div className={`flex items-center justify-between px-4 py-3 ${isFirst ? "bg-orange" : "bg-navy"}`}>
               <div className="flex items-center gap-2">
                 <span className="text-white font-black text-2xl">#{idx + 1}</span>
@@ -173,61 +203,36 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {isTab && (
-                  <span className="text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">
-                    TAB
-                  </span>
+                {qi.isTab && (
+                  <span className="text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">TAB</span>
                 )}
-                <ElapsedBadge createdAt={order.createdAt} />
+                <ElapsedBadge createdAt={qi.orderCreatedAt} />
               </div>
             </div>
 
-            {/* Location: bill name + table */}
+            {/* Location */}
             <div className={`px-4 py-2 border-b ${isFirst ? "bg-orange/10 border-orange/20" : "bg-gray-50 border-gray-100"}`}>
               <p className={`text-sm font-bold ${isFirst ? "text-orange" : "text-navy"}`}>
-                📍 {getLocationLabel(order)}
+                📍 {qi.location}
               </p>
-              {order.orderName && order.bill && (
-                <p className="text-xs text-gray-400 mt-0.5">👤 {order.orderName}</p>
+              {qi.orderName && (
+                <p className="text-xs text-gray-400 mt-0.5">👤 {qi.orderName}</p>
               )}
             </div>
 
-            {/* Items */}
-            <div className="flex-1 px-4 py-3 space-y-2 bg-white">
-              {order.relevantItems.map((item) => {
-                const addons: { nameTh: string }[] = item.selectedAddons
-                  ? JSON.parse(item.selectedAddons)
-                  : [];
-                const options: { groupName: string; choiceName: string }[] = item.selectedOptions
-                  ? JSON.parse(item.selectedOptions)
-                  : [];
-                const extras = [
-                  item.selectedSize ?? "",
-                  addons.map((a) => a.nameTh).join(", "),
-                  options.map((o) => o.choiceName).join(", "),
-                ].filter(Boolean).join(" · ");
-                return (
-                  <div key={item.id} className="flex items-start justify-between gap-2 bg-gray-50 rounded-xl px-3 py-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-navy text-sm leading-tight">{item.menuItem.nameTh}</p>
-                      {extras && <p className="text-xs text-gray-400 mt-0.5">{extras}</p>}
-                    </div>
-                    <span className="text-2xl font-black text-orange shrink-0">×{item.quantity}</span>
-                  </div>
-                );
-              })}
-
-              {order.note && (
-                <p className="text-xs text-orange bg-orange/10 rounded-lg px-3 py-2">
-                  📝 {order.note}
-                </p>
-              )}
+            {/* Item */}
+            <div className="flex-1 px-4 py-4 bg-white flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-navy text-base leading-tight">{qi.nameTh}</p>
+                {extras && <p className="text-xs text-gray-400 mt-0.5">{extras}</p>}
+              </div>
+              <span className="text-3xl font-black text-orange shrink-0">×{qi.quantity}</span>
             </div>
 
             {/* Done button */}
             <div className="px-4 pb-4 pt-2 bg-white">
               <button
-                onClick={() => markDone(order.id)}
+                onClick={() => markItemDone(qi.itemId)}
                 disabled={isLoading}
                 className="w-full py-4 rounded-xl font-black text-lg transition-all disabled:opacity-50 bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
               >

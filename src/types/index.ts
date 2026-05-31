@@ -93,6 +93,7 @@ export interface OrderWithItems {
     selectedSize: string | null;
     selectedAddons: string | null;
     selectedOptions: string | null;
+    kitchenServedAt: string | null;
     menuItem: { nameTh: string; nameEn: string; category: string };
   }[];
 }

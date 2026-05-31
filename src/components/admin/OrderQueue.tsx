@@ -257,7 +257,7 @@ const BILL_COLOR_MAP: Record<string, { bg: string; text: string; border: string 
 function resolveStatusBadge(order: OrderWithItems) {
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
-  const kitchenDone = !!order.kitchenServedAt;
+  const kitchenDone = order.items.length > 0 && order.items.every((i) => !!i.kitchenServedAt);
 
   if (order.status === "PENDING") {
     if (method === "CASH")
@@ -420,9 +420,10 @@ export default function OrderQueue() {
     return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
   });
 
-  // Orders where kitchen is done but bill is not yet closed
+  // Orders where ALL items are kitchen-done but bill is not yet closed
   const kitchenReadyOrders = (orders ?? []).filter(
-    (o) => o.kitchenServedAt && o.status !== "SERVED" && o.status !== "CANCELLED"
+    (o) => o.status !== "SERVED" && o.status !== "CANCELLED" &&
+           o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)
   );
 
   // Fire beep when NEW orders arrive; fire chime when NEW kitchen-done events arrive
@@ -437,7 +438,7 @@ export default function OrderQueue() {
     });
 
     const newKitchenDone = orders.filter(
-      (o) => o.kitchenServedAt && !prevKitchenDoneRef.current.has(o.id)
+      (o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt) && !prevKitchenDoneRef.current.has(o.id)
     );
 
     if (alertEnabled) {
@@ -460,7 +461,7 @@ export default function OrderQueue() {
 
     prevIdsRef.current = new Set(orders.map((o) => o.id));
     prevKitchenDoneRef.current = new Set(
-      orders.filter((o) => o.kitchenServedAt).map((o) => o.id)
+      orders.filter((o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)).map((o) => o.id)
     );
   }, [orders, alertEnabled]);
 
@@ -1172,12 +1173,12 @@ function OrderCard({
                       </span>
                     )}
                     <span className="text-gray-400 font-normal">×{item.quantity}</span>
-                    {inKitchen && (
+                    {inKitchen && !item.kitchenServedAt && (
                       <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
                         🍳 กำลังทำ
                       </span>
                     )}
-                    {order.kitchenServedAt && (
+                    {item.kitchenServedAt && (
                       <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
                         ✅ พร้อม
                       </span>
@@ -1313,7 +1314,7 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
           </button>
-        ) : order.status === "PAID" && order.kitchenServedAt ? (
+        ) : order.status === "PAID" && order.items.every((i) => !!i.kitchenServedAt) ? (
           // Payment done + kitchen done → close order
           <button
             onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}

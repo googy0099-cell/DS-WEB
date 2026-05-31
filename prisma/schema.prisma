@@ -204,16 +204,17 @@ model Order {
 }
 
 model OrderItem {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   orderId         Int
-  order           Order    @relation(fields: [orderId], references: [id])
+  order           Order     @relation(fields: [orderId], references: [id])
   menuItemId      Int
-  menuItem        MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItem        MenuItem  @relation(fields: [menuItemId], references: [id])
   quantity        Int
   unitPriceTHB    Int
   selectedSize    String?
   selectedAddons  String?
   selectedOptions String?
+  kitchenServedAt DateTime?
 }
 
 model Payment {
