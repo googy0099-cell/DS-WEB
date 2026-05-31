@@ -184,7 +184,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="flex flex-col gap-3">
       {queueItems.map((qi, idx) => {
         const isLoading = loadingIds.has(qi.itemId);
         const isFirst = idx === 0;
@@ -199,53 +199,45 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         return (
           <div
             key={qi.itemId}
-            className={`rounded-2xl shadow flex flex-col overflow-hidden transition-all ${
-              isFirst ? "ring-4 ring-orange shadow-orange/20 shadow-xl" : "bg-white border border-gray-100"
+            className={`rounded-2xl shadow-sm overflow-hidden flex flex-row items-stretch transition-all ${
+              isFirst ? "ring-2 ring-orange shadow-orange/20 shadow-md" : "bg-white border border-gray-100"
             }`}
           >
-            {/* Header */}
-            <div className={`flex items-center justify-between px-4 py-3 ${isFirst ? "bg-orange" : "bg-navy"}`}>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-black text-2xl">#{idx + 1}</span>
-                {isFirst && (
-                  <span className="text-white/80 text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full">
-                    ต่อไป
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {qi.isTab && (
-                  <span className="text-xs font-bold bg-white/20 text-white px-2 py-0.5 rounded-full">TAB</span>
-                )}
-                <ElapsedBadge createdAt={qi.orderCreatedAt} />
-              </div>
-            </div>
-
-            {/* Location */}
-            <div className={`px-4 py-2 border-b ${isFirst ? "bg-orange/10 border-orange/20" : "bg-gray-50 border-gray-100"}`}>
-              <p className={`text-sm font-bold ${isFirst ? "text-orange" : "text-navy"}`}>
-                📍 {qi.location}
-              </p>
-              {qi.orderName && (
-                <p className="text-xs text-gray-400 mt-0.5">👤 {qi.orderName}</p>
+            {/* Left accent — number + badge */}
+            <div className={`flex flex-col items-center justify-center px-4 py-3 shrink-0 ${isFirst ? "bg-orange" : "bg-navy"}`}>
+              <span className="text-white font-black text-xl leading-none">#{idx + 1}</span>
+              {isFirst && (
+                <span className="text-white/80 text-[10px] font-semibold mt-1">ต่อไป</span>
               )}
             </div>
 
-            {/* Item */}
-            <div className="flex-1 px-4 py-4 bg-white flex items-center gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-navy text-base leading-tight">{qi.nameTh}</p>
-                {extras && <p className="text-xs text-gray-400 mt-0.5">{extras}</p>}
+            {/* Middle — location + item info */}
+            <div className="flex-1 min-w-0 px-4 py-3 bg-white flex flex-col justify-center gap-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-sm font-bold ${isFirst ? "text-orange" : "text-navy"}`}>
+                  📍 {qi.location}
+                </span>
+                {qi.orderName && (
+                  <span className="text-xs text-gray-400">· 👤 {qi.orderName}</span>
+                )}
+                {qi.isTab && (
+                  <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">TAB</span>
+                )}
+                <ElapsedBadge createdAt={qi.orderCreatedAt} />
               </div>
-              <span className="text-3xl font-black text-orange shrink-0">×{qi.quantity}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-navy text-base">{qi.nameTh}</span>
+                <span className="text-lg font-black text-orange">×{qi.quantity}</span>
+              </div>
+              {extras && <p className="text-xs text-gray-400">{extras}</p>}
             </div>
 
-            {/* Done button */}
-            <div className="px-4 pb-4 pt-2 bg-white">
+            {/* Right — done button */}
+            <div className="flex items-center px-3 py-3 bg-white shrink-0">
               <button
                 onClick={() => markItemDone(qi.itemId)}
                 disabled={isLoading}
-                className="w-full py-4 rounded-xl font-black text-lg transition-all disabled:opacity-50 bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm"
+                className="py-2.5 px-4 rounded-xl font-black text-sm transition-all disabled:opacity-50 bg-green-500 hover:bg-green-600 active:scale-95 text-white shadow-sm whitespace-nowrap"
               >
                 {isLoading ? "กำลังบันทึก..." : "✅ เสร็จแล้ว"}
               </button>
