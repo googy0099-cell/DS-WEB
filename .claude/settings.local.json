@@ -126,7 +126,12 @@
       "Bash(npm list *)",
       "Bash(/Users/wisdechsiri/.turso/turso auth *)",
       "Bash(xargs ls -la)",
-      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -20 {}')"
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -20 {}')",
+      "Bash(identify /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg)",
+      "Bash(sips -z 512 512 /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg --out /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/icon-512.png)",
+      "Bash(sips -z 192 192 /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg --out /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/icon-192.png)",
+      "Bash(sips *)"
     ]
   }
 }

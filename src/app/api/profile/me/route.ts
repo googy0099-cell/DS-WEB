@@ -17,8 +17,11 @@ export async function GET() {
         orders: {
           where: { userId },
           orderBy: { createdAt: "desc" },
-          take: 5,
-          select: { id: true, status: true, totalTHB: true, createdAt: true },
+          take: 10,
+          include: {
+            items: { include: { menuItem: { select: { nameTh: true } } } },
+            payment: { select: { method: true, status: true } },
+          },
         },
       },
     }),

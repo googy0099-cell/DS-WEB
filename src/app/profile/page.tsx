@@ -34,7 +34,15 @@ interface UserProfile {
   birthday: string | null;
   avatarUrl: string | null;
   createdAt: string;
-  orders: { id: number; status: string; totalTHB: number; createdAt: string }[];
+  orders: {
+    id: number;
+    status: string;
+    totalTHB: number;
+    createdAt: string;
+    note: string | null;
+    payment: { method: string; status: string } | null;
+    items: { id: number; quantity: number; unitPriceTHB: number; menuItem: { nameTh: string } }[];
+  }[];
   activeSessions: ActiveSession[];
 }
 
@@ -348,20 +356,63 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* Recent orders */}
+          {/* Order history */}
           {profile.orders.length > 0 && (
             <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <h2 className="font-bold text-navy mb-3">ออเดอร์ล่าสุด</h2>
-              <div className="space-y-2">
-                {profile.orders.map(order => (
-                  <div key={order.id} className="flex justify-between text-sm py-2 border-b border-sand last:border-0">
-                    <div>
-                      <p className="font-medium text-navy">#{order.id} — {order.status}</p>
-                      <p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleDateString("th-TH")}</p>
+              <h2 className="font-bold text-navy mb-3">ประวัติออเดอร์</h2>
+              <div className="space-y-3">
+                {profile.orders.map(order => {
+                  const statusLabel: Record<string, string> = {
+                    PENDING: "รอดำเนินการ", CONFIRMED: "ยืนยันแล้ว",
+                    PAID: "ชำระแล้ว", SERVED: "เสร็จสิ้น", CANCELLED: "ยกเลิก",
+                  };
+                  const statusColor: Record<string, string> = {
+                    PENDING: "text-yellow-600 bg-yellow-50",
+                    CONFIRMED: "text-blue-600 bg-blue-50",
+                    PAID: "text-green-600 bg-green-50",
+                    SERVED: "text-gray-500 bg-gray-100",
+                    CANCELLED: "text-red-500 bg-red-50",
+                  };
+                  const canDownload = order.status === "PAID" || order.status === "SERVED";
+                  return (
+                    <div key={order.id} className="border border-sand rounded-xl overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-sand">
+                        <div>
+                          <span className="font-bold text-navy text-sm">ออเดอร์ #{order.id}</span>
+                          <span className="text-gray-400 text-xs ml-2">{new Date(order.createdAt).toLocaleDateString("th-TH")}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${statusColor[order.status] ?? "text-gray-500 bg-gray-100"}`}>
+                            {statusLabel[order.status] ?? order.status}
+                          </span>
+                          {canDownload && (
+                            <button
+                              onClick={() => window.open(`/api/receipt/${order.id}`, "_blank")}
+                              className="text-xs font-semibold text-orange border border-orange/30 bg-orange/5 px-2 py-0.5 rounded-full hover:bg-orange/15 transition-colors"
+                            >
+                              ⬇ ใบเสร็จ
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="px-3 py-2 space-y-1">
+                        {order.items.slice(0, 3).map(item => (
+                          <div key={item.id} className="flex justify-between text-xs text-gray-600">
+                            <span>{item.menuItem.nameTh} ×{item.quantity}</span>
+                            <span>฿{item.unitPriceTHB * item.quantity}</span>
+                          </div>
+                        ))}
+                        {order.items.length > 3 && (
+                          <p className="text-xs text-gray-400">+{order.items.length - 3} รายการอื่น</p>
+                        )}
+                        <div className="flex justify-between font-bold text-sm text-navy border-t border-sand pt-1 mt-1">
+                          <span>รวม</span>
+                          <span className="text-orange">฿{order.totalTHB.toLocaleString()}</span>
+                        </div>
+                      </div>
                     </div>
-                    <p className="font-bold text-orange">฿{order.totalTHB}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

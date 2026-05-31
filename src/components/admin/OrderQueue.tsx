@@ -222,6 +222,22 @@ const STATUS_CONFIG = {
   },
 };
 
+function resolveStatusBadge(order: OrderWithItems) {
+  const method = order.payment?.method;
+  const hasSlip = !!order.payment?.slipUrl;
+  if (order.status === "PENDING") {
+    if (method === "CASH")
+      return { label: "🏪 รอชำระที่เคาน์เตอร์", color: "bg-indigo-100 text-indigo-800 border-indigo-300" };
+    if (method === "PROMPTPAY" && hasSlip)
+      return { label: "📨 มีสลิปแล้ว รอยืนยัน", color: "bg-teal-100 text-teal-800 border-teal-300" };
+    if (method === "PROMPTPAY")
+      return { label: "📷 รอสลิปจากลูกค้า", color: "bg-blue-100 text-blue-800 border-blue-300" };
+  }
+  if (order.status === "CONFIRMED" && (method === "TAB" || method === "UNSET" || !method))
+    return { label: "🧾 รอชำระตอนเช็กเอาท์", color: "bg-amber-100 text-amber-800 border-amber-300" };
+  return STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
+}
+
 interface ConfirmState {
   message: string;
   detail?: string;
@@ -347,21 +363,37 @@ export default function OrderQueue() {
       .catch(() => {});
   }, []);
 
-  const pendingOrders = (orders?.filter((o) => o.status === "PENDING") ?? [])
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // Only show PENDING orders where customer has already selected a payment method
+  const pendingOrders = (orders?.filter((o) => {
+    if (o.status !== "PENDING") return false;
+    const m = o.payment?.method;
+    return m === "CASH" || m === "PROMPTPAY";
+  }) ?? []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Fire beep + browser notification when NEW pending orders arrive
+  // Fire beep + browser notification when NEW ready-to-action orders arrive
   useEffect(() => {
     if (!orders) return;
     const incoming = orders.filter(
-      (o) => o.status === "PENDING" && !prevIdsRef.current.has(o.id)
+      (o) => {
+        if (!prevIdsRef.current.has(o.id)) return false; // already known
+        return false;
+      }
     );
-    if (incoming.length > 0 && alertEnabled) {
+    // detect newly added orders that are board-visible
+    const boardVisible = (o: OrderWithItems) => {
+      if (o.status === "CONFIRMED" || o.status === "PAID") return true;
+      const m = o.payment?.method;
+      return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
+    };
+    const newVisible = orders.filter(
+      (o) => boardVisible(o) && !prevIdsRef.current.has(o.id)
+    );
+    if (newVisible.length > 0 && alertEnabled) {
       try {
         if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
         playBeep(audioCtxRef.current);
       } catch {}
-      incoming.forEach((o) =>
+      newVisible.forEach((o) =>
         showBrowserNotification(o.orderName || `ออเดอร์ #${o.id}`, o.totalTHB)
       );
     }
@@ -971,18 +1003,27 @@ function OrderCard({
   onChooseScan: (order: OrderWithItems) => void;
   qrUrl?: string;
 }) {
+  const badge = resolveStatusBadge(order);
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
   const canCancel = order.status === "PENDING" || order.status === "CONFIRMED";
   const canEdit = order.status === "PENDING" || order.status === "CONFIRMED" || order.status === "PAID";
 
-  // Payment state machine for CONFIRMED orders awaiting payment
   const isConfirmed = order.status === "CONFIRMED";
+  const isPending = order.status === "PENDING";
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
+
+  // PENDING payment cases (customer already selected method)
+  const isPendingCash = isPending && method === "CASH";
+  const isPendingQrNoSlip = isPending && method === "PROMPTPAY" && !hasSlip;
+  const isPendingQrSlip = isPending && method === "PROMPTPAY" && hasSlip;
+
+  // CONFIRMED payment cases
   const needsMethod = isConfirmed && (!order.payment || method === "UNSET");
   const isCashPay = isConfirmed && method === "CASH";
   const isQrSlip = isConfirmed && method === "PROMPTPAY" && hasSlip;
   const isQrNoSlip = isConfirmed && method === "PROMPTPAY" && !hasSlip;
+  const isTabOrder = method === "TAB" && isConfirmed;
 
   return (
     <div
@@ -991,8 +1032,16 @@ function OrderCard({
       }`}
     >
       {isNew && (
-        <div className="bg-yellow-400 text-white text-xs font-bold text-center py-1 rounded-t-xl animate-pulse">
-          🔔 ออเดอร์ใหม่! กรุณารับออเดอร์
+        <div className={`text-xs font-bold text-center py-1 rounded-t-xl animate-pulse ${
+          isPendingCash ? "bg-indigo-500 text-white" :
+          isPendingQrNoSlip ? "bg-blue-500 text-white" :
+          isPendingQrSlip ? "bg-teal-500 text-white" :
+          "bg-yellow-400 text-white"
+        }`}>
+          {isPendingCash ? "🏪 ลูกค้าเลือกชำระที่เคาน์เตอร์" :
+           isPendingQrNoSlip ? "📷 รอสลิปจากลูกค้า" :
+           isPendingQrSlip ? "📨 ลูกค้าส่งสลิปแล้ว!" :
+           "🔔 ออเดอร์ใหม่!"}
         </div>
       )}
       <div className="p-4">
@@ -1003,9 +1052,16 @@ function OrderCard({
               👤 {order.orderName || `ออเดอร์ #${order.id}`}
             </p>
             <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
+            {/* Show order ID prominently for counter orders */}
+            {isPendingCash && (
+              <div className="mt-1 inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5">
+                <span className="text-xs text-indigo-500">เลขที่ออเดอร์</span>
+                <span className="font-black text-indigo-700">#{order.id}</span>
+              </div>
+            )}
           </div>
-          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${cfg.color}`}>
-            {cfg.label}
+          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${badge.color}`}>
+            {badge.label}
           </span>
         </div>
 
@@ -1071,7 +1127,33 @@ function OrderCard({
         )}
 
         {/* Primary action — payment state machine */}
-        {needsMethod ? (
+        {isPendingCash ? (
+          <button
+            onClick={() => onUpdate(order.id, "PAID")}
+            disabled={isLoading}
+            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-indigo-600 text-white transition-opacity disabled:opacity-60"
+          >
+            {isLoading ? "กำลังบันทึก..." : `💵 รับชำระแล้ว ฿${order.totalTHB.toLocaleString()}`}
+          </button>
+        ) : isPendingQrNoSlip ? (
+          <div className="mb-2 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center text-sm text-blue-600">
+            <p className="font-semibold">📷 รอสลิปจากลูกค้า</p>
+            <p className="text-xs text-blue-400 mt-0.5">ลูกค้ากำลังโอนเงินและส่งสลิป</p>
+          </div>
+        ) : isPendingQrSlip ? (
+          <button
+            onClick={() => onConfirmQr(order)}
+            disabled={isLoading}
+            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-teal-600 text-white transition-opacity disabled:opacity-60"
+          >
+            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${order.totalTHB.toLocaleString()}`}
+          </button>
+        ) : isTabOrder ? (
+          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
+            <p className="font-semibold">🧾 รอชำระตอนเช็กเอาท์</p>
+            <p className="text-xs text-amber-500 mt-0.5">ส่งครัวทำได้เลย — ชำระรวมตอนปิดบิล</p>
+          </div>
+        ) : needsMethod ? (
           <div className="mb-2">
             <p className="text-xs text-gray-400 mb-1.5 text-center">เลือกวิธีชำระเงิน</p>
             <div className="grid grid-cols-2 gap-2">
