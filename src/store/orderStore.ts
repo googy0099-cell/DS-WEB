@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type { CartItem } from "@/types";
 
 interface OrderStore {
@@ -14,7 +15,9 @@ interface OrderStore {
   total: () => number;
 }
 
-export const useOrderStore = create<OrderStore>((set, get) => ({
+export const useOrderStore = create<OrderStore>()(
+  persist(
+    (set, get) => ({
   orderName: "",
   userId: null,
   cart: [],
@@ -49,7 +52,13 @@ export const useOrderStore = create<OrderStore>((set, get) => ({
   clearCart: () => set({ cart: [], orderName: "", userId: null }),
 
   total: () => get().cart.reduce((sum, c) => sum + c.priceTHB * c.quantity, 0),
-}));
+    }),
+    {
+      name: "dice-shop-cart",
+      partialize: (state) => ({ cart: state.cart, orderName: state.orderName }),
+    }
+  )
+);
 
 export function makeCartKey(
   menuItemId: number,
