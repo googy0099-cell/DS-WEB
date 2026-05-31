@@ -2,9 +2,14 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import type { Metadata } from "next";
 import RegisterSW from "@/components/admin/RegisterSW";
 import MobileNav from "@/components/admin/MobileNav";
 import SidebarNav from "@/components/admin/SidebarNav";
+
+export const metadata: Metadata = {
+  manifest: "/manifest-admin.json",
+};
 
 const DASHBOARD_NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
@@ -67,7 +72,7 @@ export default async function AdminLayout({
               alt="Dice Shop"
               width={180}
               height={64}
-              className="object-contain brightness-0 invert h-16 w-auto"
+              className="object-contain brightness-0 invert h-30 w-auto"
             />
           </Link>
           <p className="text-cream/40 text-xs mt-1">Admin Panel</p>
