@@ -40,14 +40,17 @@ const TAG_LABELS: Record<string, string> = {
 };
 
 export default function GamesPage() {
+  const PAGE_SIZE = 24;
   const [query, setQuery] = useState("");
   const [activeTag, setActiveTag] = useState("");
   const [games, setGames] = useState<GameGuide[]>([]);
   const [loading, setLoading] = useState(true);
   const [allTags, setAllTags] = useState<string[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const fetchGames = useCallback(async (q: string, tag: string) => {
     setLoading(true);
+    setVisibleCount(PAGE_SIZE);
     const params = new URLSearchParams();
     if (q) params.set("q", q);
     if (tag) params.set("tag", tag);
@@ -93,7 +96,7 @@ export default function GamesPage() {
             />
             <div>
               <p className="text-cream/70 text-xs">Dice Shop</p>
-              <h1 className="text-cream font-bold text-lg leading-tight">คู่มือเกม</h1>
+              <h1 className="text-cream font-bold text-lg leading-tight">บอร์ดเกม</h1>
             </div>
           </div>
           <Link href="/" className="text-cream/60 text-xs underline">หน้าหลัก</Link>
@@ -165,46 +168,56 @@ export default function GamesPage() {
             <p>ไม่พบเกมที่ค้นหา</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {games.map((game) => {
-              const tags: string[] = (() => { try { return JSON.parse(game.tags ?? "[]"); } catch { return []; } })();
-              return (
-                <Link
-                  key={game.id}
-                  href={`/games/${game.id}`}
-                  className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform"
-                >
-                  <div className="relative aspect-square w-full bg-sand flex items-center justify-center">
-                    {game.imageUrl ? (
-                      <Image src={game.imageUrl} alt={game.nameTh} fill className="object-cover" />
-                    ) : (
-                      <span className="text-4xl">🎲</span>
-                    )}
-                  </div>
-                  <div className="p-2.5">
-                    <p className="font-bold text-navy text-sm leading-tight line-clamp-2">{game.nameEn || game.nameTh}</p>
-                    {game.nameEn && game.nameTh && <p className="text-[10px] text-gray-400 line-clamp-1">{game.nameTh}</p>}
-                    <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
-                      <span className="flex items-center gap-0.5"><Users size={10} />{game.minPlayers}–{game.maxPlayers}</span>
-                      <span className="flex items-center gap-0.5"><Clock size={10} />{game.durationMin}น.</span>
-                    </div>
-                    <div className="flex gap-1 mt-1.5 flex-wrap">
-                      {game.difficulty && DIFFICULTY_MAP[game.difficulty] && (
-                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_MAP[game.difficulty].color}`}>
-                          {DIFFICULTY_MAP[game.difficulty].label}
-                        </span>
-                      )}
-                      {tags[0] && (
-                        <span className="text-[10px] bg-orange/10 text-orange px-2 py-0.5 rounded-full">
-                          {tags[0]}
-                        </span>
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              {games.slice(0, visibleCount).map((game) => {
+                const tags: string[] = (() => { try { return JSON.parse(game.tags ?? "[]"); } catch { return []; } })();
+                return (
+                  <Link
+                    key={game.id}
+                    href={`/games/${game.id}`}
+                    className="bg-white rounded-2xl overflow-hidden shadow-sm active:scale-[0.97] transition-transform"
+                  >
+                    <div className="relative aspect-square w-full bg-sand flex items-center justify-center">
+                      {game.imageUrl ? (
+                        <Image src={game.imageUrl} alt={game.nameTh} fill className="object-cover" />
+                      ) : (
+                        <span className="text-4xl">🎲</span>
                       )}
                     </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                    <div className="p-2.5">
+                      <p className="font-bold text-navy text-sm leading-tight line-clamp-2">{game.nameEn || game.nameTh}</p>
+                      {game.nameEn && game.nameTh && <p className="text-[10px] text-gray-400 line-clamp-1">{game.nameTh}</p>}
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
+                        <span className="flex items-center gap-0.5"><Users size={10} />{game.minPlayers}–{game.maxPlayers}</span>
+                        <span className="flex items-center gap-0.5"><Clock size={10} />{game.durationMin}น.</span>
+                      </div>
+                      <div className="flex gap-1 mt-1.5 flex-wrap">
+                        {game.difficulty && DIFFICULTY_MAP[game.difficulty] && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_MAP[game.difficulty].color}`}>
+                            {DIFFICULTY_MAP[game.difficulty].label}
+                          </span>
+                        )}
+                        {tags[0] && (
+                          <span className="text-[10px] bg-orange/10 text-orange px-2 py-0.5 rounded-full">
+                            {tags[0]}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+            {visibleCount < games.length && (
+              <button
+                onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
+                className="mt-6 w-full py-3 rounded-2xl border-2 border-sand text-navy font-semibold text-sm hover:border-orange hover:text-orange transition-colors"
+              >
+                ดูเพิ่มเติม ({games.length - visibleCount} เกม)
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
