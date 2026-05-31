@@ -111,13 +111,13 @@ export default function MenuPage() {
             <h2 className="text-xl font-bold text-navy mb-4 flex items-center gap-2">🎲 ค่าชั่วโมงเกม</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {GAME_PACKAGES.map((pkg) => (
-                <div key={pkg.title} className={`bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-4`}>
-                  <div className="mb-2">
+                <div key={pkg.title} className={`bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5`}>
+                  <div className="mb-3">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pkg.tagColor}`}>{pkg.tag}</span>
                   </div>
-                  <p className="font-bold text-navy text-sm leading-tight">{pkg.title}</p>
-                  <p className="text-orange font-bold text-lg mt-0.5">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
-                  <p className="text-gray-500 text-xs mt-1.5 leading-snug">{pkg.desc}</p>
+                  <p className="font-bold text-navy text-lg leading-tight">{pkg.title}</p>
+                  <p className="text-orange font-bold text-2xl mt-0.5">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
+                  <p className="text-gray-500 text-xs mt-2 leading-snug">{pkg.desc}</p>
                 </div>
               ))}
             </div>
