@@ -266,6 +266,8 @@ function resolveStatusBadge(order: OrderWithItems) {
       return { label: "📨 มีสลิปแล้ว รอยืนยัน", color: "bg-teal-100 text-teal-800 border-teal-300" };
     if (method === "PROMPTPAY")
       return { label: "📷 รอสลิปจากลูกค้า", color: "bg-blue-100 text-blue-800 border-blue-300" };
+    if (method === "TAB")
+      return { label: "🧾 TAB · รอรับออเดอร์", color: "bg-amber-100 text-amber-800 border-amber-300" };
   }
   if (order.status === "CONFIRMED" && (method === "TAB" || method === "UNSET" || !method)) {
     if (kitchenDone)
@@ -406,18 +408,18 @@ export default function OrderQueue() {
       .catch(() => {});
   }, []);
 
-  // Only show PENDING orders where customer has already selected a payment method
+  // All PENDING orders where customer has selected a payment method (including TAB)
   const pendingOrders = (orders?.filter((o) => {
     if (o.status !== "PENDING") return false;
     const m = o.payment?.method;
-    return m === "CASH" || m === "PROMPTPAY";
+    return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
   }) ?? []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   // All board-visible unacknowledged orders (need staff action)
   const alertOrders = (orders ?? []).filter((o) => {
     if (o.status === "CONFIRMED" || o.status === "PAID") return true;
     const m = o.payment?.method;
-    return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
+    return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY" || m === "TAB");
   });
 
   // Orders where ALL items are kitchen-done but bill is not yet closed
@@ -1092,6 +1094,7 @@ function OrderCard({
   const isPendingCash = isPending && method === "CASH";
   const isPendingQrNoSlip = isPending && method === "PROMPTPAY" && !hasSlip;
   const isPendingQrSlip = isPending && method === "PROMPTPAY" && hasSlip;
+  const isPendingTab = isPending && method === "TAB";
 
   // CONFIRMED payment cases
   const needsMethod = isConfirmed && (!order.payment || method === "UNSET");
@@ -1111,11 +1114,13 @@ function OrderCard({
           isPendingCash ? "bg-indigo-500 text-white" :
           isPendingQrNoSlip ? "bg-blue-500 text-white" :
           isPendingQrSlip ? "bg-teal-500 text-white" :
+          isPendingTab ? "bg-amber-500 text-white" :
           "bg-yellow-400 text-white"
         }`}>
           {isPendingCash ? "🏪 ลูกค้าเลือกชำระที่เคาน์เตอร์" :
            isPendingQrNoSlip ? "📷 รอสลิปจากลูกค้า" :
            isPendingQrSlip ? "📨 ลูกค้าส่งสลิปแล้ว!" :
+           isPendingTab ? "🧾 ลูกค้าเลือกจ่ายตอนเช็กเอาท์" :
            "🔔 ออเดอร์ใหม่!"}
         </div>
       )}
@@ -1227,7 +1232,21 @@ function OrderCard({
         )}
 
         {/* Primary action — payment state machine */}
-        {isPendingCash ? (
+        {isPendingTab ? (
+          <div className="mb-2 space-y-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
+              <p className="font-semibold">🧾 จ่ายตอนเช็กเอาท์</p>
+              <p className="text-xs text-amber-500 mt-0.5">กดรับออเดอร์เพื่อส่งครัวทำ</p>
+            </div>
+            <button
+              onClick={() => onUpdate(order.id, "CONFIRMED")}
+              disabled={isLoading}
+              className="w-full text-sm font-bold py-3 rounded-xl bg-navy text-cream transition-opacity disabled:opacity-60"
+            >
+              {isLoading ? "กำลังบันทึก..." : "✅ รับออเดอร์ — ส่งครัวทำ"}
+            </button>
+          </div>
+        ) : isPendingCash ? (
           <button
             onClick={() => onUpdate(order.id, "PAID")}
             disabled={isLoading}
@@ -1249,9 +1268,26 @@ function OrderCard({
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${order.totalTHB.toLocaleString()}`}
           </button>
         ) : isTabOrder ? (
-          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
-            <p className="font-semibold">🧾 รอชำระตอนเช็กเอาท์</p>
-            <p className="text-xs text-amber-500 mt-0.5">ส่งครัวทำได้เลย — ชำระรวมตอนปิดบิล</p>
+          <div className="mb-2 space-y-2">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
+              🧾 รอชำระตอนเช็กเอาท์ — เมื่อลูกค้าพร้อมชำระเลือกวิธีด้านล่าง
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onOpenCashModal(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                <span className="text-xl">💵</span>เงินสด
+              </button>
+              <button
+                onClick={() => onChooseScan(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
+              >
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
+              </button>
+            </div>
           </div>
         ) : needsMethod ? (
           <div className="mb-2">

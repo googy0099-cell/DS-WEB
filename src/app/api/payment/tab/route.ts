@@ -13,11 +13,12 @@ export async function POST(req: NextRequest) {
   if (!order.billId) return NextResponse.json({ error: "ออเดอร์นี้ไม่ได้เชื่อมกับตี้" }, { status: 400 });
   if (order.payment) return NextResponse.json({ error: "มีการชำระเงินอยู่แล้ว" }, { status: 400 });
 
+  // Keep order PENDING — staff must press "รับออเดอร์" on the dashboard before kitchen starts
   const [payment] = await db.$transaction([
     db.payment.create({
       data: { orderId: order.id, method: "TAB", amountTHB: order.totalTHB, status: "PENDING" },
     }),
-    db.order.update({ where: { id: order.id }, data: { status: "CONFIRMED" } }),
+    db.order.update({ where: { id: order.id }, data: { status: "PENDING" } }),
   ]);
 
   return NextResponse.json(payment);
