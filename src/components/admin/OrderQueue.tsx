@@ -476,11 +476,11 @@ export default function OrderQueue() {
         `⚠️ รอดำเนินการ (${alertOrders.length} รายการ)`,
         alertOrders[0].orderName || `#${alertOrders[0].id}`
       );
-    }, 15000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [alertEnabled, alertOrders.length]);
 
-  // Repeat chime every 15s while kitchen-done orders are waiting to be served
+  // Repeat chime every 2s while kitchen-done orders are waiting to be served
   useEffect(() => {
     if (!alertEnabled || kitchenReadyOrders.length === 0) return;
     const interval = setInterval(() => {
@@ -489,7 +489,7 @@ export default function OrderQueue() {
         `✅ อาหารพร้อม รอเสิร์ฟ (${kitchenReadyOrders.length} รายการ)`,
         kitchenReadyOrders[0].orderName || `#${kitchenReadyOrders[0].id}`
       );
-    }, 15000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [alertEnabled, kitchenReadyOrders.length]);
 
