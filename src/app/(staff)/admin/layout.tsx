@@ -65,9 +65,9 @@ export default async function AdminLayout({
             <Image
               src="/แแแแ-Photoroom.png"
               alt="Dice Shop"
-              width={124}
-              height={44}
-              className="object-contain brightness-0 invert h-10 w-auto"
+              width={180}
+              height={64}
+              className="object-contain brightness-0 invert h-16 w-auto"
             />
           </Link>
           <p className="text-cream/40 text-xs mt-1">Admin Panel</p>
