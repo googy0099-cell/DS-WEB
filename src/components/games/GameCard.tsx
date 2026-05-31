@@ -56,8 +56,8 @@ export default function GameCard({ game }: { game: GameGuide }) {
       >
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-navy text-base leading-tight">{game.nameTh}</h3>
-            {game.nameEn && <p className="text-xs text-gray-400">{game.nameEn}</p>}
+            <h3 className="font-bold text-navy text-base leading-tight">{game.nameEn || game.nameTh}</h3>
+            {game.nameTh && <p className="text-xs text-gray-400">{game.nameTh}</p>}
           </div>
           {expanded ? (
             <ChevronUp size={18} className="text-gray-400 shrink-0 mt-0.5" />
