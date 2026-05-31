@@ -344,6 +344,8 @@ export default function OrderQueue() {
   const prevIdsRef = useRef<Set<number>>(new Set());
   const prevKitchenDoneRef = useRef<Set<number>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const alertBufRef = useRef<ArrayBuffer | null>(null);
+  const kitchenBufRef = useRef<ArrayBuffer | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -412,6 +414,32 @@ export default function OrderQueue() {
       .catch(() => {});
   }, []);
 
+  // Pre-fetch audio files as ArrayBuffer so we can play via AudioContext (avoids autoplay block)
+  useEffect(() => {
+    if (!alertSoundUrl) { alertBufRef.current = null; return; }
+    fetch(alertSoundUrl).then((r) => r.arrayBuffer()).then((buf) => { alertBufRef.current = buf; }).catch(() => { alertBufRef.current = null; });
+  }, [alertSoundUrl]);
+
+  useEffect(() => {
+    if (!kitchenSoundUrl) { kitchenBufRef.current = null; return; }
+    fetch(kitchenSoundUrl).then((r) => r.arrayBuffer()).then((buf) => { kitchenBufRef.current = buf; }).catch(() => { kitchenBufRef.current = null; });
+  }, [kitchenSoundUrl]);
+
+  async function playCustom(bufRef: React.MutableRefObject<ArrayBuffer | null>) {
+    if (!bufRef.current) return false;
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+      const decoded = await ctx.decodeAudioData(bufRef.current.slice(0));
+      const src = ctx.createBufferSource();
+      src.buffer = decoded;
+      src.connect(ctx.destination);
+      src.start();
+      return true;
+    } catch { return false; }
+  }
+
   // All PENDING orders where customer has selected a payment method (including TAB)
   const pendingOrders = (orders?.filter((o) => {
     if (o.status !== "PENDING") return false;
@@ -453,25 +481,27 @@ export default function OrderQueue() {
     );
 
     if (alertEnabled) {
-      if (newOrders.length > 0) {
-        try {
-          if (alertSoundUrl) { new Audio(alertSoundUrl).play().catch(() => {}); }
-          else {
-            if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-            playBeep(audioCtxRef.current);
-          }
-        } catch {}
-        newOrders.forEach((o) =>
-          showBrowserNotification(`🔔 ออเดอร์ใหม่`, o.orderName || `#${o.id}`)
-        );
-      }
-      if (newKitchenDone.length > 0) {
-        if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
-        else playDoneChime();
-        newKitchenDone.forEach((o) =>
-          showBrowserNotification(`✅ อาหารพร้อม`, o.orderName || `#${o.id}`)
-        );
-      }
+      void (async () => {
+        if (newOrders.length > 0) {
+          try {
+            const played = await playCustom(alertBufRef);
+            if (!played) {
+              if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+              playBeep(audioCtxRef.current);
+            }
+          } catch {}
+          newOrders.forEach((o) =>
+            showBrowserNotification(`🔔 ออเดอร์ใหม่`, o.orderName || `#${o.id}`)
+          );
+        }
+        if (newKitchenDone.length > 0) {
+          const played = await playCustom(kitchenBufRef);
+          if (!played) playDoneChime();
+          newKitchenDone.forEach((o) =>
+            showBrowserNotification(`✅ อาหารพร้อม`, o.orderName || `#${o.id}`)
+          );
+        }
+      })();
     }
 
     prevIdsRef.current = new Set(orders.map((o) => o.id));
@@ -483,10 +513,10 @@ export default function OrderQueue() {
   // Repeat beep every 2s while any unacknowledged orders exist
   useEffect(() => {
     if (!alertEnabled || alertOrders.length === 0) return;
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       try {
-        if (alertSoundUrl) { new Audio(alertSoundUrl).play().catch(() => {}); }
-        else {
+        const played = await playCustom(alertBufRef);
+        if (!played) {
           if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
           playBeep(audioCtxRef.current);
         }
@@ -502,9 +532,9 @@ export default function OrderQueue() {
   // Repeat chime every 2s while kitchen-done orders are waiting to be served
   useEffect(() => {
     if (!alertEnabled || kitchenReadyOrders.length === 0) return;
-    const interval = setInterval(() => {
-      if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
-      else playDoneChime();
+    const interval = setInterval(async () => {
+      const played = await playCustom(kitchenBufRef);
+      if (!played) playDoneChime();
       showBrowserNotification(
         `✅ อาหารพร้อม รอเสิร์ฟ (${kitchenReadyOrders.length} รายการ)`,
         kitchenReadyOrders[0].orderName || `#${kitchenReadyOrders[0].id}`

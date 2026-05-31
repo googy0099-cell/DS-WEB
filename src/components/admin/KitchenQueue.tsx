@@ -93,6 +93,8 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const prevCountRef = useRef(0);
   const [kitchenSoundUrl, setKitchenSoundUrl] = useState<string>("");
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const kitchenBufRef = useRef<ArrayBuffer | null>(null);
 
   useEffect(() => {
     fetch("/api/site-settings")
@@ -100,6 +102,26 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
       .then((data) => { if (data.kitchen_sound_url) setKitchenSoundUrl(data.kitchen_sound_url); })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!kitchenSoundUrl) { kitchenBufRef.current = null; return; }
+    fetch(kitchenSoundUrl).then((r) => r.arrayBuffer()).then((buf) => { kitchenBufRef.current = buf; }).catch(() => { kitchenBufRef.current = null; });
+  }, [kitchenSoundUrl]);
+
+  async function playCustomKitchen() {
+    if (!kitchenBufRef.current) return false;
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === "suspended") await ctx.resume();
+      const decoded = await ctx.decodeAudioData(kitchenBufRef.current.slice(0));
+      const src = ctx.createBufferSource();
+      src.buffer = decoded;
+      src.connect(ctx.destination);
+      src.start();
+      return true;
+    } catch { return false; }
+  }
 
   // Build a flat list of pending items, one entry per item
   const queueItems: QueueItem[] = [];
@@ -151,8 +173,8 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         body: JSON.stringify({ kitchenDone: true }),
       });
       if (res.ok) {
-        if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
-        else playDoneChime();
+        const played = await playCustomKitchen();
+        if (!played) playDoneChime();
       }
       await mutate();
     } finally {
