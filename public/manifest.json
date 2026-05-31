@@ -1,14 +1,14 @@
 {
-  "name": "Dice Shop Admin",
-  "short_name": "DS Admin",
-  "description": "ระบบจัดการออเดอร์ Dice Shop",
-  "start_url": "/admin",
+  "name": "Dice Shop",
+  "short_name": "Dice Shop",
+  "description": "ระบบสั่งอาหารและเกม Dice Shop Board Game Cafe",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#182a47",
   "theme_color": "#182a47",
   "orientation": "portrait",
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icon-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
