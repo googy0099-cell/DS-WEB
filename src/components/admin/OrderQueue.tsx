@@ -184,6 +184,27 @@ ${settings.showNote && order.note ? `<div class="note">📝 ${order.note}</div>`
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+function playDoneChime() {
+  try {
+    const ctx = new AudioContext();
+    const notes = [880, 1108];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.5, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  } catch {}
+}
+
 const STATUS_CONFIG = {
   PENDING: {
     label: "🔔 ออเดอร์ใหม่",
@@ -293,9 +314,9 @@ function playBeep(ctx: AudioContext) {
   });
 }
 
-async function showBrowserNotification(orderName: string, total: number) {
+async function showBrowserNotification(orderName: string, total: number | string) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
-  const body = `${orderName} • ฿${total}`;
+  const body = typeof total === "number" ? `${orderName} • ฿${total}` : total;
   if ("serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.ready.catch(() => null);
     if (reg) {
@@ -319,6 +340,7 @@ export default function OrderQueue() {
   );
 
   const prevIdsRef = useRef<Set<number>>(new Set());
+  const prevKitchenDoneRef = useRef<Set<number>>(new Set());
   const audioCtxRef = useRef<AudioContext | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
@@ -391,54 +413,85 @@ export default function OrderQueue() {
     return m === "CASH" || m === "PROMPTPAY";
   }) ?? []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Fire beep + browser notification when NEW ready-to-action orders arrive
+  // All board-visible unacknowledged orders (need staff action)
+  const alertOrders = (orders ?? []).filter((o) => {
+    if (o.status === "CONFIRMED" || o.status === "PAID") return true;
+    const m = o.payment?.method;
+    return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
+  });
+
+  // Orders where kitchen is done but bill is not yet closed
+  const kitchenReadyOrders = (orders ?? []).filter(
+    (o) => o.kitchenServedAt && o.status !== "SERVED" && o.status !== "CANCELLED"
+  );
+
+  // Fire beep when NEW orders arrive; fire chime when NEW kitchen-done events arrive
   useEffect(() => {
     if (!orders) return;
-    const incoming = orders.filter(
-      (o) => {
-        if (!prevIdsRef.current.has(o.id)) return false; // already known
-        return false;
-      }
-    );
-    // detect newly added orders that are board-visible
-    const boardVisible = (o: OrderWithItems) => {
-      if (o.status === "CONFIRMED" || o.status === "PAID") return true;
+
+    const newOrders = orders.filter((o) => {
+      if (prevIdsRef.current.has(o.id)) return false;
       const m = o.payment?.method;
+      if (o.status === "CONFIRMED" || o.status === "PAID") return true;
       return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
-    };
-    const newVisible = orders.filter(
-      (o) => boardVisible(o) && !prevIdsRef.current.has(o.id)
+    });
+
+    const newKitchenDone = orders.filter(
+      (o) => o.kitchenServedAt && !prevKitchenDoneRef.current.has(o.id)
     );
-    if (newVisible.length > 0 && alertEnabled) {
-      try {
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        playBeep(audioCtxRef.current);
-      } catch {}
-      newVisible.forEach((o) =>
-        showBrowserNotification(o.orderName || `ออเดอร์ #${o.id}`, o.totalTHB)
-      );
+
+    if (alertEnabled) {
+      if (newOrders.length > 0) {
+        try {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          playBeep(audioCtxRef.current);
+        } catch {}
+        newOrders.forEach((o) =>
+          showBrowserNotification(`🔔 ออเดอร์ใหม่`, o.orderName || `#${o.id}`)
+        );
+      }
+      if (newKitchenDone.length > 0) {
+        playDoneChime();
+        newKitchenDone.forEach((o) =>
+          showBrowserNotification(`✅ อาหารพร้อม`, o.orderName || `#${o.id}`)
+        );
+      }
     }
+
     prevIdsRef.current = new Set(orders.map((o) => o.id));
+    prevKitchenDoneRef.current = new Set(
+      orders.filter((o) => o.kitchenServedAt).map((o) => o.id)
+    );
   }, [orders, alertEnabled]);
 
-  // Repeat alert every 15s while there are unacknowledged PENDING orders
+  // Repeat beep every 15s while any unacknowledged orders exist
   useEffect(() => {
-    if (!alertEnabled || pendingOrders.length === 0) return;
+    if (!alertEnabled || alertOrders.length === 0) return;
     const interval = setInterval(() => {
       try {
         if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
         playBeep(audioCtxRef.current);
       } catch {}
-      if (pendingOrders.length > 0) {
-        const first = pendingOrders[0];
-        showBrowserNotification(
-          `⚠️ รอรับออเดอร์ (${pendingOrders.length} รายการ)`,
-          first.totalTHB
-        );
-      }
+      showBrowserNotification(
+        `⚠️ รอดำเนินการ (${alertOrders.length} รายการ)`,
+        alertOrders[0].orderName || `#${alertOrders[0].id}`
+      );
     }, 15000);
     return () => clearInterval(interval);
-  }, [alertEnabled, pendingOrders]);
+  }, [alertEnabled, alertOrders.length]);
+
+  // Repeat chime every 15s while kitchen-done orders are waiting to be served
+  useEffect(() => {
+    if (!alertEnabled || kitchenReadyOrders.length === 0) return;
+    const interval = setInterval(() => {
+      playDoneChime();
+      showBrowserNotification(
+        `✅ อาหารพร้อม รอเสิร์ฟ (${kitchenReadyOrders.length} รายการ)`,
+        kitchenReadyOrders[0].orderName || `#${kitchenReadyOrders[0].id}`
+      );
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [alertEnabled, kitchenReadyOrders.length]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {
