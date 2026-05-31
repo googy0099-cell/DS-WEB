@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
@@ -16,8 +17,14 @@ const NAV_ITEMS = [
   { label: "🐺 Werewolf", href: "/#werewolf" },
 ];
 
+function isActive(href: string, pathname: string) {
+  if (href.startsWith("/#")) return pathname === "/";
+  return pathname === href || (href !== "/" && pathname.startsWith(href));
+}
+
 export default function Navbar() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropOpen, setUserDropOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -60,7 +67,11 @@ export default function Navbar() {
             <Link
               key={item.href}
               href={item.href}
-              className="px-3 py-2 text-cream/80 hover:text-cream text-sm font-medium transition-colors"
+              className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 ${
+                isActive(item.href, pathname)
+                  ? "text-cream border-orange"
+                  : "text-cream/80 hover:text-cream border-transparent"
+              }`}
             >
               {item.label}
             </Link>
@@ -148,7 +159,11 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className="block py-4 text-cream/90 hover:text-cream text-lg font-semibold border-b border-cream/10 last:border-0"
+              className={`block py-4 text-lg font-semibold border-b border-cream/10 last:border-0 transition-colors ${
+                isActive(item.href, pathname)
+                  ? "text-orange"
+                  : "text-cream/90 hover:text-cream"
+              }`}
             >
               {item.label}
             </Link>
