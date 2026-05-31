@@ -21,9 +21,10 @@ function useCountUp(target: number, duration = 1200, active = false) {
 export default function AboutSection() {
   const [aboutImg, setAboutImg] = useState<string | null>(null);
   const [inView, setInView] = useState(false);
+  const [gameCount, setGameCount] = useState(170);
   const ref = useRef<HTMLElement>(null);
 
-  const games = useCountUp(170, 1400, inView);
+  const games = useCountUp(gameCount, 1400, inView);
 
   useEffect(() => {
     fetch("/api/gallery?section=about")
@@ -31,6 +32,10 @@ export default function AboutSection() {
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) setAboutImg(data[0].imageUrl);
       })
+      .catch(() => {});
+    fetch("/api/games")
+      .then((r) => r.json())
+      .then((data) => { if (Array.isArray(data)) setGameCount(data.length); })
       .catch(() => {});
   }, []);
 
@@ -57,7 +62,7 @@ export default function AboutSection() {
             ผ่านตัวเลขบนลูกเต๋า
           </p>
           <p className="text-gray-600 leading-relaxed mb-8">
-            บอร์ดเกมกว่า 170 เกมพร้อมให้เลือกเล่น พร้อมทีมงานที่คอยแนะนำ
+            บอร์ดเกมกว่า {gameCount} เกมพร้อมให้เลือกเล่น พร้อมทีมงานที่คอยแนะนำ
             อาหารและเครื่องดื่มคุณภาพดี สั่งได้ทันทีไม่ต้องรอนาน
           </p>
 
