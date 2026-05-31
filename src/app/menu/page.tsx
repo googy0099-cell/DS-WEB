@@ -35,9 +35,9 @@ function parseSavedCategories(saved: string | undefined) {
 }
 
 const GAME_PACKAGES = [
-  { title: "2 ชั่วโมง", price: "49", desc: "จ่าย 1 ได้อีก 1 *ไม่รวมเครื่องดื่ม", tag: "ยอดนิยม", tagColor: "bg-orange text-white", gradient: "from-orange/10 to-amber-50", border: "border-orange/30" },
-  { title: "ซื้อเครื่องดื่ม 1 แก้ว", price: "0", desc: "เฉพาะเครื่องดื่มที่ร่วมรายการเท่านั้น", tag: "ฟรี 1 ชั่วโมง!", tagColor: "bg-green-500 text-white", gradient: "from-green-50 to-emerald-50", border: "border-green-300" },
-  { title: "เล่นทั้งวัน + น้ำ size xl ฟรี", price: "120", desc: "เฉพาะเครื่องดื่มที่ร่วมรายการเท่านั้น", tag: "เหมาวัน", tagColor: "bg-purple-500 text-white", gradient: "from-purple-50 to-indigo-50", border: "border-purple-300" },
+  { title: "2 ชั่วโมง", price: "49", desc: "จ่าย 1 ได้อีก 1 *ไม่รวมเครื่องดื่ม", tag: "ยอดนิยม" },
+  { title: "ซื้อเครื่องดื่ม 1 แก้ว", price: "0", desc: "เฉพาะเครื่องดื่มที่ร่วมรายการ", tag: "ฟรี 1 ชม." },
+  { title: "เล่นทั้งวัน + น้ำ XL ฟรี", price: "120", desc: "เฉพาะเครื่องดื่มที่ร่วมรายการ", tag: "เหมาวัน" },
 ];
 
 export default function MenuPage() {
@@ -109,15 +109,13 @@ export default function MenuPage() {
           {/* Game Packages */}
           <section>
             <h2 className="text-xl font-bold text-navy mb-4 flex items-center gap-2">🎲 ค่าชั่วโมงเกม</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="flex gap-3 overflow-x-auto no-scrollbar">
               {GAME_PACKAGES.map((pkg) => (
-                <div key={pkg.title} className={`bg-gradient-to-br ${pkg.gradient} border-2 ${pkg.border} rounded-2xl p-5`}>
-                  <div className="mb-3">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pkg.tagColor}`}>{pkg.tag}</span>
-                  </div>
-                  <p className="font-bold text-navy text-lg leading-tight">{pkg.title}</p>
-                  <p className="text-orange font-bold text-2xl mt-0.5">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
-                  <p className="text-gray-500 text-xs mt-2 leading-snug">{pkg.desc}</p>
+                <div key={pkg.title} className="flex-1 min-w-[140px] bg-orange/10 border-2 border-orange/30 rounded-2xl p-4 flex flex-col">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-orange text-white self-start mb-2">{pkg.tag}</span>
+                  <p className="font-bold text-navy text-sm leading-tight">{pkg.title}</p>
+                  <p className="text-orange font-bold text-xl mt-1">{pkg.price === "0" ? "ฟรี" : `฿${pkg.price}`}</p>
+                  <p className="text-gray-500 text-xs mt-1.5 leading-snug">{pkg.desc}</p>
                 </div>
               ))}
             </div>
