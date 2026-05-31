@@ -25,9 +25,14 @@ export function DashboardClock() {
   if (!display.time) return null;
 
   return (
-    <div className="bg-navy rounded-2xl px-4 py-3 shadow-sm flex flex-col justify-center">
+    <div className="bg-navy rounded-2xl px-4 py-3 shadow-sm flex flex-col justify-center overflow-hidden">
       <p className="text-white/60 text-xs">เวลาปัจจุบัน</p>
-      <p className="font-mono text-2xl font-bold text-cream tracking-widest">{display.time}</p>
+      <p
+        className="font-mono font-bold text-cream tracking-widest whitespace-nowrap"
+        style={{ fontSize: "clamp(1rem, 3.5vw, 1.75rem)" }}
+      >
+        {display.time}
+      </p>
       <p className="text-white/70 text-xs">วัน{display.day}</p>
     </div>
   );
