@@ -14,7 +14,13 @@ export const metadata: Metadata = {
   title: "Dice Shop",
   description: "ระบบสั่งอาหารและเกม Dice Shop Board Game Cafe",
   manifest: "/manifest.json",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "DS Admin" },
+  icons: {
+    icon: [
+      { url: "/icon-512-v2.png", type: "image/png" },
+    ],
+    apple: "/icon-512-v2.png",
+  },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Dice Shop" },
 };
 
 export const viewport: Viewport = {
