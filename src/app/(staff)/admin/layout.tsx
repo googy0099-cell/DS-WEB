@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import RegisterSW from "@/components/admin/RegisterSW";
 import MobileNav from "@/components/admin/MobileNav";
+import SidebarNav from "@/components/admin/SidebarNav";
 
 const DASHBOARD_NAV = [
   { href: "/admin", label: "Dashboard", icon: "📊" },
@@ -72,18 +73,7 @@ export default async function AdminLayout({
           <p className="text-cream/40 text-xs mt-1">Admin Panel</p>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1">
-          {allNav.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-cream/70 hover:text-cream hover:bg-cream/10 text-sm font-medium transition-colors"
-            >
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </nav>
+        <SidebarNav items={allNav} />
 
         <div className="p-4 border-t border-cream/10">
           <p className="text-cream/60 text-xs">{session.user.username}</p>

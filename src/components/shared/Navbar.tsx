@@ -7,26 +7,22 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
-  { label: "หน้าแรก", href: "/#hero" },
+  { label: "หน้าแรก", href: "/#hero", section: "hero" },
   { label: "สั่งอาหาร", href: "/menu" },
   { label: "มินิเกม", href: "/play" },
   { label: "บอร์ดเกม", href: "/games" },
   { label: "กิจกรรม", href: "/activities" },
-  { label: "เกี่ยวกับเรา", href: "/#about" },
-  { label: "ติดต่อเรา", href: "/#contact" },
-  { label: "🐺 Werewolf", href: "/#werewolf" },
+  { label: "เกี่ยวกับเรา", href: "/#about", section: "about" },
+  { label: "ติดต่อเรา", href: "/#contact", section: "contact" },
+  { label: "🐺 Werewolf", href: "/#werewolf", section: "werewolf" },
 ];
-
-function isActive(href: string, pathname: string) {
-  if (href.startsWith("/#")) return href === "/#hero" && pathname === "/";
-  return pathname === href || (href !== "/" && pathname.startsWith(href));
-}
 
 export default function Navbar() {
   const { data: session } = useSession();
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userDropOpen, setUserDropOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("hero");
   const userDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,6 +34,30 @@ export default function Navbar() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (pathname !== "/") return;
+    const sections = ["hero", "about", "contact", "werewolf"];
+    const observers: IntersectionObserver[] = [];
+    sections.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => { if (entry.isIntersecting) setActiveSection(id); },
+        { threshold: 0.4 }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+    return () => observers.forEach((o) => o.disconnect());
+  }, [pathname]);
+
+  function isActive(item: typeof NAV_ITEMS[0]) {
+    if (item.section) {
+      return pathname === "/" && activeSection === item.section;
+    }
+    return pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+  }
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-navy shadow-lg">
@@ -61,7 +81,7 @@ export default function Navbar() {
               key={item.href}
               href={item.href}
               className={`px-3 py-2 text-sm font-medium transition-colors border-b-2 ${
-                isActive(item.href, pathname)
+                isActive(item)
                   ? "text-cream border-orange"
                   : "text-cream/80 hover:text-cream border-transparent"
               }`}
@@ -71,7 +91,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* Mobile center: member code + username — tap to go to profile */}
+        {/* Mobile center: member code + username */}
         {session?.user && (
           <Link href="/profile" className="flex-1 flex lg:hidden justify-center px-2 min-w-0">
             <div className="text-center leading-tight">
@@ -153,9 +173,7 @@ export default function Navbar() {
               href={item.href}
               onClick={() => setMobileOpen(false)}
               className={`block py-4 text-lg font-semibold border-b border-cream/10 last:border-0 transition-colors ${
-                isActive(item.href, pathname)
-                  ? "text-orange"
-                  : "text-cream/90 hover:text-cream"
+                isActive(item) ? "text-orange" : "text-cream/90 hover:text-cream"
               }`}
             >
               {item.label}
