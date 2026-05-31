@@ -184,7 +184,7 @@ export default function ProfilePage() {
   return (
     <>
       <Navbar />
-      <div className="pt-16 min-h-screen bg-cream">
+      <div className="pt-16 min-h-screen bg-cream animate-fade-in">
         <div className="bg-navy px-4 py-10">
           <div className="max-w-lg mx-auto text-center relative">
             <button onClick={openNotif} className="absolute top-0 right-0 p-2">

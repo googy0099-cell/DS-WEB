@@ -109,9 +109,7 @@ export default function MenuPage() {
   function scrollToSection(id: string) {
     const el = sectionRefs.current[id];
     if (!el) return;
-    const navH = (navRef.current?.offsetHeight ?? 48) + 64; // sticky cat nav + top navbar
-    const y = el.getBoundingClientRect().top + window.scrollY - navH - 12;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function handleAdd(item: MenuItemType) {
@@ -177,7 +175,7 @@ export default function MenuPage() {
         </div>
       )}
 
-      <div className="pt-16 min-h-screen bg-cream pb-28">
+      <div className="pt-16 min-h-screen bg-cream pb-28 animate-fade-in">
         {/* Hero */}
         <div className="bg-navy px-4 py-8 text-center">
           <h1 className="text-2xl font-bold text-cream mb-1">เมนูทั้งหมด</h1>
@@ -237,6 +235,7 @@ export default function MenuPage() {
                 <section
                   key={cat.id}
                   ref={(el) => { sectionRefs.current[cat.id] = el; }}
+                  style={{ scrollMarginTop: "8rem" }}
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <CategoryIcon id={cat.id} fallback={cat.icon} size={22} className="text-navy/60" />
@@ -275,8 +274,12 @@ export default function MenuPage() {
                           <div className="p-2.5">
                             <p className="font-semibold text-navy text-sm leading-tight line-clamp-2">{item.nameTh}</p>
                             <p className="text-orange font-bold text-sm mt-1">
-                              ฿{item.priceTHB}
-                              {(item.priceS || item.priceXL) && <span className="text-gray-400 font-normal text-xs"> ขึ้นไป</span>}
+                              {(() => {
+                                const prices = [item.priceTHB, item.priceS, item.priceXL].filter((p): p is number => p != null && p > 0);
+                                const minPrice = prices.length > 0 ? Math.min(...prices) : item.priceTHB;
+                                const hasMultiple = item.priceS != null || item.priceXL != null;
+                                return <>{`฿${minPrice}`}{hasMultiple && <span className="text-gray-400 font-normal text-xs"> ขึ้นไป</span>}</>;
+                              })()}
                             </p>
                           </div>
                         </button>

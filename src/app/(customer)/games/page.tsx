@@ -83,7 +83,7 @@ export default function GamesPage() {
   }, [query, activeTag, fetchGames]);
 
   return (
-    <div className="min-h-screen bg-cream pb-8">
+    <div className="min-h-screen bg-cream pb-8 animate-fade-in">
       <Navbar />
       {/* Search bar */}
       <div className="bg-navy px-4 pt-20 pb-4">

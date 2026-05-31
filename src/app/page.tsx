@@ -14,7 +14,7 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
-      <div className="pt-16">
+      <div className="pt-16 animate-fade-in">
         <HeroCarousel />
         <AboutSection />
         <GallerySection />

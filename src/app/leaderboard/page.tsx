@@ -39,7 +39,7 @@ export default function LeaderboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-cream pb-8">
+    <div className="min-h-screen bg-cream pb-8 animate-fade-in">
       <div className="bg-navy px-4 pt-4 pb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
