@@ -6,6 +6,7 @@ import Navbar from "@/components/shared/Navbar";
 import Footer from "@/components/shared/Footer";
 import CartDrawer from "@/components/orders/CartDrawer";
 import { useSession } from "next-auth/react";
+import { CategoryIcon } from "@/lib/categoryIcons";
 
 const DEFAULT_CATEGORIES = [
   { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true, staffOnly: false },
@@ -133,7 +134,7 @@ export default function MenuPage() {
                   href={`/menu/${cat.id}`}
                   className="bg-white rounded-2xl shadow-sm px-5 py-4 flex items-center gap-4 hover:shadow-md hover:border-orange border-2 border-transparent transition-all group"
                 >
-                  <span className="text-3xl group-hover:scale-110 transition-transform">{cat.icon}</span>
+                  <CategoryIcon id={cat.id} fallback={cat.icon} size={26} className="text-navy/50 group-hover:text-orange transition-colors shrink-0" />
                   <span className="font-bold text-navy">{cat.label}</span>
                   <span className="ml-auto text-gray-300 group-hover:text-orange transition-colors">›</span>
                 </Link>

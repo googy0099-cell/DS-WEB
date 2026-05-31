@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { CategoryIcon } from "@/lib/categoryIcons";
 
 type Promo = { promo_title?: string; promo_body?: string; promo_enabled?: string };
 
@@ -18,10 +19,6 @@ type MenuItem = {
   isFeatured: boolean;
 };
 
-const CATEGORY_ICON: Record<string, string> = {
-  milktea: "🧋", coffee: "☕", soda: "🥤",
-  drink: "🧃", food: "🍜", snack: "🍿", dessert: "🍮",
-};
 
 const DEFAULT_PROMO: Promo = {
   promo_title: "🎉 โปรโมชั่นพิเศษ!",
@@ -86,7 +83,7 @@ export default function MenuSection() {
                   </div>
                 ) : (
                   <div className="aspect-square flex items-center justify-center bg-sand group-hover:bg-sand/80 transition-colors">
-                    <span className="text-4xl group-hover:scale-110 transition-transform duration-200 inline-block">{CATEGORY_ICON[item.category] ?? "🍽️"}</span>
+                    <CategoryIcon id={item.category} size={40} className="text-navy/40 group-hover:text-orange transition-colors" />
                   </div>
                 )}
                 <div className="p-3 text-center">

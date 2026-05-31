@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react";
 import Image from "next/image";
 import Link from "next/link";
+import { UtensilsCrossed } from "lucide-react";
 
 export default function ScanPage() {
   const { data: session, status } = useSession();
@@ -56,7 +57,7 @@ export default function ScanPage() {
                 href="/menu"
                 className="flex items-center gap-3 w-full bg-orange text-white font-bold px-5 py-3.5 rounded-2xl hover:bg-orange/90 transition-colors"
               >
-                <span className="text-2xl">🍜</span>
+                <UtensilsCrossed size={22} strokeWidth={1.5} />
                 <div className="text-left">
                   <p className="text-sm font-bold">สั่งอาหาร</p>
                   <p className="text-white/60 text-xs">เครื่องดื่ม อาหาร และของว่าง</p>

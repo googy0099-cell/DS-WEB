@@ -9,6 +9,7 @@ import CartDrawer from "@/components/orders/CartDrawer";
 import MenuItemPicker from "@/components/orders/MenuItemPicker";
 import { useOrderStore, makeCartKey } from "@/store/orderStore";
 import type { MenuItemType } from "@/types";
+import { CategoryIcon } from "@/lib/categoryIcons";
 
 const DEFAULT_CATEGORIES = [
   { id: "milktea", label: "Milk & Tea", icon: "🧋" },
@@ -86,7 +87,9 @@ export default function CategoryMenuPage() {
       <Navbar />
       <div className="pt-16 min-h-screen bg-cream pb-28">
         <div className="bg-navy px-4 py-8 text-center">
-          <p className="text-4xl mb-2">{catInfo?.icon ?? "🍽️"}</p>
+          <div className="flex justify-center mb-2">
+            <CategoryIcon id={catInfo?.id ?? ""} fallback={catInfo?.icon ?? "🍽️"} size={52} className="text-cream/80" />
+          </div>
           <h1 className="text-2xl font-bold text-cream mb-1">{catInfo?.label ?? categoryId}</h1>
           <Link href="/menu" className="text-cream/50 text-sm hover:text-cream/80 transition-colors">
             ← กลับหมวดหมู่
@@ -117,8 +120,8 @@ export default function CategoryMenuPage() {
                         <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover" />
                       </div>
                     ) : (
-                      <div className="aspect-[4/3] bg-sand/40 flex items-center justify-center text-4xl">
-                        {catInfo?.icon ?? "🍽️"}
+                      <div className="aspect-[4/3] bg-sand/40 flex items-center justify-center">
+                        <CategoryIcon id={catInfo?.id ?? ""} fallback={catInfo?.icon ?? "🍽️"} size={40} className="text-navy/30" />
                       </div>
                     )}
                     <div className="p-3 flex-1 flex flex-col">

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Search, X, Users, Clock } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import Navbar from "@/components/shared/Navbar";
 
 interface GameGuide {
   id: number;
@@ -83,27 +84,10 @@ export default function GamesPage() {
 
   return (
     <div className="min-h-screen bg-cream pb-8">
-      {/* Header */}
-      <div className="bg-navy px-4 pt-4 pb-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/DS-new-logo.png"
-              alt="Dice Shop"
-              width={40}
-              height={22}
-              className="object-contain brightness-0 invert"
-            />
-            <div>
-              <p className="text-cream/70 text-xs">Dice Shop</p>
-              <h1 className="text-cream font-bold text-lg leading-tight">บอร์ดเกม</h1>
-            </div>
-          </div>
-          <Link href="/" className="text-cream/60 text-xs underline">หน้าหลัก</Link>
-        </div>
-
-        {/* Search bar */}
-        <div className="relative">
+      <Navbar />
+      {/* Search bar */}
+      <div className="bg-navy px-4 pt-20 pb-4">
+        <div className="relative max-w-2xl mx-auto">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
@@ -123,35 +107,29 @@ export default function GamesPage() {
         </div>
       </div>
 
-      {/* Tag filters */}
-      <div className="px-4 py-3 border-b border-sand bg-cream sticky top-0 z-10">
-        <div className="flex gap-2 overflow-x-auto no-scrollbar">
-          <button
-            onClick={() => setActiveTag("")}
-            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              activeTag === "" ? "bg-navy text-cream" : "bg-sand text-navy"
-            }`}
+      {/* Tag filter dropdown */}
+      <div className="px-4 py-3 border-b border-sand bg-cream sticky top-16 z-10">
+        <div className="max-w-4xl mx-auto">
+          <select
+            value={activeTag}
+            onChange={(e) => setActiveTag(e.target.value)}
+            className="w-full sm:w-56 bg-white border border-sand rounded-xl px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-orange appearance-none bg-no-repeat pr-8"
+            style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundPosition: "right 10px center" }}
           >
-            ทั้งหมด
-          </button>
-          {allTags.map((tag) => (
-            <button
-              key={tag}
-              onClick={() => setActiveTag(activeTag === tag ? "" : tag)}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                activeTag === tag ? "bg-navy text-cream" : "bg-sand text-navy"
-              }`}
-            >
-              {TAG_LABELS[tag] ?? tag}
-            </button>
-          ))}
+            <option value="">ทุกประเภท</option>
+            {allTags.map((tag) => (
+              <option key={tag} value={tag}>
+                {TAG_LABELS[tag] ?? tag}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Game grid */}
-      <div className="max-w-2xl mx-auto px-4 py-4">
+      <div className="max-w-4xl mx-auto px-4 py-4">
         {loading ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl overflow-hidden shadow-sm animate-pulse">
                 <div className="aspect-square bg-sand" />
@@ -169,7 +147,7 @@ export default function GamesPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {games.slice(0, visibleCount).map((game) => {
                 const tags: string[] = (() => { try { return JSON.parse(game.tags ?? "[]"); } catch { return []; } })();
                 return (

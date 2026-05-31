@@ -6,6 +6,7 @@ import MenuCard from "@/components/orders/MenuCard";
 import CartDrawer from "@/components/orders/CartDrawer";
 import type { MenuItemType } from "@/types";
 import Image from "next/image";
+import { CategoryIcon } from "@/lib/categoryIcons";
 
 type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean };
 
@@ -97,7 +98,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   : "bg-sand text-navy"
               }`}
             >
-              {cat.icon} {cat.label}
+              <CategoryIcon id={cat.id} fallback={cat.icon} size={14} className="inline-block" /> {cat.label}
             </button>
           ))}
         </div>
