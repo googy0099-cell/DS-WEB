@@ -128,15 +128,16 @@ export default function MenuPage() {
           {/* Category Grid */}
           <section>
             <h2 className="text-xl font-bold text-navy mb-4">🍽️ เลือกหมวดหมู่</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            <div className="flex flex-col gap-2">
               {categories.map((cat) => (
                 <Link
                   key={cat.id}
                   href={`/menu/${cat.id}`}
-                  className="bg-white rounded-2xl shadow-sm p-5 flex flex-col items-center gap-2 hover:shadow-md hover:border-orange border-2 border-transparent transition-all text-center group"
+                  className="bg-white rounded-2xl shadow-sm px-5 py-4 flex items-center gap-4 hover:shadow-md hover:border-orange border-2 border-transparent transition-all group"
                 >
-                  <span className="text-4xl group-hover:scale-110 transition-transform">{cat.icon}</span>
-                  <span className="font-bold text-navy text-sm">{cat.label}</span>
+                  <span className="text-3xl group-hover:scale-110 transition-transform">{cat.icon}</span>
+                  <span className="font-bold text-navy">{cat.label}</span>
+                  <span className="ml-auto text-gray-300 group-hover:text-orange transition-colors">›</span>
                 </Link>
               ))}
             </div>
