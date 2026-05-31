@@ -55,7 +55,7 @@ export default async function AdminPage() {
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-bold text-navy">ออเดอร์ที่รอดำเนินการ</h2>
-        <span className="text-xs text-gray-400">รีเฟรชทุก 10 วินาที</span>
+        <span className="text-xs text-gray-400">รีเฟรชทุก 2 วินาที</span>
       </div>
       <OrderQueue />
     </div>
