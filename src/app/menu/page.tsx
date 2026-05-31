@@ -273,14 +273,17 @@ export default function MenuPage() {
                           )}
                           <div className="p-2.5">
                             <p className="font-semibold text-navy text-sm leading-tight line-clamp-2">{item.nameTh}</p>
-                            <p className="text-orange font-bold text-sm mt-1">
-                              {(() => {
-                                const prices = [item.priceTHB, item.priceS, item.priceXL].filter((p): p is number => p != null && p > 0);
-                                const minPrice = prices.length > 0 ? Math.min(...prices) : item.priceTHB;
-                                const hasMultiple = item.priceS != null || item.priceXL != null;
-                                return <>{`฿${minPrice}`}{hasMultiple && <span className="text-gray-400 font-normal text-xs"> ขึ้นไป</span>}</>;
-                              })()}
-                            </p>
+                            <div className="flex items-center justify-between mt-1">
+                              <p className="text-orange font-bold text-sm">
+                                {(() => {
+                                  const prices = [item.priceTHB, item.priceS, item.priceXL].filter((p): p is number => p != null && p > 0);
+                                  const minPrice = prices.length > 0 ? Math.min(...prices) : item.priceTHB;
+                                  const hasMultiple = item.priceS != null || item.priceXL != null;
+                                  return <>{`฿${minPrice}`}{hasMultiple && <span className="text-gray-400 font-normal text-xs"> ขึ้นไป</span>}</>;
+                                })()}
+                              </p>
+                              <span className="w-6 h-6 bg-orange text-white text-lg font-bold rounded-full flex items-center justify-center leading-none shrink-0">+</span>
+                            </div>
                           </div>
                         </button>
                       );

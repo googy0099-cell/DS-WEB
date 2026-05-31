@@ -83,7 +83,10 @@ export default function MenuItemPicker({ item, onClose }: Props) {
     <>
       <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
       <div className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 p-5 max-h-[85vh] overflow-y-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:w-[480px] md:max-h-[85vh]">
-        <h3 className="font-bold text-navy text-lg mb-1">{item.nameTh}</h3>
+        <div className="flex items-start justify-between mb-1">
+          <h3 className="font-bold text-navy text-lg leading-tight pr-2">{item.nameTh}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none px-1 shrink-0">×</button>
+        </div>
         <p className="text-xs text-gray-400 mb-4">{item.nameEn}</p>
 
         {hasSizes && (
