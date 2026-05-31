@@ -63,7 +63,7 @@ export default async function AdminLayout({
         <div className="p-4 border-b border-cream/10">
           <Link href="/">
             <Image
-              src="/DS-new-logo.png"
+              src="/แแแแ-Photoroom.png"
               alt="Dice Shop"
               width={124}
               height={44}
