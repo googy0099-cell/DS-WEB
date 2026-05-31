@@ -776,7 +776,7 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
         <div className="bg-white rounded-2xl shadow-sm p-5 space-y-5">
           <div>
             <h2 className="font-bold text-navy text-base">🔔 เสียงแจ้งเตือน</h2>
-            <p className="text-xs text-gray-400 mt-0.5">อัปโหลดไฟล์ WAV ไม่เกิน 20 วินาที (สูงสุด 10 MB)</p>
+            <p className="text-xs text-gray-400 mt-0.5">อัปโหลดไฟล์เสียง (สูงสุด 20 MB)</p>
           </div>
 
           {/* Order alert sound */}

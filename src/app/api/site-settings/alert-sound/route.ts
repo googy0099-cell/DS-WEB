@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB — covers ~20s WAV at any common sample rate
+const MAX_SIZE = 20 * 1024 * 1024; // 20 MB
 
 async function requireStaff() {
   const session = await auth();
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   if (key !== "alert_sound_url" && key !== "kitchen_sound_url")
     return NextResponse.json({ error: "key ไม่ถูกต้อง" }, { status: 400 });
   if (!file.type.startsWith("audio/")) return NextResponse.json({ error: "รองรับเฉพาะไฟล์เสียง" }, { status: 400 });
-  if (file.size > MAX_SIZE) return NextResponse.json({ error: "ไฟล์ใหญ่เกิน 10MB" }, { status: 400 });
+  if (file.size > MAX_SIZE) return NextResponse.json({ error: "ไฟล์ใหญ่เกิน 20MB" }, { status: 400 });
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "wav";
   const filename = `alert-sounds/${randomUUID()}.${ext}`;
