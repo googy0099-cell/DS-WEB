@@ -1050,7 +1050,7 @@ function OrderCard({
           <div className="flex-1 min-w-0 pr-2">
             {/* Bill name — most prominent */}
             {order.bill && (
-              <p className="font-black text-navy text-xl leading-tight">{order.bill.name}</p>
+              <p className="font-black text-navy text-xl leading-tight">ตี้ {order.bill.name}</p>
             )}
             {/* Table number — smaller, below bill name */}
             {order.bill ? (
