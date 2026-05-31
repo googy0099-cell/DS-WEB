@@ -8,6 +8,28 @@ const DRINK_CATEGORIES = ["milktea", "coffee", "soda", "drink"];
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+// Pleasant two-note chime — distinct from the alert beep
+function playDoneChime() {
+  try {
+    const ctx = new AudioContext();
+    const notes = [880, 1108]; // A5 → C#6 (major third)
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const t = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.5, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      osc.start(t);
+      osc.stop(t + 0.5);
+    });
+  } catch {}
+}
+
 function elapsed(createdAt: string) {
   const diff = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000);
   if (diff < 60) return `${diff} วิ`;
@@ -90,11 +112,12 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
     if (loadingIds.has(orderId)) return;
     setLoadingIds((prev) => { const s = new Set(prev); s.add(orderId); return s; });
     try {
-      await fetch(`/api/orders/${orderId}`, {
+      const res = await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "SERVED" }),
       });
+      if (res.ok) playDoneChime();
       await mutate();
     } finally {
       setLoadingIds((prev) => { const s = new Set(prev); s.delete(orderId); return s; });
