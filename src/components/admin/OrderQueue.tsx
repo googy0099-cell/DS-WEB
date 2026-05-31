@@ -1047,12 +1047,19 @@ function OrderCard({
       <div className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
-          <div>
-            <p className="font-bold text-navy text-lg">
-              👤 {order.orderName || `ออเดอร์ #${order.id}`}
-            </p>
+          <div className="flex-1 min-w-0 pr-2">
+            {/* Bill name — most prominent */}
+            {order.bill && (
+              <p className="font-black text-navy text-xl leading-tight">{order.bill.name}</p>
+            )}
+            {/* Table number — smaller, below bill name */}
+            {order.bill ? (
+              <p className="text-xs text-gray-400 mb-0.5">โต๊ะ {order.bill.table.number}</p>
+            ) : order.tableId ? (
+              <p className="font-bold text-navy text-lg">โต๊ะ {order.tableId}</p>
+            ) : null}
+            <p className="text-sm text-gray-500">👤 {order.orderName || `ออเดอร์ #${order.id}`}</p>
             <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
-            {/* Show order ID prominently for counter orders */}
             {isPendingCash && (
               <div className="mt-1 inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-0.5">
                 <span className="text-xs text-indigo-500">เลขที่ออเดอร์</span>
@@ -1060,7 +1067,7 @@ function OrderCard({
               </div>
             )}
           </div>
-          <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${badge.color}`}>
+          <span className={`text-xs font-semibold px-2 py-1 rounded-full border shrink-0 ${badge.color}`}>
             {badge.label}
           </span>
         </div>
