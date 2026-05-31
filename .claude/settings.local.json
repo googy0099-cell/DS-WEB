@@ -131,7 +131,9 @@
       "Bash(sips -g pixelWidth -g pixelHeight /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg)",
       "Bash(sips -z 512 512 /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg --out /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/icon-512.png)",
       "Bash(sips -z 192 192 /Users/wisdechsiri/.claude/image-cache/ad8f0522-bde2-4d26-b537-5d86bb5e1be0/10.jpeg --out /Users/wisdechsiri/Desktop/My-Diceshop-webpage/public/icon-192.png)",
-      "Bash(sips *)"
+      "Bash(sips *)",
+      "Bash(TURSO_DATABASE_URL=\"libsql://dice-shop-googy0099-cell.aws-ap-northeast-1.turso.io\" TURSO_AUTH_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzkzMzQ2NTYsImlkIjoiMDE5ZTQ4OWItZjIwMS03MzNlLTg4ODYtN2U1MDRhMDkyOGE1IiwicmlkIjoiNGQ3Y2ZmZDUtMjRiMi00N2I2LTk0NWYtOTE0NjA0MDM0MGI4In0.JmS6y_OSTjlpPjkJ-yen1mxaKCQ7YgQdUwFJov1d-qk-XamK6f2P3bP-8Ca9I0irwJxDzVmIGS7ogRZDxCqpDQ\" npx prisma *)",
+      "Bash(TURSO_DATABASE_URL=\"libsql://dice-shop-googy0099-cell.aws-ap-northeast-1.turso.io\" TURSO_AUTH_TOKEN=\"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3NzkzMzQ2NTYsImlkIjoiMDE5ZTQ4OWItZjIwMS03MzNlLTg4ODYtN2U1MDRhMDkyOGE1IiwicmlkIjoiNGQ3Y2ZmZDUtMjRiMi00N2I2LTk0NWYtOTE0NjA0MDM0MGI4In0.JmS6y_OSTjlpPjkJ-yen1mxaKCQ7YgQdUwFJov1d-qk-XamK6f2P3bP-8Ca9I0irwJxDzVmIGS7ogRZDxCqpDQ\" node *)"
     ]
   }
 }

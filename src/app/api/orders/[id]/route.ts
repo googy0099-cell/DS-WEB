@@ -75,7 +75,7 @@ export async function PATCH(
     const { receivedAmount, changeAmount } = body as { receivedAmount: number; changeAmount?: number };
     const orderFull = await db.order.findUnique({
       where: { id: orderId },
-      select: { totalTHB: true, userId: true },
+      select: { totalTHB: true, userId: true, kitchenServedAt: true },
     });
     if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
     const confirmData = {
@@ -91,8 +91,8 @@ export async function PATCH(
       create: { orderId, ...confirmData },
       update: confirmData,
     });
-    // Bill orders carry pending player data in staffNote — create sessions now
     await createSessionsFromStaffNote(payment.staffNote);
+    // Award loyalty + dice points at payment time
     const pts = Math.floor(orderFull.totalTHB / 10);
     if (orderFull.userId && pts > 0) {
       await db.user.update({
@@ -104,13 +104,54 @@ export async function PATCH(
       const dice = Math.floor(orderFull.totalTHB / 49);
       if (dice > 0) await db.user.update({ where: { id: orderFull.userId }, data: { dicePoints: { increment: dice } } });
     }
-    const served = await db.order.update({
+    // Only mark SERVED if kitchen has already finished; otherwise PAID (waiting kitchen)
+    const newStatus = orderFull.kitchenServedAt ? "SERVED" : "PAID";
+    const updated = await db.order.update({
       where: { id: orderId },
-      data: { status: "SERVED", ...(handledById ? { handledById } : {}) },
+      data: { status: newStatus, ...(handledById ? { handledById } : {}) },
       select: { id: true, orderName: true, status: true },
     });
-    if (handledById) await deductStockForOrder(orderId, handledById);
-    return NextResponse.json(served);
+    if (newStatus === "SERVED" && handledById) await deductStockForOrder(orderId, handledById);
+    return NextResponse.json(updated);
+  }
+
+  // Kitchen marks food done — separate from payment/order-closed status
+  if ("kitchenDone" in body) {
+    const orderFull = await db.order.findUnique({
+      where: { id: orderId },
+      select: { status: true, userId: true, totalTHB: true },
+    });
+    if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
+
+    const now = new Date();
+    // If payment is already collected (PAID), closing everything now → SERVED
+    const nextStatus = orderFull.status === "PAID" ? "SERVED" : orderFull.status;
+
+    const updated = await db.order.update({
+      where: { id: orderId },
+      data: {
+        kitchenServedAt: now,
+        status: nextStatus,
+        ...(handledById ? { handledById } : {}),
+      },
+      select: { id: true, orderName: true, status: true, userId: true, totalTHB: true },
+    });
+
+    if (nextStatus === "SERVED") {
+      if (handledById) await deductStockForOrder(orderId, handledById);
+      if (handledById) {
+        await db.auditLog.create({
+          data: {
+            userId: handledById,
+            action: "ORDER_SERVED",
+            targetType: "Order",
+            targetId: orderId,
+            detail: `ออเดอร์ #${orderId} ของ ${updated.orderName}`,
+          },
+        });
+      }
+    }
+    return NextResponse.json(updated);
   }
 
   // Status update mode
@@ -125,14 +166,6 @@ export async function PATCH(
     select: { id: true, orderName: true, status: true, userId: true, totalTHB: true },
   });
 
-  // Award dice points only when cashier confirms payment (SERVED)
-  if (status === "SERVED" && order.userId) {
-    const diceEarned = Math.floor(order.totalTHB / 49);
-    if (diceEarned > 0) {
-      await db.user.update({ where: { id: order.userId }, data: { dicePoints: { increment: diceEarned } } });
-    }
-  }
-
   if (status === "SERVED" && handledById) await deductStockForOrder(orderId, handledById);
 
   if (handledById && AUDIT_ACTIONS[status]) {
@@ -146,7 +179,6 @@ export async function PATCH(
       },
     });
   }
-
 
   return NextResponse.json(order);
 }

@@ -83,6 +83,7 @@ export interface OrderWithItems {
   totalTHB: number;
   note: string | null;
   createdAt: string;
+  kitchenServedAt: string | null;
   payment?: { id: number; slipUrl: string | null; status: string; method: string; amountTHB: number } | null;
   bill?: { id: number; name: string; color: string; table: { number: number } } | null;
   items: {

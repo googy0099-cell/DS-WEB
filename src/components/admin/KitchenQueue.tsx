@@ -84,7 +84,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   const prevCountRef = useRef(0);
 
   const queueOrders = (allOrders ?? [])
-    .filter(isReadyForKitchen)
+    .filter((o) => isReadyForKitchen(o) && !o.kitchenServedAt)
     .map((order) => {
       const relevantItems = order.items.filter((item) =>
         type === "drink"
@@ -115,7 +115,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
       const res = await fetch(`/api/orders/${orderId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "SERVED" }),
+        body: JSON.stringify({ kitchenDone: true }),
       });
       if (res.ok) playDoneChime();
       await mutate();

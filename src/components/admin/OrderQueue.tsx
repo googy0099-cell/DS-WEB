@@ -200,11 +200,11 @@ const STATUS_CONFIG = {
     nextColor: "bg-green-600 text-white",
   },
   PAID: {
-    label: "✅ ชำระแล้ว",
+    label: "💰 ชำระแล้ว รอครัว",
     color: "bg-green-100 text-green-800 border-green-300",
-    next: "SERVED",
-    nextLabel: "🖨️ พิมพ์ใบเสร็จ",
-    nextColor: "bg-orange text-white",
+    next: null,
+    nextLabel: null,
+    nextColor: "",
   },
   SERVED: {
     label: "🎉 เสร็จสิ้น",
@@ -236,6 +236,8 @@ const BILL_COLOR_MAP: Record<string, { bg: string; text: string; border: string 
 function resolveStatusBadge(order: OrderWithItems) {
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
+  const kitchenDone = !!order.kitchenServedAt;
+
   if (order.status === "PENDING") {
     if (method === "CASH")
       return { label: "🏪 รอชำระที่เคาน์เตอร์", color: "bg-indigo-100 text-indigo-800 border-indigo-300" };
@@ -244,8 +246,16 @@ function resolveStatusBadge(order: OrderWithItems) {
     if (method === "PROMPTPAY")
       return { label: "📷 รอสลิปจากลูกค้า", color: "bg-blue-100 text-blue-800 border-blue-300" };
   }
-  if (order.status === "CONFIRMED" && (method === "TAB" || method === "UNSET" || !method))
-    return { label: "🧾 รอชำระตอนเช็กเอาท์", color: "bg-amber-100 text-amber-800 border-amber-300" };
+  if (order.status === "CONFIRMED" && (method === "TAB" || method === "UNSET" || !method)) {
+    if (kitchenDone)
+      return { label: "✅ อาหารพร้อม รอชำระ", color: "bg-green-100 text-green-800 border-green-300" };
+    return { label: "🍳 กำลังทำ · รอชำระ", color: "bg-amber-100 text-amber-800 border-amber-300" };
+  }
+  if (order.status === "PAID") {
+    if (kitchenDone)
+      return { label: "✅ อาหารพร้อม ชำระแล้ว", color: "bg-green-100 text-green-800 border-green-300" };
+    return { label: "💰 ชำระแล้ว กำลังทำ", color: "bg-blue-100 text-blue-800 border-blue-300" };
+  }
   return STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
 }
 
@@ -1097,16 +1107,29 @@ function OrderCard({
             const options: { groupName: string; choiceName: string }[] = item.selectedOptions
               ? JSON.parse(item.selectedOptions)
               : [];
+            const inKitchen = !order.kitchenServedAt && (order.status === "CONFIRMED" || order.status === "PAID");
             return (
               <div key={item.id} className="flex justify-between text-sm gap-2">
                 <div className="flex-1 min-w-0">
-                  <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
-                  {item.selectedSize && (
-                    <span className="ml-1 text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
-                      {item.selectedSize}
-                    </span>
-                  )}
-                  <span className="text-gray-400 font-normal"> ×{item.quantity}</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
+                    {item.selectedSize && (
+                      <span className="text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">
+                        {item.selectedSize}
+                      </span>
+                    )}
+                    <span className="text-gray-400 font-normal">×{item.quantity}</span>
+                    {inKitchen && (
+                      <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                        🍳 กำลังทำ
+                      </span>
+                    )}
+                    {order.kitchenServedAt && (
+                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                        ✅ พร้อม
+                      </span>
+                    )}
+                  </div>
                   {addons.length > 0 && (
                     <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>
                   )}
@@ -1237,12 +1260,24 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
           </button>
+        ) : order.status === "PAID" && order.kitchenServedAt ? (
+          // Payment done + kitchen done → close order
+          <button
+            onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
+            disabled={isLoading}
+            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-orange text-white transition-opacity disabled:opacity-60"
+          >
+            {isLoading ? "กำลังบันทึก..." : "🖨️ พิมพ์ใบเสร็จ · ปิดออเดอร์"}
+          </button>
+        ) : order.status === "PAID" ? (
+          // Paid but kitchen still working — info only
+          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
+            <p className="font-semibold">🍳 ชำระแล้ว — รอครัวยืนยันว่าเสร็จ</p>
+            <p className="text-xs text-amber-500 mt-0.5">ออเดอร์จะปิดอัตโนมัติเมื่อครัวกดเสร็จแล้ว</p>
+          </div>
         ) : cfg.next ? (
           <button
-            onClick={() => {
-              if (cfg.next === "SERVED") onPrint(order);
-              onUpdate(order.id, cfg.next!);
-            }}
+            onClick={() => onUpdate(order.id, cfg.next!)}
             disabled={isLoading}
             className={`w-full text-sm font-bold py-3 rounded-xl mb-2 transition-opacity disabled:opacity-60 ${cfg.nextColor}`}
           >

@@ -196,6 +196,7 @@ model Order {
   status          String         @default("PENDING")
   totalTHB        Int
   note            String?
+  kitchenServedAt DateTime?
   items           OrderItem[]
   payment         Payment?
   createdAt       DateTime       @default(now())

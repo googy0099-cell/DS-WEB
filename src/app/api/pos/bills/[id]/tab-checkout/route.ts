@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { deductStockForOrder } from "@/lib/stock-deduct";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const tabTotal = orders.reduce((sum, o) => sum + o.totalTHB, 0);
   const now = new Date();
 
+  // Mark SERVED only if kitchen has already finished; otherwise PAID (waiting kitchen to confirm)
   await db.$transaction([
     ...orders.map((o) =>
       db.payment.update({
@@ -57,7 +59,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
     ),
     ...orders.map((o) =>
-      db.order.update({ where: { id: o.id }, data: { status: "SERVED" } })
+      db.order.update({
+        where: { id: o.id },
+        data: { status: o.kitchenServedAt ? "SERVED" : "PAID" },
+      })
     ),
   ]);
 
@@ -75,6 +80,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     pointsAwarded = pts;
   }
+
+  // Deduct stock for orders that are now SERVED (kitchen was already done)
+  const staffId = Number(session.user.id);
+  const servedOrders = orders.filter((o) => o.kitchenServedAt);
+  await Promise.allSettled(servedOrders.map((o) => deductStockForOrder(o.id, staffId)));
 
   return NextResponse.json({ tabTotal, ordersCount: orders.length, pointsAwarded });
 }
