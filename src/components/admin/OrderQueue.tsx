@@ -350,7 +350,7 @@ export default function OrderQueue() {
   const pendingOrders = (orders?.filter((o) => o.status === "PENDING") ?? [])
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // Fire beep + browser notification only when NEW pending orders arrive
+  // Fire beep + browser notification when NEW pending orders arrive
   useEffect(() => {
     if (!orders) return;
     const incoming = orders.filter(
@@ -367,6 +367,25 @@ export default function OrderQueue() {
     }
     prevIdsRef.current = new Set(orders.map((o) => o.id));
   }, [orders, alertEnabled]);
+
+  // Repeat alert every 15s while there are unacknowledged PENDING orders
+  useEffect(() => {
+    if (!alertEnabled || pendingOrders.length === 0) return;
+    const interval = setInterval(() => {
+      try {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        playBeep(audioCtxRef.current);
+      } catch {}
+      if (pendingOrders.length > 0) {
+        const first = pendingOrders[0];
+        showBrowserNotification(
+          `⚠️ รอรับออเดอร์ (${pendingOrders.length} รายการ)`,
+          first.totalTHB
+        );
+      }
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [alertEnabled, pendingOrders]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {

@@ -51,8 +51,17 @@ export default function MobileNav({ items, username, role }: { items: NavItem[];
           <button onClick={() => setOpen(false)} className="text-cream/50 text-2xl leading-none">×</button>
         </div>
 
-        {/* Nav items grid */}
-        <nav className="p-4 grid grid-cols-3 gap-2 max-h-[65vh] overflow-y-auto pb-8">
+        {/* Nav items list */}
+        <nav className="p-3 flex flex-col gap-1 max-h-[65vh] overflow-y-auto pb-8">
+          <Link
+            href="/"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-cream/70 hover:bg-cream/10 hover:text-cream transition-colors"
+          >
+            <span className="text-xl">🏠</span>
+            <span className="text-sm font-medium">กลับหน้าหลัก</span>
+          </Link>
+          <div className="my-1 border-t border-cream/10" />
           {items.map((item) => {
             const active = pathname === item.href;
             return (
@@ -60,14 +69,14 @@ export default function MobileNav({ items, username, role }: { items: NavItem[];
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl transition-colors ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
                   active
                     ? "bg-orange/20 text-orange"
-                    : "text-cream/70 hover:bg-cream/10 hover:text-cream active:bg-cream/20"
+                    : "text-cream/70 hover:bg-cream/10 hover:text-cream"
                 }`}
               >
-                <span className="text-2xl">{item.icon}</span>
-                <span className="text-[10px] font-medium text-center leading-tight">{item.label}</span>
+                <span className="text-xl">{item.icon}</span>
+                <span className="text-sm font-medium">{item.label}</span>
               </Link>
             );
           })}

@@ -90,6 +90,6 @@ export interface OrderWithItems {
     selectedSize: string | null;
     selectedAddons: string | null;
     selectedOptions: string | null;
-    menuItem: { nameTh: string; nameEn: string };
+    menuItem: { nameTh: string; nameEn: string; category: string };
   }[];
 }
