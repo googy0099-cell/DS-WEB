@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 
   const orders = await db.order.findMany({
     where: whereClause,
-    include: { items: { include: { menuItem: true } }, user: true, payment: true },
+    include: { items: { include: { menuItem: true } }, user: true, payment: true, bill: { include: { table: true } } },
     orderBy: { createdAt: "asc" },
   });
 

@@ -78,11 +78,13 @@ export interface OrderWithItems {
   id: number;
   orderName: string;
   tableId: number | null;
+  billId: number | null;
   status: OrderStatus;
   totalTHB: number;
   note: string | null;
   createdAt: string;
   payment?: { id: number; slipUrl: string | null; status: string; method: string; amountTHB: number } | null;
+  bill?: { id: number; name: string; table: { number: number } } | null;
   items: {
     id: number;
     quantity: number;
