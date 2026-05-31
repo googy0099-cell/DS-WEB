@@ -174,7 +174,8 @@ export default function GamesPage() {
                     )}
                   </div>
                   <div className="p-2.5">
-                    <p className="font-bold text-navy text-sm leading-tight line-clamp-2">{game.nameTh}</p>
+                    <p className="font-bold text-navy text-sm leading-tight line-clamp-2">{game.nameEn || game.nameTh}</p>
+                    {game.nameEn && game.nameTh && <p className="text-[10px] text-gray-400 line-clamp-1">{game.nameTh}</p>}
                     <div className="flex items-center gap-2 mt-1 text-[10px] text-gray-400">
                       <span className="flex items-center gap-0.5"><Users size={10} />{game.minPlayers}–{game.maxPlayers}</span>
                       <span className="flex items-center gap-0.5"><Clock size={10} />{game.durationMin}น.</span>

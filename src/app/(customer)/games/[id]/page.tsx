@@ -97,8 +97,8 @@ export default function GameDetailPage() {
           <div className="px-4 space-y-4 pb-12">
             {/* Name + tags */}
             <div>
-              <h1 className="text-2xl font-bold text-navy">{game.nameTh}</h1>
-              {game.nameEn && <p className="text-gray-400 text-sm mt-0.5">{game.nameEn}</p>}
+              <h1 className="text-2xl font-bold text-navy">{game.nameEn || game.nameTh}</h1>
+              {game.nameEn && game.nameTh && <p className="text-gray-400 text-sm mt-0.5">{game.nameTh}</p>}
 
               <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
                 <span className="flex items-center gap-1.5">
