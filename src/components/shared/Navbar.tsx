@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
 const NAV_ITEMS = [
-  { label: "หน้าแรก", href: "/#hero", section: "hero" },
+  { label: "หน้าแรก", href: "/", section: "hero" },
   { label: "สั่งอาหาร", href: "/menu" },
   { label: "มินิเกม", href: "/play" },
   { label: "บอร์ดเกม", href: "/games" },
