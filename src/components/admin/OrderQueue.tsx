@@ -415,11 +415,16 @@ export default function OrderQueue() {
     return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
   }) ?? []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-  // All board-visible unacknowledged orders (need staff action)
+  // Orders that still need immediate staff action (alert beeps for these)
   const alertOrders = (orders ?? []).filter((o) => {
-    if (o.status === "CONFIRMED" || o.status === "PAID") return true;
     const m = o.payment?.method;
-    return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY" || m === "TAB");
+    // PENDING with payment method selected — needs staff to process
+    if (o.status === "PENDING") return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
+    // CONFIRMED cashier orders waiting for payment selection/collection
+    if (o.status === "CONFIRMED") return !m || m === "UNSET" || m === "CASH" || m === "PROMPTPAY";
+    // CONFIRMED+TAB = accepted, in kitchen → no more alert needed
+    // PAID = payment done → no alert (kitchen chime handles food-ready)
+    return false;
   });
 
   // Orders where ALL items are kitchen-done but bill is not yet closed
