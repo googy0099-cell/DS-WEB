@@ -6,6 +6,13 @@ import Image from "next/image";
 import { Users, Clock, ChevronLeft } from "lucide-react";
 import Navbar from "@/components/shared/Navbar";
 
+const DIFFICULTY_MAP: Record<string, { label: string; color: string }> = {
+  easy:   { label: "ง่าย",          color: "bg-green-100 text-green-700" },
+  medium: { label: "ปานกลาง",       color: "bg-yellow-100 text-yellow-700" },
+  hard:   { label: "ยาก",           color: "bg-orange-100 text-orange-700" },
+  expert: { label: "ผู้เชี่ยวชาญ", color: "bg-red-100 text-red-700" },
+};
+
 interface GameGuide {
   id: number;
   nameTh: string;
@@ -17,6 +24,7 @@ interface GameGuide {
   maxPlayers: number;
   durationMin: number;
   tags: string;
+  difficulty: string | null;
 }
 
 function getYoutubeEmbedId(url: string): string | null {
@@ -100,7 +108,7 @@ export default function GameDetailPage() {
               <h1 className="text-2xl font-bold text-navy">{game.nameEn || game.nameTh}</h1>
               {game.nameEn && game.nameTh && <p className="text-gray-400 text-sm mt-0.5">{game.nameTh}</p>}
 
-              <div className="flex items-center gap-4 mt-3 text-sm text-gray-500">
+              <div className="flex items-center gap-4 mt-3 text-sm text-gray-500 flex-wrap">
                 <span className="flex items-center gap-1.5">
                   <Users size={15} />
                   {game.minPlayers}–{game.maxPlayers} คน
@@ -109,6 +117,11 @@ export default function GameDetailPage() {
                   <Clock size={15} />
                   {game.durationMin} นาที
                 </span>
+                {game.difficulty && DIFFICULTY_MAP[game.difficulty] && (
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${DIFFICULTY_MAP[game.difficulty].color}`}>
+                    {DIFFICULTY_MAP[game.difficulty].label}
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-wrap gap-1.5 mt-3">

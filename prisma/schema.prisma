@@ -301,6 +301,7 @@ model GameGuide {
   maxPlayers  Int
   durationMin Int
   tags        String
+  difficulty  String? @default("medium")
   isActive    Boolean @default(true)
   sortOrder   Int     @default(0)
 }

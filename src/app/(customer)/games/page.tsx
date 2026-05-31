@@ -16,7 +16,15 @@ interface GameGuide {
   maxPlayers: number;
   durationMin: number;
   tags: string;
+  difficulty: string | null;
 }
+
+const DIFFICULTY_MAP: Record<string, { label: string; color: string }> = {
+  easy:   { label: "ง่าย",          color: "bg-green-100 text-green-700" },
+  medium: { label: "ปานกลาง",       color: "bg-yellow-100 text-yellow-700" },
+  hard:   { label: "ยาก",           color: "bg-orange-100 text-orange-700" },
+  expert: { label: "ผู้เชี่ยวชาญ", color: "bg-red-100 text-red-700" },
+};
 
 const TAG_LABELS: Record<string, string> = {
   bluffing: "🃏 บลัฟฟิ่ง",
@@ -180,11 +188,18 @@ export default function GamesPage() {
                       <span className="flex items-center gap-0.5"><Users size={10} />{game.minPlayers}–{game.maxPlayers}</span>
                       <span className="flex items-center gap-0.5"><Clock size={10} />{game.durationMin}น.</span>
                     </div>
-                    {tags[0] && (
-                      <span className="inline-block mt-1.5 text-[10px] bg-orange/10 text-orange px-2 py-0.5 rounded-full">
-                        {tags[0]}
-                      </span>
-                    )}
+                    <div className="flex gap-1 mt-1.5 flex-wrap">
+                      {game.difficulty && DIFFICULTY_MAP[game.difficulty] && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_MAP[game.difficulty].color}`}>
+                          {DIFFICULTY_MAP[game.difficulty].label}
+                        </span>
+                      )}
+                      {tags[0] && (
+                        <span className="text-[10px] bg-orange/10 text-orange px-2 py-0.5 rounded-full">
+                          {tags[0]}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </Link>
               );

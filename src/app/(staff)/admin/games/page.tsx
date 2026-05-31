@@ -17,9 +17,17 @@ type GameGuide = {
   maxPlayers: number;
   durationMin: number;
   tags: string;
+  difficulty: string | null;
   isActive: boolean;
   sortOrder: number;
 };
+
+const DIFFICULTIES = [
+  { value: "easy", label: "ง่าย", color: "text-green-600 bg-green-50" },
+  { value: "medium", label: "ปานกลาง", color: "text-yellow-600 bg-yellow-50" },
+  { value: "hard", label: "ยาก", color: "text-orange-600 bg-orange-50" },
+  { value: "expert", label: "ผู้เชี่ยวชาญ", color: "text-red-600 bg-red-50" },
+];
 
 const EMPTY: Omit<GameGuide, "id"> = {
   nameTh: "",
@@ -31,6 +39,7 @@ const EMPTY: Omit<GameGuide, "id"> = {
   maxPlayers: 8,
   durationMin: 30,
   tags: "[]",
+  difficulty: "medium",
   isActive: true,
   sortOrder: 0,
 };
@@ -584,6 +593,27 @@ export default function AdminGamesPage() {
                     placeholder="30"
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none"
                   />
+                </div>
+              </div>
+
+              {/* Difficulty */}
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">ความยาก</label>
+                <div className="flex gap-2 flex-wrap">
+                  {DIFFICULTIES.map((d) => (
+                    <button
+                      key={d.value}
+                      type="button"
+                      onClick={() => setEditing({ ...editing, difficulty: d.value })}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-all ${
+                        (editing.difficulty ?? "medium") === d.value
+                          ? `${d.color} border-current`
+                          : "text-gray-400 bg-gray-50 border-transparent"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
