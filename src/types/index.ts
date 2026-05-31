@@ -84,7 +84,7 @@ export interface OrderWithItems {
   note: string | null;
   createdAt: string;
   payment?: { id: number; slipUrl: string | null; status: string; method: string; amountTHB: number } | null;
-  bill?: { id: number; name: string; table: { number: number } } | null;
+  bill?: { id: number; name: string; color: string; table: { number: number } } | null;
   items: {
     id: number;
     quantity: number;

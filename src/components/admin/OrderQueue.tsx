@@ -222,6 +222,17 @@ const STATUS_CONFIG = {
   },
 };
 
+const BILL_COLOR_MAP: Record<string, { bg: string; text: string; border: string }> = {
+  indigo:  { bg: "bg-indigo-600",  text: "text-white", border: "border-indigo-700" },
+  emerald: { bg: "bg-emerald-600", text: "text-white", border: "border-emerald-700" },
+  rose:    { bg: "bg-rose-600",    text: "text-white", border: "border-rose-700" },
+  amber:   { bg: "bg-amber-500",   text: "text-white", border: "border-amber-600" },
+  violet:  { bg: "bg-violet-600",  text: "text-white", border: "border-violet-700" },
+  teal:    { bg: "bg-teal-600",    text: "text-white", border: "border-teal-700" },
+  sky:     { bg: "bg-sky-500",     text: "text-white", border: "border-sky-600" },
+  pink:    { bg: "bg-pink-500",    text: "text-white", border: "border-pink-600" },
+};
+
 function resolveStatusBadge(order: OrderWithItems) {
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
@@ -1048,10 +1059,15 @@ function OrderCard({
         {/* Header */}
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0 pr-2">
-            {/* Bill name — most prominent */}
-            {order.bill && (
-              <p className="font-black text-navy text-xl leading-tight">ตี้ {order.bill.name}</p>
-            )}
+            {/* Bill name — most prominent, colored by bill color */}
+            {order.bill && (() => {
+              const c = BILL_COLOR_MAP[order.bill.color] ?? BILL_COLOR_MAP.indigo;
+              return (
+                <span className={`inline-block font-black text-base px-3 py-0.5 rounded-full ${c.bg} ${c.text} mb-1`}>
+                  ตี้ {order.bill.name}
+                </span>
+              );
+            })()}
             {/* Table number — smaller, below bill name */}
             {order.bill ? (
               <p className="text-xs text-gray-400 mb-0.5">โต๊ะ {order.bill.table.number}</p>
