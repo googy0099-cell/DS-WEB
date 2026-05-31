@@ -92,6 +92,14 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
 
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const prevCountRef = useRef(0);
+  const [kitchenSoundUrl, setKitchenSoundUrl] = useState<string>("");
+
+  useEffect(() => {
+    fetch("/api/site-settings")
+      .then((r) => r.json())
+      .then((data) => { if (data.kitchen_sound_url) setKitchenSoundUrl(data.kitchen_sound_url); })
+      .catch(() => {});
+  }, []);
 
   // Build a flat list of pending items, one entry per item
   const queueItems: QueueItem[] = [];
@@ -142,7 +150,10 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kitchenDone: true }),
       });
-      if (res.ok) playDoneChime();
+      if (res.ok) {
+        if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
+        else playDoneChime();
+      }
       await mutate();
     } finally {
       setLoadingIds((prev) => { const s = new Set(prev); s.delete(itemId); return s; });

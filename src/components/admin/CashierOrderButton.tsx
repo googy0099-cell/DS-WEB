@@ -128,6 +128,7 @@ function ItemDetail({ item, onClose, onAdd }: {
 type MemberInfo = { id: number; firstName: string; username: string; memberCode: string; dicePoints: number };
 type PublicBill = { id: number; name: string; tableNumber: number };
 type SessionLink = { id: number; nickname: string } | null;
+type BillPlayer = { id: number; nickname: string; userId: number | null; memberCode: string | null };
 
 export default function CashierOrderButton({ onCreated, initialBillId, initialBillName, triggerClassName }: {
   onCreated?: () => void;
@@ -149,6 +150,13 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
   const [selectedBillId, setSelectedBillId] = useState<number | "">("");
   const [sessionLink, setSessionLink] = useState<SessionLink>(null);
 
+  // Bill players
+  const [billPlayers, setBillPlayers] = useState<BillPlayer[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState<number | "new" | "">("");
+
+  // Payment method
+  const [paymentMethod, setPaymentMethod] = useState<"now" | "tab">("now");
+
   // Member code for dice points
   const [memberCode, setMemberCode] = useState("");
   const [memberInfo, setMemberInfo] = useState<MemberInfo | null>(null);
@@ -166,6 +174,18 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
       })
       .catch(() => setSessionLink(null));
   }, [selectedBillId, memberInfo]);
+
+  // When bill changes, load its players
+  useEffect(() => {
+    if (!selectedBillId) { setBillPlayers([]); setSelectedPlayerId(""); return; }
+    fetch(`/api/pos/bills/${selectedBillId}/players`)
+      .then((r) => r.json())
+      .then((data: BillPlayer[]) => {
+        setBillPlayers(data);
+        setSelectedPlayerId(data.length > 0 ? "" : "new");
+      })
+      .catch(() => { setBillPlayers([]); setSelectedPlayerId("new"); });
+  }, [selectedBillId]);
 
   const loadMenu = useCallback(async () => {
     const res = await fetch("/api/menu").then((r) => r.json()).catch(() => []);
@@ -191,6 +211,22 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
     setOpen(false); setCart([]); setOrderName(""); setOrderNote(""); setSearch("");
     setMemberCode(""); setMemberInfo(null); setMemberError("");
     setBills([]); setSelectedBillId(""); setSessionLink(null);
+    setBillPlayers([]); setSelectedPlayerId(""); setPaymentMethod("now");
+  }
+
+  async function lookupMember(code: string, setName = true) {
+    if (!code.trim()) { setMemberInfo(null); return; }
+    setMemberLoading(true);
+    const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
+    setMemberLoading(false);
+    if (res.ok) {
+      const m: MemberInfo = await res.json();
+      setMemberInfo(m);
+      if (setName && !orderName.trim()) setOrderName(m.firstName);
+    } else {
+      setMemberInfo(null);
+      setMemberError("ไม่พบสมาชิก");
+    }
   }
 
   function onMemberCodeChange(code: string) {
@@ -198,19 +234,26 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
     setMemberError("");
     if (!code.trim()) { setMemberInfo(null); return; }
     if (memberTimerRef.current) clearTimeout(memberTimerRef.current);
-    memberTimerRef.current = setTimeout(async () => {
-      setMemberLoading(true);
-      const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
-      setMemberLoading(false);
-      if (res.ok) {
-        const m: MemberInfo = await res.json();
-        setMemberInfo(m);
-        if (!orderName.trim()) setOrderName(m.firstName);
-      } else {
-        setMemberInfo(null);
-        setMemberError("ไม่พบสมาชิก");
-      }
-    }, 500);
+    memberTimerRef.current = setTimeout(() => lookupMember(code), 500);
+  }
+
+  function onSelectPlayer(playerId: number | "new" | "") {
+    setSelectedPlayerId(playerId);
+    if (playerId === "" || playerId === "new") {
+      setOrderName("");
+      setMemberCode(""); setMemberInfo(null); setMemberError("");
+      return;
+    }
+    const player = billPlayers.find((p) => p.id === playerId);
+    if (!player) return;
+    setOrderName(player.nickname);
+    if (player.memberCode) {
+      setMemberCode(player.memberCode);
+      setMemberError("");
+      lookupMember(player.memberCode, false);
+    } else {
+      setMemberCode(""); setMemberInfo(null); setMemberError("");
+    }
   }
 
   function pickItem(item: MenuItemType) {
@@ -241,8 +284,12 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
       alert("กรุณาเลือกตี้ก่อนส่งออเดอร์");
       return;
     }
+    if (paymentMethod === "tab" && !selectedBillId) {
+      alert("ต้องเลือกตี้เพื่อชำระตอนเช็กเอาท์");
+      return;
+    }
     setSaving(true);
-    await fetch("/api/orders", {
+    const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -260,6 +307,14 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
         })),
       }),
     });
+    if (res.ok && paymentMethod === "tab") {
+      const order = await res.json();
+      await fetch("/api/payment/tab", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+    }
     setSaving(false);
     closeModal();
     onCreated?.();
@@ -283,13 +338,7 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-navy block mb-1">ชื่อลูกค้า *</label>
-                <input value={orderName} onChange={(e) => setOrderName(e.target.value)}
-                  placeholder="เช่น คุณสมชาย หรือ โต๊ะ 3"
-                  className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange" />
-              </div>
-
+              {/* Bill selector */}
               {initialBillId ? (
                 <div>
                   <label className="text-xs font-semibold text-navy block mb-1">ตี้</label>
@@ -317,6 +366,33 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
                 </div>
               )}
 
+              {/* Player dropdown — shown when bill has existing players */}
+              {selectedBillId && billPlayers.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-navy block mb-1">ผู้เล่น</label>
+                  <select
+                    value={selectedPlayerId}
+                    onChange={(e) => onSelectPlayer(e.target.value === "new" ? "new" : e.target.value ? Number(e.target.value) : "")}
+                    className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange"
+                  >
+                    <option value="">— เลือกผู้เล่น —</option>
+                    {billPlayers.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nickname}{p.memberCode ? ` (${p.memberCode})` : ""}</option>
+                    ))}
+                    <option value="new">+ ใหม่ / ไม่ระบุ</option>
+                  </select>
+                </div>
+              )}
+
+              {/* Name field — always show, editable */}
+              <div>
+                <label className="text-xs font-semibold text-navy block mb-1">ชื่อลูกค้า *</label>
+                <input value={orderName} onChange={(e) => setOrderName(e.target.value)}
+                  placeholder={selectedBillId && billPlayers.length > 0 ? "หรือพิมพ์ชื่อใหม่" : "เช่น คุณสมชาย หรือ โต๊ะ 3"}
+                  className="w-full border-2 border-sand rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange" />
+              </div>
+
+              {/* Member code */}
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">รหัสสมาชิก <span className="text-gray-400 font-normal">(ไม่บังคับ — เพื่อสะสมแต้ม)</span></label>
                 <input
@@ -340,6 +416,23 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
                 )}
                 {memberError && <p className="text-xs text-red-500 mt-1">{memberError}</p>}
               </div>
+
+              {/* Payment method — show TAB option only when a bill is selected */}
+              {selectedBillId && (
+                <div>
+                  <label className="text-xs font-semibold text-navy block mb-2">วิธีชำระ</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setPaymentMethod("now")}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${paymentMethod === "now" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      💵 ชำระทันที
+                    </button>
+                    <button type="button" onClick={() => setPaymentMethod("tab")}
+                      className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${paymentMethod === "tab" ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                      🧾 ชำระตอนเช็กเอาท์
+                    </button>
+                  </div>
+                </div>
+              )}
               <input value={search} onChange={(e) => setSearch(e.target.value)}
                 placeholder="🔍 ค้นหารายการ..."
                 className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />

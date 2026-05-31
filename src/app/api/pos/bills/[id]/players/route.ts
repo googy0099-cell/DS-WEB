@@ -1,6 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const billId = Number(id);
+
+  const sessions = await db.playerSession.findMany({
+    where: { billId, status: "ACTIVE" },
+    select: { id: true, nickname: true, userId: true, user: { select: { memberCode: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return NextResponse.json(
+    sessions.map((s) => ({ id: s.id, nickname: s.nickname, userId: s.userId, memberCode: s.user?.memberCode ?? null }))
+  );
+}
+
 type PlayerInput = { nameOrCode?: string };
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

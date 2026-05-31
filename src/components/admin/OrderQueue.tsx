@@ -351,6 +351,8 @@ export default function OrderQueue() {
   const [confirmAction, setConfirmAction] = useState<ConfirmState | null>(null);
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT);
   const [kitchenSettings, setKitchenSettings] = useState<KitchenSettings>(DEFAULT_KITCHEN);
+  const [alertSoundUrl, setAlertSoundUrl] = useState<string>("");
+  const [kitchenSoundUrl, setKitchenSoundUrl] = useState<string>("");
 
   // Cash payment modal
   const [cashOrder, setCashOrder] = useState<OrderWithItems | null>(null);
@@ -404,6 +406,8 @@ export default function OrderQueue() {
         if (data.print_kitchen) {
           try { setKitchenSettings({ ...DEFAULT_KITCHEN, ...JSON.parse(data.print_kitchen) }); } catch {}
         }
+        if (data.alert_sound_url) setAlertSoundUrl(data.alert_sound_url);
+        if (data.kitchen_sound_url) setKitchenSoundUrl(data.kitchen_sound_url);
       })
       .catch(() => {});
   }, []);
@@ -451,15 +455,19 @@ export default function OrderQueue() {
     if (alertEnabled) {
       if (newOrders.length > 0) {
         try {
-          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-          playBeep(audioCtxRef.current);
+          if (alertSoundUrl) { new Audio(alertSoundUrl).play().catch(() => {}); }
+          else {
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+            playBeep(audioCtxRef.current);
+          }
         } catch {}
         newOrders.forEach((o) =>
           showBrowserNotification(`🔔 ออเดอร์ใหม่`, o.orderName || `#${o.id}`)
         );
       }
       if (newKitchenDone.length > 0) {
-        playDoneChime();
+        if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
+        else playDoneChime();
         newKitchenDone.forEach((o) =>
           showBrowserNotification(`✅ อาหารพร้อม`, o.orderName || `#${o.id}`)
         );
@@ -472,13 +480,16 @@ export default function OrderQueue() {
     );
   }, [orders, alertEnabled]);
 
-  // Repeat beep every 15s while any unacknowledged orders exist
+  // Repeat beep every 2s while any unacknowledged orders exist
   useEffect(() => {
     if (!alertEnabled || alertOrders.length === 0) return;
     const interval = setInterval(() => {
       try {
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        playBeep(audioCtxRef.current);
+        if (alertSoundUrl) { new Audio(alertSoundUrl).play().catch(() => {}); }
+        else {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          playBeep(audioCtxRef.current);
+        }
       } catch {}
       showBrowserNotification(
         `⚠️ รอดำเนินการ (${alertOrders.length} รายการ)`,
@@ -486,20 +497,21 @@ export default function OrderQueue() {
       );
     }, 2000);
     return () => clearInterval(interval);
-  }, [alertEnabled, alertOrders.length]);
+  }, [alertEnabled, alertOrders.length, alertSoundUrl]);
 
   // Repeat chime every 2s while kitchen-done orders are waiting to be served
   useEffect(() => {
     if (!alertEnabled || kitchenReadyOrders.length === 0) return;
     const interval = setInterval(() => {
-      playDoneChime();
+      if (kitchenSoundUrl) { new Audio(kitchenSoundUrl).play().catch(() => {}); }
+      else playDoneChime();
       showBrowserNotification(
         `✅ อาหารพร้อม รอเสิร์ฟ (${kitchenReadyOrders.length} รายการ)`,
         kitchenReadyOrders[0].orderName || `#${kitchenReadyOrders[0].id}`
       );
     }, 2000);
     return () => clearInterval(interval);
-  }, [alertEnabled, kitchenReadyOrders.length]);
+  }, [alertEnabled, kitchenReadyOrders.length, kitchenSoundUrl]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {

@@ -38,7 +38,7 @@ const OWNER_ONLY_NAV = [
   { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "📈" },
   { href: "/admin/audit", label: "Log การทำงาน", icon: "📋" },
   { href: "/admin/rewards", label: "จัดการรางวัล", icon: "🎁" },
-  { href: "/admin/settings", label: "ตั้งค่าการชำระ", icon: "⚙️" },
+  { href: "/admin/settings", label: "การตั้งค่า", icon: "⚙️" },
 ];
 
 export default async function AdminLayout({

@@ -22,6 +22,8 @@ interface SiteSettings {
   print_receipt?: string;
   print_kitchen?: string;
   business_hours?: string;
+  alert_sound_url?: string;
+  kitchen_sound_url?: string;
 }
 
 const DAYS = [
@@ -110,6 +112,13 @@ export default function AdminSettingsPage() {
   const [hoursSaving, setHoursSaving] = useState(false);
   const [hoursSuccess, setHoursSuccess] = useState(false);
 
+  // Alert sound state
+  const [alertSoundUrl, setAlertSoundUrl] = useState<string>("");
+  const [kitchenSoundUrl, setKitchenSoundUrl] = useState<string>("");
+  const [alertSoundUploading, setAlertSoundUploading] = useState(false);
+  const [kitchenSoundUploading, setKitchenSoundUploading] = useState(false);
+  const [soundsLoaded, setSoundsLoaded] = useState(false);
+
   // Serial printer state
   const [serialSupported, setSerialSupported] = useState(false);
   const [printerConnected, setPrinterConnected] = useState(false);
@@ -152,6 +161,12 @@ export default function AdminSettingsPage() {
       setHours({ ...DEFAULT_HOURS, ...parsed });
     } catch {}
     setHoursLoaded(true);
+  }
+
+  if (siteSettings && !soundsLoaded) {
+    setAlertSoundUrl(siteSettings.alert_sound_url ?? "");
+    setKitchenSoundUrl(siteSettings.kitchen_sound_url ?? "");
+    setSoundsLoaded(true);
   }
 
   async function savePromo() {
@@ -210,6 +225,34 @@ export default function AdminSettingsPage() {
 
   function updateDay(day: DayKey, field: keyof DayHours, value: string | boolean) {
     setHours((prev) => ({ ...prev, [day]: { ...prev[day], [field]: value } }));
+  }
+
+  async function uploadAlertSound(file: File, key: "alert_sound_url" | "kitchen_sound_url") {
+    const setUploading = key === "alert_sound_url" ? setAlertSoundUploading : setKitchenSoundUploading;
+    const setUrl = key === "alert_sound_url" ? setAlertSoundUrl : setKitchenSoundUrl;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("key", key);
+      const res = await fetch("/api/site-settings/alert-sound", { method: "POST", body: fd });
+      const d = await res.json();
+      if (d.url) { setUrl(d.url); await mutateSite(); }
+      else alert(d.error ?? "อัปโหลดไม่สำเร็จ");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function removeAlertSound(key: "alert_sound_url" | "kitchen_sound_url") {
+    const setUrl = key === "alert_sound_url" ? setAlertSoundUrl : setKitchenSoundUrl;
+    setUrl("");
+    await fetch("/api/site-settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [key]: "" }),
+    });
+    await mutateSite();
   }
 
   async function handleSelectPrinter() {
@@ -728,6 +771,60 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
         <p className="text-xs text-gray-400 mt-3 text-center">
           💡 ต้องใช้ Chrome หรือ Edge เพื่อเชื่อมต่อเครื่องพิมพ์โดยตรง — Safari / Firefox ใช้ปุ่ม "ทดสอบพิมพ์" แล้ว browser จะจำเครื่องพิมพ์ไว้
         </p>
+
+        {/* Alert Sound Upload */}
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-5">
+          <div>
+            <h2 className="font-bold text-navy text-base">🔔 เสียงแจ้งเตือน</h2>
+            <p className="text-xs text-gray-400 mt-0.5">อัปโหลดไฟล์ WAV ไม่เกิน 20 วินาที (สูงสุด 10 MB)</p>
+          </div>
+
+          {/* Order alert sound */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">เสียงแจ้งเตือนออเดอร์ใหม่</label>
+            <div className="flex items-center gap-3">
+              <label className={`cursor-pointer inline-flex items-center gap-2 border-2 border-dashed rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${alertSoundUploading ? "border-gray-200 text-gray-400" : "border-orange/40 text-orange hover:border-orange hover:bg-orange/5"}`}>
+                {alertSoundUploading ? "⏳ กำลังอัปโหลด..." : alertSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลด WAV"}
+                <input type="file" accept="audio/*" className="hidden" disabled={alertSoundUploading}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    await uploadAlertSound(f, "alert_sound_url");
+                    e.target.value = "";
+                  }} />
+              </label>
+              {alertSoundUrl && (
+                <>
+                  <audio controls src={alertSoundUrl} className="h-8 flex-1 min-w-0" />
+                  <button onClick={() => removeAlertSound("alert_sound_url")} className="text-xs text-red-400 hover:underline shrink-0">ลบ</button>
+                </>
+              )}
+            </div>
+            {!alertSoundUrl && <p className="text-xs text-gray-400 mt-1">ถ้าไม่ได้ตั้งค่า จะใช้เสียงบีปเริ่มต้น</p>}
+          </div>
+
+          {/* Kitchen done sound */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">เสียงแจ้งเตือนอาหารพร้อม</label>
+            <div className="flex items-center gap-3">
+              <label className={`cursor-pointer inline-flex items-center gap-2 border-2 border-dashed rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${kitchenSoundUploading ? "border-gray-200 text-gray-400" : "border-orange/40 text-orange hover:border-orange hover:bg-orange/5"}`}>
+                {kitchenSoundUploading ? "⏳ กำลังอัปโหลด..." : kitchenSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลด WAV"}
+                <input type="file" accept="audio/*" className="hidden" disabled={kitchenSoundUploading}
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0]; if (!f) return;
+                    await uploadAlertSound(f, "kitchen_sound_url");
+                    e.target.value = "";
+                  }} />
+              </label>
+              {kitchenSoundUrl && (
+                <>
+                  <audio controls src={kitchenSoundUrl} className="h-8 flex-1 min-w-0" />
+                  <button onClick={() => removeAlertSound("kitchen_sound_url")} className="text-xs text-red-400 hover:underline shrink-0">ลบ</button>
+                </>
+              )}
+            </div>
+            {!kitchenSoundUrl && <p className="text-xs text-gray-400 mt-1">ถ้าไม่ได้ตั้งค่า จะใช้เสียงชิมเริ่มต้น</p>}
+          </div>
+        </div>
 
         {/* ── Business Hours ───────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">

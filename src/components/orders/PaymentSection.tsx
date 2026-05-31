@@ -141,8 +141,8 @@ export default function PaymentSection({ orderId, totalTHB, orderName, billId }:
               🧾
             </div>
             <div>
-              <p className="font-bold text-navy">เปิดแท็บ</p>
-              <p className="text-xs text-gray-400">บันทึกในบิลโต๊ะ — จ่ายรวมตอนเช็คเอาท์</p>
+              <p className="font-bold text-navy">ชำระตอนเช็กเอาท์</p>
+              <p className="text-xs text-gray-400">บันทึกในบิลโต๊ะ — จ่ายรวมตอนเช็กเอาท์</p>
             </div>
           </button>
         )}
@@ -261,8 +261,8 @@ export default function PaymentSection({ orderId, totalTHB, orderName, billId }:
       <div className="text-center py-2">
         <div className="text-5xl mb-3">🧾</div>
         <p className="font-bold text-navy text-lg mb-1">บันทึกในบิลแล้ว!</p>
-        <p className="text-gray-400 text-sm mb-1">ออเดอร์ถูกส่งครัวแล้ว</p>
-        <p className="text-gray-400 text-sm">ชำระเงินรวมตอนเช็คเอาท์กับพนักงาน</p>
+        <p className="text-gray-400 text-sm mb-1">รอพนักงานรับออเดอร์แล้วส่งครัว</p>
+        <p className="text-gray-400 text-sm">ชำระเงินรวมตอนเช็กเอาท์กับพนักงาน</p>
       </div>
     );
   }
