@@ -590,6 +590,19 @@ export default function OrderQueue() {
     return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
   }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  // TAB+billId pending orders grouped by bill (shown as a single grouped card)
+  const pendingBillGroupsMap = new Map<number, OrderWithItems[]>();
+  const regularPendingOrders: OrderWithItems[] = [];
+  for (const order of pendingOrders) {
+    if (order.billId && order.payment?.method === "TAB") {
+      const grp = pendingBillGroupsMap.get(order.billId) ?? [];
+      grp.push(order);
+      pendingBillGroupsMap.set(order.billId, grp);
+    } else {
+      regularPendingOrders.push(order);
+    }
+  }
+
   // Orders that still need immediate staff action (alert beeps for these)
   // Cashier counter orders (handledById set) are excluded — staff created them intentionally
   const alertOrders = (orders ?? []).filter((o) => {
@@ -919,6 +932,30 @@ export default function OrderQueue() {
     setLoading(order.id, false);
   }
 
+  async function handleBillGroupConfirm(grpOrders: OrderWithItems[]) {
+    const ids = grpOrders.map((o) => o.id);
+    setLoadingIds((prev) => new Set([...prev, ...ids]));
+    try {
+      await Promise.all(
+        grpOrders.map((o) =>
+          fetch(`/api/orders/${o.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "CONFIRMED" }),
+          })
+        )
+      );
+      ackAlertOrders(ids);
+      await mutate();
+    } finally {
+      setLoadingIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }
+
   async function confirmBillGroupCash() {
     if (!billGroupCash) return;
     const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
@@ -1115,7 +1152,49 @@ export default function OrderQueue() {
             รอรับออเดอร์
           </h3>
           <div className="space-y-3">
-            {pendingOrders.map((order) => (
+            {/* Grouped pending TAB+bill orders — accept all at once */}
+            {[...pendingBillGroupsMap.entries()].map(([billId, grpOrders]) => {
+              const bill = grpOrders[0]?.bill;
+              const total = grpOrders.reduce((s, o) => s + o.totalTHB, 0);
+              const allItems = grpOrders.flatMap((o) => o.items);
+              const isLoading = grpOrders.some((o) => loadingIds.has(o.id));
+              return (
+                <div key={`pbill-${billId}`} className="bg-white rounded-2xl shadow-sm border-l-4 border-orange overflow-hidden">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <span className="font-bold text-navy">ตี้ {bill?.name ?? billId}</span>
+                        {bill?.table && <span className="text-sm text-gray-400 ml-1">· โต๊ะ {bill.table.number}</span>}
+                      </div>
+                      <span className="bg-orange/10 text-orange text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                        {grpOrders.length} ออเดอร์ใหม่
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-2">รวมบิล TAB · ฿{total.toLocaleString()}</p>
+                    <div className="space-y-0.5 mb-3">
+                      {allItems.slice(0, 6).map((item) => (
+                        <p key={item.id} className="text-xs text-gray-600">
+                          • {item.menuItem.nameTh}{item.selectedSize ? ` (${item.selectedSize})` : ""} ×{item.quantity}
+                        </p>
+                      ))}
+                      {allItems.length > 6 && (
+                        <p className="text-xs text-gray-400">+ อีก {allItems.length - 6} รายการ</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleBillGroupConfirm(grpOrders)}
+                      disabled={isLoading}
+                      className="w-full bg-green-500 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-green-600 disabled:opacity-50 transition-colors"
+                    >
+                      {isLoading ? "กำลังรับออเดอร์..." : `✅ รับออเดอร์ทั้งหมด (${grpOrders.length} ออเดอร์)`}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Regular pending orders (CASH / PROMPTPAY / TAB without bill) */}
+            {regularPendingOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
