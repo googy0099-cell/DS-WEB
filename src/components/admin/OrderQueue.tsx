@@ -351,19 +351,24 @@ export default function OrderQueue() {
   const kitchenLoopRef = useRef<AudioBufferSourceNode | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
-  const [servedAcked, setServedAcked] = useState<Set<number>>(new Set());
-  const [kitchenItemAcked, setKitchenItemAcked] = useState<Set<number>>(new Set());
-
-  useEffect(() => {
+  const [servedAcked, setServedAcked] = useState<Set<number>>(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem("servedAcked") ?? "[]") as number[];
-      setServedAcked(new Set(stored));
-    } catch {}
+      if (typeof window === "undefined") return new Set<number>();
+      return new Set(JSON.parse(localStorage.getItem("servedAcked") ?? "[]") as number[]);
+    } catch { return new Set<number>(); }
+  });
+  const [kitchenItemAcked, setKitchenItemAcked] = useState<Set<number>>(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[];
-      setKitchenItemAcked(new Set(stored));
-    } catch {}
-  }, []);
+      if (typeof window === "undefined") return new Set<number>();
+      return new Set(JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[]);
+    } catch { return new Set<number>(); }
+  });
+  const [alertOrderAcked, setAlertOrderAcked] = useState<Set<number>>(() => {
+    try {
+      if (typeof window === "undefined") return new Set<number>();
+      return new Set(JSON.parse(localStorage.getItem("alertOrderAcked") ?? "[]") as number[]);
+    } catch { return new Set<number>(); }
+  });
 
   function markServedAck(orderId: number) {
     setServedAcked((prev) => {
@@ -380,6 +385,16 @@ export default function OrderQueue() {
       const next = new Set(prev);
       itemIds.forEach((id) => next.add(id));
       try { localStorage.setItem("kitchenItemAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function ackAlertOrders(orderIds: number[]) {
+    if (orderIds.length === 0) return;
+    setAlertOrderAcked((prev) => {
+      const next = new Set(prev);
+      orderIds.forEach((id) => next.add(id));
+      try { localStorage.setItem("alertOrderAcked", JSON.stringify([...next])); } catch {}
       return next;
     });
   }
@@ -505,6 +520,9 @@ export default function OrderQueue() {
     return false;
   });
 
+  // Only unacked alert orders trigger the loop — prevents loop restart on page navigation
+  const unackedAlertOrderCount = alertOrders.filter((o) => !alertOrderAcked.has(o.id)).length;
+
   // Per-item kitchen-done alert: each item that finishes triggers the loop until acked.
   // Next item to finish triggers it again. "ยืนยันการเสิร์ฟ" (servedAcked) is separate.
   const kitchenReadyItems = (orders ?? []).flatMap((o) =>
@@ -513,11 +531,20 @@ export default function OrderQueue() {
       : o.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id))
   );
 
-  // Clean up servedAcked / kitchenItemAcked for orders/items no longer active
+  // Clean up servedAcked / kitchenItemAcked / alertOrderAcked for orders/items no longer active
   useEffect(() => {
     if (!orders) return;
     const activeOrderIds = new Set(orders.map((o) => o.id));
     const activeItemIds = new Set(orders.flatMap((o) => o.items.map((i) => i.id)));
+    const activeAlertIds = new Set(
+      orders.filter((o) => {
+        if (o.handledById) return false;
+        const m = o.payment?.method;
+        if (o.status === "PENDING") return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
+        if (o.status === "CONFIRMED") return !m || m === "UNSET" || m === "CASH" || m === "PROMPTPAY" || (m === "TAB" && !!o.billId);
+        return false;
+      }).map((o) => o.id)
+    );
     setServedAcked((prev) => {
       const next = new Set([...prev].filter((id) => activeOrderIds.has(id)));
       if (next.size !== prev.size) {
@@ -530,6 +557,14 @@ export default function OrderQueue() {
       const next = new Set([...prev].filter((id) => activeItemIds.has(id)));
       if (next.size !== prev.size) {
         try { localStorage.setItem("kitchenItemAcked", JSON.stringify([...next])); } catch {}
+        return next;
+      }
+      return prev;
+    });
+    setAlertOrderAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeAlertIds.has(id)));
+      if (next.size !== prev.size) {
+        try { localStorage.setItem("alertOrderAcked", JSON.stringify([...next])); } catch {}
         return next;
       }
       return prev;
@@ -593,9 +628,9 @@ export default function OrderQueue() {
     );
   }, [orders, alertEnabled]);
 
-  // Loop alert sound while unacknowledged orders exist — stop when cleared
+  // Loop alert sound while there are unacked alert orders — stop when all acked or dismissed
   useEffect(() => {
-    const hasAlerts = alertEnabled && alertOrders.length > 0;
+    const hasAlerts = alertEnabled && unackedAlertOrderCount > 0;
 
     // Stop any existing loop
     if (alertLoopRef.current) {
@@ -648,7 +683,7 @@ export default function OrderQueue() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, alertOrders.length > 0, alertSoundUrl]);
+  }, [alertEnabled, unackedAlertOrderCount > 0, alertSoundUrl]);
 
   // Loop kitchen chime while food-ready orders are unserved — stop when cleared
   useEffect(() => {
@@ -715,6 +750,7 @@ export default function OrderQueue() {
 
   async function updateStatus(orderId: number, status: string) {
     if (loadingIds.has(orderId)) return;
+    ackAlertOrders([orderId]);
     setLoading(orderId, true);
     try {
       await fetch(`/api/orders/${orderId}`, {
@@ -772,6 +808,7 @@ export default function OrderQueue() {
   }
 
   function openCashModal(order: OrderWithItems) {
+    ackAlertOrders([order.id]);
     setCashOrder(order);
     setCashInputStr("");
   }
@@ -832,6 +869,7 @@ export default function OrderQueue() {
 
   async function confirmQrPayment(order: OrderWithItems) {
     if (!order.payment?.id) return;
+    ackAlertOrders([order.id]);
     setLoading(order.id, true);
     await fetch("/api/payment/confirm", {
       method: "PATCH",
@@ -966,6 +1004,16 @@ export default function OrderQueue() {
         </button>
       </div>
 
+      {/* Dismiss loop button — shows only while unacked alert orders are ringing */}
+      {alertEnabled && unackedAlertOrderCount > 0 && (
+        <button
+          onClick={() => ackAlertOrders(alertOrders.map((o) => o.id))}
+          className="w-full flex items-center justify-center gap-2 bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-800 font-bold py-2.5 rounded-xl text-sm transition-colors"
+        >
+          🔕 ปิดเสียงแจ้งเตือน ({unackedAlertOrderCount} รายการ)
+        </button>
+      )}
+
       {/* ออเดอร์ใหม่ PENDING */}
       {pendingOrders.length > 0 && (
         <div>
@@ -1016,6 +1064,7 @@ export default function OrderQueue() {
                   onServeAck={markServedAck}
                   isLoading={item.orders.some((o) => loadingIds.has(o.id))}
                   onOpenCashModal={(orders) => {
+                    ackAlertOrders(orders.map((o) => o.id));
                     setBillGroupCash({
                       billId: orders[0].billId!,
                       billName: orders[0].bill?.name ?? "",
@@ -1025,6 +1074,7 @@ export default function OrderQueue() {
                     setBillCashInputStr("");
                   }}
                   onScanCheckout={(orders) => {
+                    ackAlertOrders(orders.map((o) => o.id));
                     setBillGroupScan({
                       billId: orders[0].billId!,
                       billName: orders[0].bill?.name ?? "",

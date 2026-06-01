@@ -405,17 +405,15 @@ export default function AdminTimePage() {
 
   // Expired-session alert state — persists ack across page refreshes
   type ExpiredInfo = { nickname: string; billName: string; tableNumber: number };
-  const [expiredAcked, setExpiredAcked] = useState<Set<number>>(new Set());
+  const [expiredAcked, setExpiredAcked] = useState<Set<number>>(() => {
+    try {
+      if (typeof window === "undefined") return new Set<number>();
+      const raw = localStorage.getItem("posExpiredAcked");
+      return raw ? new Set(JSON.parse(raw) as number[]) : new Set<number>();
+    } catch { return new Set<number>(); }
+  });
   const [liveExpired, setLiveExpired] = useState<Map<number, ExpiredInfo>>(new Map());
   const expiredLoopIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Load acked set from localStorage on mount
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("posExpiredAcked");
-      if (raw) setExpiredAcked(new Set(JSON.parse(raw)));
-    } catch {}
-  }, []);
 
   const reportExpired = useCallback((info: { sessionId: number } & ExpiredInfo) => {
     if (expiredAcked.has(info.sessionId)) return; // already acked — no alert
