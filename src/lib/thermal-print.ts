@@ -40,6 +40,10 @@ export interface ReceiptEscPosSettings {
   showNote: boolean;
   showItemPrice: boolean;
   showTotal: boolean;
+  // Optional deep settings — defaults applied inside buildReceiptEscPos
+  titleSize?: "double" | "normal";   // shop name font size (double = 2× width+height)
+  feedLines?: number;                 // lines to feed before cut (0–10, default 3)
+  headerAlign?: "center" | "left";   // alignment for shop name / footer block
 }
 
 export interface KitchenEscPosSettings {
@@ -80,7 +84,11 @@ export function buildReceiptEscPos(order: EscPosOrder, s: ReceiptEscPosSettings)
   const chunks: number[][] = [];
   const push = (...parts: number[][]) => chunks.push(...parts);
 
-  push(INIT, CENTER, DOUBLE, BOLD_ON, ln(s.shopName), NORMAL, BOLD_OFF);
+  const titleFont = s.titleSize === "normal" ? NORMAL : DOUBLE;
+  const feed = b(0x1b, 0x64, Math.max(0, Math.min(10, s.feedLines ?? 3)));
+  const hAlign = s.headerAlign === "left" ? LEFT : CENTER;
+
+  push(INIT, hAlign, titleFont, BOLD_ON, ln(s.shopName), NORMAL, BOLD_OFF);
   push(ln(s.shopInfo), ln("ใบเสร็จรับเงิน"), SEP, LEFT);
 
   if (s.showCustomer) push(ln(`ออเดอร์: ${order.orderName}`));
@@ -103,7 +111,7 @@ export function buildReceiptEscPos(order: EscPosOrder, s: ReceiptEscPosSettings)
 
   if (s.showTotal) push(SEP, BOLD_ON, RIGHT, ln(`รวม ฿${order.totalTHB}`), LEFT, BOLD_OFF);
   if (s.showNote && order.note) push(SEP, ln(`หมายเหตุ: ${order.note}`));
-  push(SEP, CENTER, ln(s.footer), FEED3, CUT);
+  push(SEP, hAlign, ln(s.footer), feed, CUT);
 
   const flat: number[] = [];
   for (const c of chunks) flat.push(...c);

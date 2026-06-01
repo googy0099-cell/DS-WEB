@@ -61,6 +61,10 @@ const DEFAULT_RECEIPT_SETTINGS = {
   showNote: true,
   showItemPrice: true,
   showTotal: true,
+  titleSize: "double" as "double" | "normal",
+  feedLines: 3,
+  headerAlign: "center" as "center" | "left",
+  htmlFontSize: 13,
 };
 
 const DEFAULT_KITCHEN_SETTINGS = {
@@ -96,6 +100,10 @@ export default function AdminSettingsPage() {
   const [rShowNote, setRShowNote] = useState(DEFAULT_RECEIPT_SETTINGS.showNote);
   const [rShowItemPrice, setRShowItemPrice] = useState(DEFAULT_RECEIPT_SETTINGS.showItemPrice);
   const [rShowTotal, setRShowTotal] = useState(DEFAULT_RECEIPT_SETTINGS.showTotal);
+  const [rTitleSize, setRTitleSize] = useState<"double" | "normal">(DEFAULT_RECEIPT_SETTINGS.titleSize);
+  const [rFeedLines, setRFeedLines] = useState(DEFAULT_RECEIPT_SETTINGS.feedLines);
+  const [rHeaderAlign, setRHeaderAlign] = useState<"center" | "left">(DEFAULT_RECEIPT_SETTINGS.headerAlign);
+  const [rHtmlFontSize, setRHtmlFontSize] = useState(DEFAULT_RECEIPT_SETTINGS.htmlFontSize);
 
   // Print settings — kitchen
   const [kEnabled, setKEnabled] = useState(DEFAULT_KITCHEN_SETTINGS.enabled);
@@ -146,6 +154,8 @@ export default function AdminSettingsPage() {
       setRFooter(r.footer); setRLogoUrl(r.logoUrl ?? ""); setRShowOrderId(r.showOrderId);
       setRShowDate(r.showDate); setRShowCustomer(r.showCustomer); setRShowNote(r.showNote);
       setRShowItemPrice(r.showItemPrice); setRShowTotal(r.showTotal);
+      setRTitleSize(r.titleSize ?? "double"); setRFeedLines(r.feedLines ?? 3);
+      setRHeaderAlign(r.headerAlign ?? "center"); setRHtmlFontSize(r.htmlFontSize ?? 13);
     } catch {}
     try {
       const k = { ...DEFAULT_KITCHEN_SETTINGS, ...JSON.parse(siteSettings.print_kitchen ?? "{}") };
@@ -196,7 +206,7 @@ export default function AdminSettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, logoUrl: rLogoUrl, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal }),
+          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, logoUrl: rLogoUrl, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal, titleSize: rTitleSize, feedLines: rFeedLines, headerAlign: rHeaderAlign, htmlFontSize: rHtmlFontSize }),
           print_kitchen: JSON.stringify({ enabled: kEnabled, paperWidth: kPaperWidth, showTable: kShowTable, showNote: kShowNote }),
         }),
       });
@@ -307,6 +317,7 @@ export default function AdminSettingsPage() {
       shopName: rShopName, shopInfo: rShopInfo, footer: rFooter,
       showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer,
       showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal,
+      titleSize: rTitleSize, feedLines: rFeedLines, headerAlign: rHeaderAlign,
     });
     const ok = await printToSerial(data);
     setSerialStatus(ok ? "ok" : "fail");
@@ -316,7 +327,7 @@ export default function AdminSettingsPage() {
   function testReceiptPrint() {
     const w = rPaperWidth === "A4" ? "210mm" : `${rPaperWidth}mm`;
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบเสร็จ</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}.logo{display:block;max-width:120px;max-height:60px;margin:0 auto 6px;object-fit:contain}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:12px}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style></head>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${rHtmlFontSize}px;color:#111;width:${w};margin:0 auto;padding:8px}.logo{display:block;max-width:120px;max-height:60px;margin:0 auto 6px;object-fit:contain}h1{font-size:${Math.round(rHtmlFontSize * 1.4)}px;font-weight:900;text-align:${rHeaderAlign};margin-bottom:2px}.sub{font-size:${Math.round(rHtmlFontSize * 0.85)}px;text-align:${rHeaderAlign};color:#555;margin-bottom:8px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:${Math.round(rHtmlFontSize * 1.15)}px;padding-top:6px;border-top:1px dashed #aaa}.note{background:#fff8e7;border:1px solid #f5a623;border-radius:4px;padding:5px 8px;margin-top:6px;font-size:${Math.round(rHtmlFontSize * 0.92)}px}.footer{text-align:center;font-size:${Math.round(rHtmlFontSize * 0.85)}px;color:#777;margin-top:10px}@media print{body{width:100%}}</style></head>
 <body>
 ${rLogoUrl ? `<img src="${rLogoUrl}" class="logo" alt="logo"/>` : ""}
 <h1>${rLogoUrl ? "" : "🎲 "}${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
@@ -701,6 +712,59 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
             </div>
           </div>
 
+          {/* Title size */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">ขนาดชื่อร้าน <span className="font-normal text-gray-400">(ESC/POS เครื่องพิมพ์)</span></label>
+            <div className="flex gap-2">
+              {([["double", "ใหญ่ 2×"], ["normal", "ปกติ"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setRTitleSize(val)}
+                  className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition-all ${rTitleSize === val ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Header alignment */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">ตำแหน่งหัวใบเสร็จ</label>
+            <div className="flex gap-2">
+              {([["center", "กลาง"], ["left", "ซ้าย"]] as const).map(([val, label]) => (
+                <button key={val} onClick={() => setRHeaderAlign(val)}
+                  className={`flex-1 py-2 rounded-xl border-2 text-sm font-medium transition-all ${rHeaderAlign === val ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Feed lines before cut */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">
+              ระยะก่อนตัดกระดาษ <span className="font-normal text-gray-400">({rFeedLines} บรรทัด)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <input type="range" min={0} max={10} step={1} value={rFeedLines}
+                onChange={(e) => setRFeedLines(Number(e.target.value))}
+                className="flex-1 accent-orange h-2" />
+              <span className="text-navy font-bold text-sm w-6 text-center">{rFeedLines}</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">เพิ่มค่าถ้ากระดาษตัดชิดข้อความเกินไป (ค่าเริ่มต้น 3)</p>
+          </div>
+
+          {/* HTML font size */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">ขนาดตัวอักษร <span className="font-normal text-gray-400">(พิมพ์ผ่านเบราว์เซอร์)</span></label>
+            <div className="grid grid-cols-4 gap-2">
+              {([11, 13, 15, 18] as const).map((size) => (
+                <button key={size} onClick={() => setRHtmlFontSize(size)}
+                  className={`py-2 rounded-xl border-2 text-xs font-medium transition-all ${rHtmlFontSize === size ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}>
+                  {size}px
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="text-sm font-semibold text-navy block mb-2">ข้อมูลที่แสดงบนใบเสร็จ</label>
             <div className="space-y-2">
@@ -724,6 +788,112 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
             <label className="text-sm font-semibold text-navy block mb-1">ข้อความท้ายใบเสร็จ</label>
             <input type="text" value={rFooter} onChange={(e) => setRFooter(e.target.value)}
               className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none" />
+          </div>
+
+          {/* ── Live receipt preview ─────────────────────────────────────── */}
+          <div>
+            <label className="text-sm font-semibold text-navy block mb-2">
+              ตัวอย่างใบเสร็จ <span className="font-normal text-gray-400">(58mm · อัปเดต real-time)</span>
+            </label>
+            <div className="flex justify-center bg-gray-200 rounded-xl py-6 px-3 overflow-x-auto">
+              <div
+                style={{
+                  width: "220px",
+                  minWidth: "220px",
+                  padding: "10px 8px 0",
+                  fontFamily: "'Sarabun', 'Helvetica Neue', Arial, sans-serif",
+                  fontSize: `${rHtmlFontSize}px`,
+                  color: "#111",
+                  background: "#fff",
+                  boxShadow: "0 3px 16px rgba(0,0,0,0.18)",
+                }}
+              >
+                {/* Logo */}
+                {rLogoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={rLogoUrl} alt="logo"
+                    style={{ display: "block", maxWidth: "100px", maxHeight: "50px", margin: "0 auto 4px", objectFit: "contain" }} />
+                )}
+
+                {/* Shop name */}
+                <div style={{
+                  textAlign: rHeaderAlign,
+                  fontWeight: "bold",
+                  fontSize: `${rTitleSize === "double" ? rHtmlFontSize * 2 : rHtmlFontSize}px`,
+                  lineHeight: 1.2,
+                  marginBottom: "1px",
+                }}>
+                  {rShopName || "ชื่อร้าน"}
+                </div>
+
+                {/* Shop info + label */}
+                {rShopInfo && (
+                  <div style={{ textAlign: rHeaderAlign, fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, color: "#555" }}>
+                    {rShopInfo}
+                  </div>
+                )}
+                <div style={{ textAlign: rHeaderAlign, fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, marginBottom: "3px" }}>
+                  ใบเสร็จรับเงิน
+                </div>
+
+                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
+
+                {/* Order info */}
+                <div style={{ fontSize: `${Math.round(rHtmlFontSize * 0.92)}px`, marginBottom: "2px" }}>
+                  {rShowCustomer && <div>ออเดอร์: ทดสอบระบบ</div>}
+                  {rShowOrderId  && <div>เลขที่: #999</div>}
+                  {rShowDate     && <div>วันที่: {new Date().toLocaleDateString("th-TH")}</div>}
+                </div>
+
+                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
+
+                {/* Items */}
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>ชาไทย (XL) x2</span>
+                    {rShowItemPrice && <span>฿110</span>}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>กาแฟ x1</span>
+                    {rShowItemPrice && <span>฿40</span>}
+                  </div>
+                </div>
+
+                {/* Total */}
+                {rShowTotal && (
+                  <>
+                    <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: `${Math.round(rHtmlFontSize * 1.1)}px` }}>
+                      <span>รวม</span>
+                      <span>฿150</span>
+                    </div>
+                  </>
+                )}
+
+                {/* Note */}
+                {rShowNote && (
+                  <>
+                    <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
+                    <div style={{ fontSize: `${Math.round(rHtmlFontSize * 0.85)}px` }}>หมายเหตุ: ไม่ใส่น้ำตาล</div>
+                  </>
+                )}
+
+                {/* Footer */}
+                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
+                <div style={{ textAlign: "center", fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, color: "#777" }}>
+                  {rFooter}
+                </div>
+
+                {/* Feed lines — visualize spacing before cut */}
+                <div style={{ height: `${Math.max(4, rFeedLines * (rHtmlFontSize + 2))}px` }} />
+
+                {/* Cut line */}
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "0" }}>
+                  <div style={{ flex: 1, borderTop: "1.5px dashed #bbb" }} />
+                  <span style={{ fontSize: "13px", color: "#bbb", lineHeight: 1 }}>✂</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-2 pt-1">
