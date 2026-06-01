@@ -51,12 +51,12 @@ function ItemDetail({ item, onClose, onAdd }: {
 
   return (
     <div className="fixed inset-0 bg-black/70 z-[60] flex items-end md:items-center justify-center p-0 md:p-4">
-      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-md flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-md flex flex-col max-h-[90dvh]">
         <div className="flex items-center justify-between px-5 py-4 border-b border-sand shrink-0">
           <h3 className="font-bold text-navy">{item.nameTh}</h3>
           <button onClick={onClose} className="text-gray-400 text-2xl leading-none">×</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex-1 overflow-y-scroll overscroll-contain p-5 space-y-4">
           {hasSizes && (
             <div>
               <p className="text-sm font-semibold text-navy mb-2">เลือกขนาด</p>
@@ -331,13 +331,13 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
 
       {open && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end md:items-center justify-center">
-          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-lg flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-t-2xl md:rounded-2xl w-full md:max-w-lg flex flex-col max-h-[90dvh]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-sand shrink-0">
               <h3 className="font-bold text-navy text-lg">🛒 สั่งอาหาร (เคาน์เตอร์)</h3>
               <button onClick={closeModal} className="text-gray-400 text-2xl leading-none">×</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-scroll overscroll-contain p-4 space-y-4">
               {/* Bill selector */}
               {initialBillId ? (
                 <div>

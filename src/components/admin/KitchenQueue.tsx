@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import type { OrderWithItems } from "@/types";
 
-const DRINK_CATEGORIES = ["milktea", "coffee", "soda", "drink"];
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -129,9 +128,8 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   for (const order of allOrders ?? []) {
     if (!isReadyForKitchen(order)) continue;
     for (const item of order.items) {
-      const isRelevant = type === "drink"
-        ? DRINK_CATEGORIES.includes(item.menuItem.category)
-        : !DRINK_CATEGORIES.includes(item.menuItem.category);
+      const target = item.menuItem.queueTarget ?? "kitchen";
+      const isRelevant = type === "drink" ? target === "bar" : target === "kitchen";
       if (!isRelevant) continue;
       if (item.kitchenServedAt) continue; // already done
       queueItems.push({

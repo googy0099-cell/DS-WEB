@@ -70,6 +70,7 @@ export interface MenuItemType {
   isAvailable: boolean;
   sellStartTime: string | null;
   sellEndTime: string | null;
+  queueTarget: string;
   addonGroups: AddonGroupType[];
   optionGroups: OptionGroupType[];
 }
@@ -95,6 +96,6 @@ export interface OrderWithItems {
     selectedAddons: string | null;
     selectedOptions: string | null;
     kitchenServedAt: string | null;
-    menuItem: { nameTh: string; nameEn: string; category: string };
+    menuItem: { nameTh: string; nameEn: string; category: string; queueTarget: string };
   }[];
 }

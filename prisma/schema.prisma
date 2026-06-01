@@ -100,6 +100,7 @@ model MenuItem {
   sellStartTime String?
   sellEndTime   String?
   recipeNote    String?               @map("recipe_note")
+  queueTarget   String                @default("kitchen") @map("queue_target")
   orderItems    OrderItem[]
   addonGroups   MenuItemAddonGroup[]
   optionGroups  MenuItemOptionGroup[]

@@ -19,6 +19,7 @@ type MenuItem = {
   sellStartTime: string | null;
   sellEndTime: string | null;
   recipeNote: string | null;
+  queueTarget: string;
   addonGroups: { id: number; nameTh: string }[];
   optionGroups: { id: number; nameTh: string; isRequired: boolean }[];
 };
@@ -59,6 +60,7 @@ const EMPTY = {
   priceS: null as number | null, priceXL: null as number | null,
   imageUrl: null as string | null, isAvailable: true, isFeatured: false,
   sellStartTime: null as string | null, sellEndTime: null as string | null,
+  queueTarget: "bar",
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -627,6 +629,31 @@ export default function AdminMenuPage() {
                   )}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">เช่น 15:00 ถึง 22:00 — นอกเวลานี้จะขึ้น "ไม่รับออเดอร์ตอนนี้" ในเมนูลูกค้า</p>
+              </div>
+
+              {/* Queue target */}
+              <div>
+                <label className="text-xs font-medium text-navy block mb-2">📡 ส่งออเดอร์ไปที่</label>
+                <div className="flex gap-2">
+                  {([
+                    { value: "kitchen", label: "🍳 ครัว" },
+                    { value: "bar", label: "🥤 บาร์" },
+                    { value: "none", label: "🚫 ไม่ต้องทำ" },
+                  ] as { value: string; label: string }[]).map((opt) => {
+                    const cur = (editing as { queueTarget?: string }).queueTarget ?? "kitchen";
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditing({ ...editing, queueTarget: opt.value })}
+                        className={`flex-1 py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${cur === opt.value ? "border-orange bg-orange/10 text-orange" : "border-sand text-navy"}`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">เลือก "ไม่ต้องทำ" สำหรับสินค้าสำเร็จรูป เช่น น้ำเปล่า โค้ก</p>
               </div>
 
               {/* Addon Groups */}
