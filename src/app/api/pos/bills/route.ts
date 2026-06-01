@@ -12,11 +12,6 @@ export async function GET() {
         include: { user: { select: { id: true, username: true, memberCode: true, firstName: true } } },
         orderBy: { createdAt: "asc" },
       },
-      orders: {
-        where: { status: { in: ["PENDING", "CONFIRMED"] }, payment: { status: "PENDING" } },
-        select: { id: true, orderName: true, totalTHB: true, createdAt: true, payment: { select: { id: true, method: true, staffNote: true } } },
-        orderBy: { createdAt: "asc" },
-      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -29,18 +24,6 @@ export async function GET() {
       ...s,
       timeRemaining: remainingSeconds(s.timeRemaining, b.startsAt, s.updatedAt, now),
     })),
-    pendingCash: b.orders
-      .filter((o) => o.payment?.method !== "TAB")
-      .map((o) => ({
-        orderId: o.id,
-        totalTHB: o.totalTHB,
-        paymentId: o.payment?.id ?? null,
-        staffNote: o.payment?.staffNote ?? null,
-      })),
-    tabOrders: b.orders
-      .filter((o) => o.payment?.method === "TAB")
-      .map((o) => ({ id: o.id, orderName: o.orderName, totalTHB: o.totalTHB, createdAt: o.createdAt })),
-    tabTotal: b.orders.filter((o) => o.payment?.method === "TAB").reduce((s, o) => s + o.totalTHB, 0),
   }));
 
   return NextResponse.json(result);
