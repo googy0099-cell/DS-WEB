@@ -68,26 +68,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
   const finalName = orderName.trim();
 
   // ถ้ามีออเดอร์ที่ยังไม่ชำระของคนนี้วันนี้ → เพิ่มรายการเข้าออเดอร์เดิม
-  const unpaidWhere = userId
-    ? { userId, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } }
-    : { orderName: finalName, createdAt: { gte: today, lt: tomorrow }, status: { in: ["PENDING", "CONFIRMED"] }, payment: { is: null } };
-
-  // Cashier orders are discrete transactions — never merge into an existing order
-  const existingUnpaid = isCashier
-    ? null
-    : await db.order.findFirst({
-        where: unpaidWhere,
-        include: { items: { include: { menuItem: true } } },
-      });
-
   const menuItems = await db.menuItem.findMany({
     where: { id: { in: items.map((i) => i.menuItemId) } },
   });
@@ -120,27 +103,6 @@ export async function POST(req: NextRequest) {
   });
 
   const newTotal = itemsWithPrice.reduce((sum, i) => sum + i.unitPriceTHB * i.quantity, 0);
-
-  // ถ้ามีออเดอร์เดิมที่ยังไม่ชำระ → เพิ่มรายการเข้าไป
-  if (existingUnpaid) {
-    await db.orderItem.createMany({
-      data: itemsWithPrice.map((i) => ({
-        orderId: existingUnpaid.id,
-        menuItemId: i.menuItemId,
-        quantity: i.quantity,
-        unitPriceTHB: i.unitPriceTHB,
-        selectedSize: i.selectedSize ?? null,
-        selectedAddons: i.selectedAddons?.length ? JSON.stringify(i.selectedAddons) : null,
-        selectedOptions: i.selectedOptions?.length ? JSON.stringify(i.selectedOptions) : null,
-      })),
-    });
-    const updatedOrder = await db.order.update({
-      where: { id: existingUnpaid.id },
-      data: { totalTHB: existingUnpaid.totalTHB + newTotal, note: note || existingUnpaid.note },
-      include: { items: { include: { menuItem: true } } },
-    });
-    return NextResponse.json({ ...updatedOrder, checkoutToken: signCheckoutToken(existingUnpaid.id) }, { status: 200 });
-  }
 
   const totalTHB = newTotal;
 
