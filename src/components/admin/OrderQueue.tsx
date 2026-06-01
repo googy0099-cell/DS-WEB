@@ -375,9 +375,16 @@ export default function OrderQueue() {
   const [alertSoundUrl, setAlertSoundUrl] = useState<string>("");
   const [kitchenSoundUrl, setKitchenSoundUrl] = useState<string>("");
 
-  // Cash payment modal
+  // Cash payment modal (single order)
   const [cashOrder, setCashOrder] = useState<OrderWithItems | null>(null);
   const [cashInputStr, setCashInputStr] = useState("");
+
+  // Bill group cash modal (multiple TAB orders from same bill)
+  const [billGroupCash, setBillGroupCash] = useState<{
+    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+  } | null>(null);
+  const [billCashInputStr, setBillCashInputStr] = useState("");
+  const [billGroupCashLoading, setBillGroupCashLoading] = useState(false);
   // QR data URLs for scan-at-counter, keyed by order id
   const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
@@ -749,6 +756,25 @@ export default function OrderQueue() {
     setLoading(order.id, false);
   }
 
+  async function confirmBillGroupCash() {
+    if (!billGroupCash) return;
+    const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
+    if (received < billGroupCash.total) return;
+    setBillGroupCashLoading(true);
+    try {
+      await fetch(`/api/pos/bills/${billGroupCash.billId}/tab-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberUserId: null }),
+      });
+      setBillGroupCash(null);
+      setBillCashInputStr("");
+      await mutate();
+    } finally {
+      setBillGroupCashLoading(false);
+    }
+  }
+
   async function confirmQrPayment(order: OrderWithItems) {
     if (!order.payment?.id) return;
     setLoading(order.id, true);
@@ -830,6 +856,34 @@ export default function OrderQueue() {
   const activeOrders = (orders?.filter((o) => o.status !== "PENDING") ?? [])
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  // Group CONFIRMED+TAB orders from the same bill into one card
+  const billTabGroupsMap = new Map<number, OrderWithItems[]>();
+  const standaloneActive: OrderWithItems[] = [];
+  for (const order of activeOrders) {
+    if (order.billId && order.payment?.method === "TAB" && order.status === "CONFIRMED") {
+      const grp = billTabGroupsMap.get(order.billId) ?? [];
+      grp.push(order);
+      billTabGroupsMap.set(order.billId, grp);
+    } else {
+      standaloneActive.push(order);
+    }
+  }
+
+  type ActiveDisplayItem =
+    | { kind: "group"; billId: number; orders: OrderWithItems[]; ts: number }
+    | { kind: "single"; order: OrderWithItems; ts: number };
+
+  const activeDisplayItems: ActiveDisplayItem[] = [
+    ...[...billTabGroupsMap.entries()].map(([billId, orders]) => ({
+      kind: "group" as const, billId, orders,
+      ts: Math.max(...orders.map((o) => new Date(o.createdAt).getTime())),
+    })),
+    ...standaloneActive.map((order) => ({
+      kind: "single" as const, order,
+      ts: new Date(order.createdAt).getTime(),
+    })),
+  ].sort((a, b) => b.ts - a.ts);
+
   if (!orders) return <div className="text-center py-8 text-gray-400">กำลังโหลด...</div>;
 
   const editTotal = editItems
@@ -892,30 +946,49 @@ export default function OrderQueue() {
       )}
 
       {/* ออเดอร์กำลังดำเนินการ */}
-      {activeOrders.length > 0 && (
+      {activeDisplayItems.length > 0 && (
         <div>
           <h3 className="font-bold text-navy mb-3">กำลังดำเนินการ</h3>
           <div className="space-y-3">
-            {activeOrders.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                isNew={false}
-                isLoading={loadingIds.has(order.id)}
-                onUpdate={handleUpdate}
-                onEdit={openEdit}
-                onDelete={handleDelete}
-                onPrint={(o) => printReceipt(o, receiptSettings)}
-                onKitchen={(o) => printKitchen(o, kitchenSettings)}
-                kitchenEnabled={kitchenSettings.enabled}
-                onOpenCashModal={openCashModal}
-                onConfirmQr={confirmQrPayment}
-                onChooseScan={chooseScan}
-                qrUrl={qrMap[order.id]}
-                servedAcked={servedAcked}
-                onServeAck={markServedAck}
-              />
-            ))}
+            {activeDisplayItems.map((item) =>
+              item.kind === "group" ? (
+                <BillOrderGroupCard
+                  key={`bill-${item.billId}`}
+                  orders={item.orders}
+                  servedAcked={servedAcked}
+                  onServeAck={markServedAck}
+                  isLoading={item.orders.some((o) => loadingIds.has(o.id))}
+                  onOpenCashModal={(orders) => {
+                    setBillGroupCash({
+                      billId: orders[0].billId!,
+                      billName: orders[0].bill?.name ?? "",
+                      orders,
+                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
+                    });
+                    setBillCashInputStr("");
+                  }}
+                />
+              ) : (
+                <OrderCard
+                  key={item.order.id}
+                  order={item.order}
+                  isNew={false}
+                  isLoading={loadingIds.has(item.order.id)}
+                  onUpdate={handleUpdate}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onPrint={(o) => printReceipt(o, receiptSettings)}
+                  onKitchen={(o) => printKitchen(o, kitchenSettings)}
+                  kitchenEnabled={kitchenSettings.enabled}
+                  onOpenCashModal={openCashModal}
+                  onConfirmQr={confirmQrPayment}
+                  onChooseScan={chooseScan}
+                  qrUrl={qrMap[item.order.id]}
+                  servedAcked={servedAcked}
+                  onServeAck={markServedAck}
+                />
+              )
+            )}
           </div>
         </div>
       )}
@@ -1089,6 +1162,64 @@ export default function OrderQueue() {
         );
       })()}
 
+      {/* Bill group cash modal */}
+      {billGroupCash && (() => {
+        const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
+        const change = received - billGroupCash.total;
+        function pressDigit(d: string) { setBillCashInputStr((prev) => (prev === "" || prev === "0") ? d : prev + d); }
+        function pressBack() { setBillCashInputStr((prev) => prev.slice(0, -1)); }
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3">
+              <h3 className="font-bold text-navy text-lg text-center">รับเงินสด — ตี้ {billGroupCash.billName}</h3>
+              <p className="text-xs text-center text-gray-400">{billGroupCash.orders.length} ออเดอร์รวมกัน</p>
+              <div className="text-center">
+                <p className="text-xs text-gray-400">ยอดรวมที่ต้องชำระ</p>
+                <p className="text-3xl font-bold text-orange">฿{billGroupCash.total.toLocaleString()}</p>
+              </div>
+              <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                {billCashInputStr ? `฿${received.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
+              </div>
+              {billCashInputStr && (
+                <div className={`rounded-xl p-2.5 text-center ${received >= billGroupCash.total ? "bg-green-50" : "bg-red-50"}`}>
+                  {received >= billGroupCash.total
+                    ? <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
+                    : <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(billGroupCash.total - received).toLocaleString()}</p>}
+                </div>
+              )}
+              <div className="grid grid-cols-3 gap-1.5">
+                {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                  <button key={d} type="button" onClick={() => pressDigit(d)}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">{d}</button>
+                ))}
+                <button type="button" onClick={() => setBillCashInputStr((p) => p === "" ? "" : p + "00")}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">00</button>
+                <button type="button" onClick={() => pressDigit("0")}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">0</button>
+                <button type="button" onClick={pressBack}
+                  className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">⌫</button>
+              </div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {[20, 50, 100, 500, 1000].map((amt) => (
+                  <button key={amt} type="button" onClick={() => setBillCashInputStr(String((parseInt(billCashInputStr) || 0) + amt))}
+                    className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">+{amt}</button>
+                ))}
+                <button type="button" onClick={() => setBillCashInputStr("")}
+                  className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => { setBillGroupCash(null); setBillCashInputStr(""); }}
+                  className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                <button onClick={confirmBillGroupCash} disabled={!billCashInputStr || received < billGroupCash.total || billGroupCashLoading}
+                  className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                  {billGroupCashLoading ? "กำลังบันทึก..." : "✅ ชำระแล้ว"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Confirm Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
@@ -1214,6 +1345,116 @@ export default function OrderQueue() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function BillOrderGroupCard({
+  orders,
+  servedAcked,
+  onServeAck,
+  isLoading,
+  onOpenCashModal,
+}: {
+  orders: OrderWithItems[];
+  servedAcked: Set<number>;
+  onServeAck: (id: number) => void;
+  isLoading: boolean;
+  onOpenCashModal: (orders: OrderWithItems[]) => void;
+}) {
+  const first = orders[0];
+  const bill = first.bill;
+  const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
+  const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
+  const allItems = orders.flatMap((o) => o.items);
+  const kitchenDone = allItems.length > 0 && allItems.every((i) => !!i.kitchenServedAt);
+  const allServedAcked = orders.every((o) => servedAcked.has(o.id));
+
+  // Sort orders newest first within the group
+  const sorted = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border-2 border-transparent p-4">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex-1 min-w-0 pr-2">
+          <span className={`inline-block font-black text-base px-3 py-0.5 rounded-full ${bc.bg} ${bc.text} mb-1`}>
+            ตี้ {bill?.name}
+          </span>
+          <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {orders.length} ออเดอร์รวมกัน</p>
+        </div>
+        <span className="text-xs font-semibold px-2 py-1 rounded-full border shrink-0 bg-amber-100 text-amber-800 border-amber-300">
+          🧾 รอชำระรวม
+        </span>
+      </div>
+
+      {/* All items from all orders */}
+      <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-3">
+        {sorted.map((order, oi) => (
+          <div key={order.id}>
+            {orders.length > 1 && (
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
+                ออเดอร์ {oi + 1} · 👤 {order.orderName} · {formatThaiDateTime(order.createdAt)}
+              </p>
+            )}
+            {order.items.map((item) => {
+              const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+              const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+              return (
+                <div key={item.id} className="flex justify-between text-sm gap-2 py-0.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
+                      {item.selectedSize && <span className="text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">{item.selectedSize}</span>}
+                      <span className="text-gray-400">×{item.quantity}</span>
+                      {item.kitchenServedAt
+                        ? <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✅ พร้อม</span>
+                        : <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🍳 กำลังทำ</span>}
+                    </div>
+                    {addons.length > 0 && <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>}
+                    {options.length > 0 && <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>}
+                  </div>
+                  <span className="text-navy font-semibold shrink-0">฿{item.unitPriceTHB * item.quantity}</span>
+                </div>
+              );
+            })}
+            {order.note && (
+              <p className="text-xs text-orange bg-orange/10 rounded-lg px-2 py-1 mt-1">📝 {order.note}</p>
+            )}
+          </div>
+        ))}
+        <div className="border-t border-gray-200 pt-1.5 flex justify-between font-black text-navy text-base">
+          <span>รวมทั้งหมด</span>
+          <span>฿{totalTHB.toLocaleString()}</span>
+        </div>
+      </div>
+
+      {/* Serve ack */}
+      {kitchenDone && (
+        <div className="mb-2">
+          {!allServedAcked ? (
+            <button
+              onClick={() => orders.forEach((o) => onServeAck(o.id))}
+              className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
+            >
+              🍽️ เสิร์ฟแล้ว — หยุดแจ้งเตือน
+            </button>
+          ) : (
+            <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
+              ✅ เสิร์ฟถึงโต๊ะแล้ว
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Payment */}
+      <button
+        onClick={() => onOpenCashModal(orders)}
+        disabled={isLoading}
+        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+      >
+        💵 {isLoading ? "กำลังบันทึก..." : `ชำระเงินสด ฿${totalTHB.toLocaleString()}`}
+      </button>
     </div>
   );
 }
