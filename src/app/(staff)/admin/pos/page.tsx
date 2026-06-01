@@ -580,37 +580,39 @@ export default function AdminTimePage() {
 
   // edit time modal
   const [editTimeTarget, setEditTimeTarget] = useState<{ type: "session"; session: PlayerSession } | { type: "bill"; bill: Bill } | null>(null);
-  const [editTimeHours, setEditTimeHours] = useState("1");
-  const [editTimeMinutes, setEditTimeMinutes] = useState("0");
+  const [editTimeHours, setEditTimeHours] = useState("0");
+  const [editTimeMinutes, setEditTimeMinutes] = useState("30");
+  const [editTimeSign, setEditTimeSign] = useState<"add" | "sub">("add");
   const [editTimeSaving, setEditTimeSaving] = useState(false);
 
   function openEditTimeSession(session: PlayerSession) {
-    const h = Math.floor(session.timeRemaining / 3600);
-    const m = Math.floor((session.timeRemaining % 3600) / 60);
-    setEditTimeHours(String(h));
-    setEditTimeMinutes(String(m));
+    setEditTimeHours("0");
+    setEditTimeMinutes("30");
+    setEditTimeSign("add");
     setEditTimeTarget({ type: "session", session });
   }
 
   function openEditTimeBill(bill: Bill) {
-    setEditTimeHours("1");
-    setEditTimeMinutes("0");
+    setEditTimeHours("0");
+    setEditTimeMinutes("30");
+    setEditTimeSign("add");
     setEditTimeTarget({ type: "bill", bill });
   }
 
   async function saveEditTime() {
     if (!editTimeTarget) return;
-    const seconds = (parseInt(editTimeHours) || 0) * 3600 + (parseInt(editTimeMinutes) || 0) * 60;
+    const delta = (parseInt(editTimeHours) || 0) * 3600 + (parseInt(editTimeMinutes) || 0) * 60;
+    const addSeconds = editTimeSign === "add" ? delta : -delta;
     setEditTimeSaving(true);
     if (editTimeTarget.type === "session") {
       await fetch(`/api/pos/sessions/${editTimeTarget.session.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setSeconds: seconds }),
+        body: JSON.stringify({ addSeconds }),
       });
     } else {
       await fetch(`/api/pos/bills/${editTimeTarget.bill.id}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ setTimeAll: seconds }),
+        body: JSON.stringify({ addTimeAll: addSeconds }),
       });
     }
     setEditTimeSaving(false);
@@ -1704,9 +1706,25 @@ export default function AdminTimePage() {
           <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
             <h3 className="font-bold text-navy text-lg text-center">
               {editTimeTarget.type === "session"
-                ? `⏱️ แก้ไขเวลา — ${editTimeTarget.session.nickname}`
-                : `⏱️ แก้ไขเวลายกตี้ — ${editTimeTarget.bill.name}`}
+                ? `⏱️ ปรับเวลา — ${editTimeTarget.session.nickname}`
+                : `⏱️ ปรับเวลายกตี้ — ${editTimeTarget.bill.name}`}
             </h3>
+            {editTimeTarget.type === "session" && (
+              <p className="text-center text-sm text-gray-400">
+                เวลาที่เหลือ: <span className="font-bold text-navy">{fmt(editTimeTarget.session.timeRemaining)}</span>
+              </p>
+            )}
+            {/* +/- toggle */}
+            <div className="flex rounded-xl overflow-hidden border border-sand">
+              <button
+                onClick={() => setEditTimeSign("add")}
+                className={`flex-1 py-2.5 text-sm font-bold transition-colors ${editTimeSign === "add" ? "bg-green-500 text-white" : "text-gray-400 bg-white"}`}
+              >+ เพิ่ม</button>
+              <button
+                onClick={() => setEditTimeSign("sub")}
+                className={`flex-1 py-2.5 text-sm font-bold transition-colors ${editTimeSign === "sub" ? "bg-red-400 text-white" : "text-gray-400 bg-white"}`}
+              >− ลด</button>
+            </div>
             <div className="flex items-center gap-3 justify-center">
               <div className="text-center">
                 <label className="text-xs text-gray-400 block mb-1">ชั่วโมง</label>
@@ -1730,8 +1748,8 @@ export default function AdminTimePage() {
               <button onClick={() => setEditTimeTarget(null)}
                 className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
               <button onClick={saveEditTime} disabled={editTimeSaving}
-                className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
-                {editTimeSaving ? "..." : "บันทึก"}
+                className={`flex-1 py-3 rounded-2xl text-sm font-bold disabled:opacity-40 text-white ${editTimeSign === "add" ? "bg-green-500" : "bg-red-400"}`}>
+                {editTimeSaving ? "..." : editTimeSign === "add" ? "เพิ่มเวลา" : "ลดเวลา"}
               </button>
             </div>
           </div>

@@ -5,7 +5,7 @@ import { remainingSeconds } from "@/lib/pos-time";
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const billId = Number(id);
-  const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string; setTimeAll?: number };
+  const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string; setTimeAll?: number; addTimeAll?: number };
 
   const bill = await db.bill.findUnique({
     where: { id: billId },
@@ -36,6 +36,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: { billId, status: "ACTIVE" },
       data: { timeRemaining: body.setTimeAll },
     });
+  }
+
+  // Add/subtract time for all active sessions individually
+  if (body.addTimeAll !== undefined) {
+    const now = Date.now();
+    for (const s of bill.sessions) {
+      const current = remainingSeconds(s.timeRemaining, bill.startsAt, s.updatedAt, now);
+      await db.playerSession.update({
+        where: { id: s.id },
+        data: { timeRemaining: Math.max(0, current + body.addTimeAll) },
+      });
+    }
   }
 
   // Close bill → close all sessions, credit member hours, free table
