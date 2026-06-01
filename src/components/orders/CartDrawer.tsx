@@ -98,6 +98,10 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
       alert("กรุณากรอกชื่อก่อนสั่งอาหาร");
       return;
     }
+    if (bills.length > 0 && !selectedBillId) {
+      alert("กรุณาเลือกตี้ก่อนสั่งอาหาร");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/orders", {
@@ -204,17 +208,22 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
             </div>
             {bills.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-navy mb-1">เลือกตี้ (ถ้ามี)</p>
+                <p className="text-xs font-medium text-navy mb-1">
+                  เลือกตี้ <span className="text-red-500">*</span>
+                </p>
                 <select
                   value={selectedBillId}
                   onChange={(e) => setSelectedBillId(e.target.value ? Number(e.target.value) : "")}
-                  className="w-full bg-white border border-sand rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange"
+                  className={`w-full bg-white border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-orange ${!selectedBillId ? "border-red-300" : "border-sand"}`}
                 >
-                  <option value="">— ไม่เลือกตี้ —</option>
+                  <option value="">— กรุณาเลือกตี้ —</option>
                   {bills.map((b) => (
                     <option key={b.id} value={b.id}>โต๊ะ {b.tableNumber} — {b.name}</option>
                   ))}
                 </select>
+                {!selectedBillId && (
+                  <p className="text-[10px] text-red-400 mt-1">จำเป็นต้องเลือกตี้ก่อนสั่ง</p>
+                )}
               </div>
             )}
           </div>
@@ -278,7 +287,7 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
             </div>
             <button
               onClick={submitOrder}
-              disabled={loading}
+              disabled={loading || (bills.length > 0 && !selectedBillId)}
               className="w-full bg-navy text-cream font-bold py-3 rounded-xl disabled:opacity-50"
             >
               {loading ? "กำลังส่งออเดอร์..." : "ยืนยันการสั่งอาหาร"}
