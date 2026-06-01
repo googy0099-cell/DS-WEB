@@ -119,10 +119,12 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onEdit }: {
+function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onEdit, isExpiredAcked, onExpiredDetected }: {
   session: PlayerSession; bill: Bill; prepRemaining: number;
   onCheckout: (id: number) => void; onEditTime: (session: PlayerSession) => void;
   onEdit: (session: PlayerSession) => void;
+  isExpiredAcked: boolean;
+  onExpiredDetected: (info: { sessionId: number; nickname: string; billName: string; tableNumber: number }) => void;
 }) {
   const prep = useCountdown(prepRemaining);
   const remaining = useCountdown(session.timeRemaining);
@@ -130,25 +132,16 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onE
   const color = timerColor(remaining);
   const isAllDay = session.timeRemaining >= 86400;
 
-  // Fire notifications at 5-min warning and time-up
-  const notifiedRef = useRef({ warned: false, expired: false });
-  useEffect(() => { notifiedRef.current = { warned: false, expired: false }; }, [session.timeRemaining]);
+  // Report expiration to parent — parent owns the alert loop and ack state
+  const reportedRef = useRef(false);
+  useEffect(() => { reportedRef.current = false; }, [session.id, session.timeRemaining]);
   useEffect(() => {
     if (isAllDay || inPrep) return;
-    if (remaining === 0 && !notifiedRef.current.expired) {
-      notifiedRef.current.expired = true;
-      playTimeUpBeep();
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("⏰ หมดเวลา!", { body: `${session.nickname} หมดเวลาแล้ว`, icon: "/DS-new-logo.png" });
-      }
-    } else if (remaining <= 300 && remaining > 0 && !notifiedRef.current.warned) {
-      notifiedRef.current.warned = true;
-      playWarningBeep();
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("⚠️ ใกล้หมดเวลา", { body: `${session.nickname} เหลือ 5 นาที`, icon: "/DS-new-logo.png" });
-      }
+    if (remaining === 0 && !reportedRef.current) {
+      reportedRef.current = true;
+      onExpiredDetected({ sessionId: session.id, nickname: session.nickname, billName: bill.name, tableNumber: bill.table.number });
     }
-  }, [remaining, isAllDay, inPrep, session.nickname]);
+  }, [remaining, isAllDay, inPrep, session.id, session.nickname, bill.name, bill.table.number, onExpiredDetected]);
   const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? (session.timeRemaining || 3600);
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
 
@@ -165,7 +158,7 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onE
             ✏️
           </button>
           <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : isAllDay ? "text-purple-300" : color.text} border border-current`}>
-            {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : color.label}
+            {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : remaining === 0 && isExpiredAcked ? "หมดเวลา · รับทราบแล้ว" : color.label}
           </span>
         </div>
       </div>
@@ -409,6 +402,71 @@ function ExtraItemsList({ items, onChange, players }: {
 export default function AdminTimePage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [tables, setTables] = useState<TableRef[]>([]);
+
+  // Expired-session alert state — persists ack across page refreshes
+  type ExpiredInfo = { nickname: string; billName: string; tableNumber: number };
+  const [expiredAcked, setExpiredAcked] = useState<Set<number>>(new Set());
+  const [liveExpired, setLiveExpired] = useState<Map<number, ExpiredInfo>>(new Map());
+  const expiredLoopIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Load acked set from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("posExpiredAcked");
+      if (raw) setExpiredAcked(new Set(JSON.parse(raw)));
+    } catch {}
+  }, []);
+
+  const reportExpired = useCallback((info: { sessionId: number } & ExpiredInfo) => {
+    if (expiredAcked.has(info.sessionId)) return; // already acked — no alert
+    setLiveExpired((prev) => {
+      if (prev.has(info.sessionId)) return prev;
+      const next = new Map(prev);
+      next.set(info.sessionId, { nickname: info.nickname, billName: info.billName, tableNumber: info.tableNumber });
+      return next;
+    });
+  }, [expiredAcked]);
+
+  function dismissExpired() {
+    setExpiredAcked((prev) => {
+      const next = new Set(prev);
+      liveExpired.forEach((_, id) => next.add(id));
+      try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    setLiveExpired(new Map());
+  }
+
+  // Loop the time-up sound while there are unacked expired sessions
+  useEffect(() => {
+    if (liveExpired.size === 0) {
+      if (expiredLoopIntervalRef.current) { clearInterval(expiredLoopIntervalRef.current); expiredLoopIntervalRef.current = null; }
+      return;
+    }
+    playTimeUpBeep();
+    expiredLoopIntervalRef.current = setInterval(() => playTimeUpBeep(), 3000);
+    return () => {
+      if (expiredLoopIntervalRef.current) { clearInterval(expiredLoopIntervalRef.current); expiredLoopIntervalRef.current = null; }
+    };
+  }, [liveExpired.size]);
+
+  // Cleanup: drop ack/live entries for sessions that are gone or got time extended
+  useEffect(() => {
+    const activeMap = new Map<number, number>(); // sessionId -> timeRemaining
+    bills.forEach((b) => b.sessions.forEach((s) => activeMap.set(s.id, s.timeRemaining)));
+    setExpiredAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeMap.has(id) && activeMap.get(id) === 0));
+      if (next.size === prev.size) return prev;
+      try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    setLiveExpired((prev) => {
+      const next = new Map([...prev].filter(([id]) => activeMap.has(id) && activeMap.get(id) === 0));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [bills]);
+
+
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [allMenuItems, setAllMenuItems] = useState<DrinkItem[]>([]);
   const [gametimeItems, setGametimeItems] = useState<DrinkItem[]>([]);
@@ -1271,6 +1329,24 @@ export default function AdminTimePage() {
         <button onClick={openBillFlow} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">+ เปิดตี้</button>
       </div>
 
+      {/* Time-up alert banner */}
+      {liveExpired.size > 0 && (
+        <div className="bg-red-500 text-white rounded-2xl p-4 flex items-start gap-3 shadow-xl animate-pulse">
+          <span className="text-3xl shrink-0">⏰</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base">หมดเวลา {liveExpired.size} คน!</p>
+            <div className="text-sm opacity-95 mt-1 space-y-0.5">
+              {[...liveExpired.values()].map((v, i) => (
+                <p key={i}>• {v.nickname} · ตี้ {v.billName} · โต๊ะ {v.tableNumber}</p>
+              ))}
+            </div>
+          </div>
+          <button onClick={dismissExpired} className="bg-white text-red-600 font-bold px-4 py-2 rounded-xl text-sm whitespace-nowrap hover:bg-red-50 transition-colors">
+            🔕 รับทราบ
+          </button>
+        </div>
+      )}
+
       {loading && <p className="text-gray-400 py-8 text-center">กำลังโหลด...</p>}
       {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีตี้ที่เปิดอยู่ — กด &quot;+ เปิดตี้&quot; เพื่อเริ่ม</p>}
 
@@ -1337,7 +1413,7 @@ export default function AdminTimePage() {
               </div>
             )}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onEditTime={openEditTimeSession} onEdit={openEditSession} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onEditTime={openEditTimeSession} onEdit={openEditSession} isExpiredAcked={expiredAcked.has(s.id)} onExpiredDetected={reportExpired} />)}
             </div>
           </div>
         );

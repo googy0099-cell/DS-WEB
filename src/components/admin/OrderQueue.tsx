@@ -343,6 +343,7 @@ export default function OrderQueue() {
 
   const prevIdsRef = useRef<Set<number>>(new Set());
   const prevKitchenDoneRef = useRef<Set<number>>(new Set());
+  const firstRenderRef = useRef(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const alertBufRef = useRef<ArrayBuffer | null>(null);
   const kitchenBufRef = useRef<ArrayBuffer | null>(null);
@@ -513,6 +514,17 @@ export default function OrderQueue() {
   // Fire beep when NEW orders arrive; fire chime when NEW kitchen-done events arrive
   useEffect(() => {
     if (!orders) return;
+
+    // First render after page load: seed the refs with current state and skip notifications
+    // so we don't pop up alerts for orders that were already there before the page opened.
+    if (firstRenderRef.current) {
+      firstRenderRef.current = false;
+      prevIdsRef.current = new Set(orders.map((o) => o.id));
+      prevKitchenDoneRef.current = new Set(
+        orders.filter((o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)).map((o) => o.id)
+      );
+      return;
+    }
 
     const newOrders = orders.filter((o) => {
       if (prevIdsRef.current.has(o.id)) return false;

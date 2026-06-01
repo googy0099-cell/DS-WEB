@@ -9,5 +9,7 @@ export default defineConfig({
   },
   datasource: {
     url: process.env.TURSO_DATABASE_URL!,
+    // @ts-expect-error Prisma Turso adapter passes authToken separately
+    authToken: process.env.TURSO_AUTH_TOKEN,
   },
 });
