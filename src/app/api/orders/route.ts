@@ -139,7 +139,7 @@ export async function POST(req: NextRequest) {
       data: { totalTHB: existingUnpaid.totalTHB + newTotal, note: note || existingUnpaid.note },
       include: { items: { include: { menuItem: true } } },
     });
-    return NextResponse.json(updatedOrder, { status: 200 });
+    return NextResponse.json({ ...updatedOrder, checkoutToken: signCheckoutToken(existingUnpaid.id) }, { status: 200 });
   }
 
   const totalTHB = newTotal;
