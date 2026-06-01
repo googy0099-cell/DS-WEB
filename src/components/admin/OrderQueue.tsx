@@ -25,6 +25,7 @@ interface ReceiptSettings {
   feedLines?: number;
   headerAlign?: "center" | "left";
   htmlFontSize?: number;
+  logoSize?: number;
 }
 
 interface KitchenSettings {
@@ -39,7 +40,7 @@ const DEFAULT_RECEIPT: ReceiptSettings = {
   footer: "ขอบคุณที่ใช้บริการ 🎲",
   showOrderId: true, showDate: true, showCustomer: true,
   showNote: true, showItemPrice: true, showTotal: true,
-  titleSize: "double", feedLines: 3, headerAlign: "center", htmlFontSize: 13,
+  titleSize: "double", feedLines: 3, headerAlign: "center", htmlFontSize: 13, logoSize: 80,
 };
 
 const DEFAULT_KITCHEN: KitchenSettings = {
@@ -118,8 +119,9 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
     })
     .join("");
 
+  const logoSz = settings.logoSize ?? 80;
   openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ #${order.id}</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:100px;max-height:50px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(fs*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:${logoSz}px;max-height:${logoSz}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(fs*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
 </head><body>
 ${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="logo"/>` : ""}
 <h1>${settings.logoUrl ? "" : "🎲 "}${settings.shopName}</h1>
@@ -193,10 +195,12 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
     })
     .join("");
 
+  const logoSzB = settings.logoSize ?? 80;
   openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ ${orderName}</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:${logoSzB}px;max-height:${logoSzB}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
 </head><body>
-<h1>🎲 ${settings.shopName}</h1>
+${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="logo"/>` : ""}
+<h1>${settings.logoUrl ? "" : "🎲 "}${settings.shopName}</h1>
 <div class="sub">${settings.shopInfo} • ใบเสร็จรับเงิน</div>
 <hr class="divider"/>
 <div style="font-size:12px;margin-bottom:4px">

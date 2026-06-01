@@ -65,6 +65,7 @@ const DEFAULT_RECEIPT_SETTINGS = {
   feedLines: 3,
   headerAlign: "center" as "center" | "left",
   htmlFontSize: 13,
+  logoSize: 80,
 };
 
 const DEFAULT_KITCHEN_SETTINGS = {
@@ -104,6 +105,7 @@ export default function AdminSettingsPage() {
   const [rFeedLines, setRFeedLines] = useState(DEFAULT_RECEIPT_SETTINGS.feedLines);
   const [rHeaderAlign, setRHeaderAlign] = useState<"center" | "left">(DEFAULT_RECEIPT_SETTINGS.headerAlign);
   const [rHtmlFontSize, setRHtmlFontSize] = useState(DEFAULT_RECEIPT_SETTINGS.htmlFontSize);
+  const [rLogoSize, setRLogoSize] = useState(DEFAULT_RECEIPT_SETTINGS.logoSize);
 
   // Print settings — kitchen
   const [kEnabled, setKEnabled] = useState(DEFAULT_KITCHEN_SETTINGS.enabled);
@@ -156,6 +158,7 @@ export default function AdminSettingsPage() {
       setRShowItemPrice(r.showItemPrice); setRShowTotal(r.showTotal);
       setRTitleSize(r.titleSize ?? "double"); setRFeedLines(r.feedLines ?? 3);
       setRHeaderAlign(r.headerAlign ?? "center"); setRHtmlFontSize(r.htmlFontSize ?? 13);
+      setRLogoSize(r.logoSize ?? 80);
     } catch {}
     try {
       const k = { ...DEFAULT_KITCHEN_SETTINGS, ...JSON.parse(siteSettings.print_kitchen ?? "{}") };
@@ -206,7 +209,7 @@ export default function AdminSettingsPage() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, logoUrl: rLogoUrl, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal, titleSize: rTitleSize, feedLines: rFeedLines, headerAlign: rHeaderAlign, htmlFontSize: rHtmlFontSize }),
+          print_receipt: JSON.stringify({ shopName: rShopName, shopInfo: rShopInfo, paperWidth: rPaperWidth, footer: rFooter, logoUrl: rLogoUrl, showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer, showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal, titleSize: rTitleSize, feedLines: rFeedLines, headerAlign: rHeaderAlign, htmlFontSize: rHtmlFontSize, logoSize: rLogoSize }),
           print_kitchen: JSON.stringify({ enabled: kEnabled, paperWidth: kPaperWidth, showTable: kShowTable, showNote: kShowNote }),
         }),
       });
@@ -352,7 +355,7 @@ export default function AdminSettingsPage() {
     // Fallback: browser print window
     const w = rPaperWidth === "A4" ? "210mm" : `${rPaperWidth}mm`;
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบเสร็จ</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${rHtmlFontSize}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:100px;max-height:50px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(rHtmlFontSize*1.4)}px;font-weight:900;text-align:${rHeaderAlign};margin-bottom:2px}.sub{font-size:${Math.round(rHtmlFontSize*0.85)}px;text-align:${rHeaderAlign};color:#555;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:${Math.round(rHtmlFontSize*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(rHtmlFontSize*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(rHtmlFontSize*0.85)}px;color:#777;margin-top:6px}</style></head>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${rHtmlFontSize}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:${rLogoSize}px;max-height:${rLogoSize}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(rHtmlFontSize*1.4)}px;font-weight:900;text-align:${rHeaderAlign};margin-bottom:2px}.sub{font-size:${Math.round(rHtmlFontSize*0.85)}px;text-align:${rHeaderAlign};color:#555;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:${Math.round(rHtmlFontSize*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(rHtmlFontSize*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(rHtmlFontSize*0.85)}px;color:#777;margin-top:6px}</style></head>
 <body>
 ${rLogoUrl ? `<img src="${rLogoUrl}" class="logo" alt="logo"/>` : ""}
 <h1>${rLogoUrl ? "" : "🎲 "}${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
@@ -727,6 +730,20 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
                 <p className="text-xs text-gray-400">PNG/JPG โปร่งใสได้ · แสดงบนสุดของใบเสร็จ</p>
               </div>
             </div>
+            {rLogoUrl && (
+              <div className="mt-3">
+                <label className="text-sm font-semibold text-navy block mb-2">
+                  ขนาดโลโก้ <span className="font-normal text-gray-400">({rLogoSize}px)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-gray-400 w-8">เล็ก</span>
+                  <input type="range" min={40} max={200} step={10} value={rLogoSize}
+                    onChange={(e) => setRLogoSize(Number(e.target.value))}
+                    className="flex-1 accent-orange h-2" />
+                  <span className="text-xs text-gray-400 w-10 text-right">ใหญ่</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -854,7 +871,7 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
                 {rLogoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={rLogoUrl} alt="logo"
-                    style={{ display: "block", maxWidth: "100px", maxHeight: "50px", margin: "0 auto 4px", objectFit: "contain" }} />
+                    style={{ display: "block", maxWidth: `${rLogoSize}px`, maxHeight: `${rLogoSize}px`, margin: "0 auto 4px", objectFit: "contain" }} />
                 )}
 
                 {/* Shop name */}
