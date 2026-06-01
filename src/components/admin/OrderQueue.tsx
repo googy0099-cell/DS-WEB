@@ -346,6 +346,8 @@ export default function OrderQueue() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const alertBufRef = useRef<ArrayBuffer | null>(null);
   const kitchenBufRef = useRef<ArrayBuffer | null>(null);
+  const alertLoopRef = useRef<AudioBufferSourceNode | null>(null);
+  const kitchenLoopRef = useRef<AudioBufferSourceNode | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [servedAcked, setServedAcked] = useState<Set<number>>(new Set());
@@ -545,38 +547,117 @@ export default function OrderQueue() {
     );
   }, [orders, alertEnabled]);
 
-  // Repeat beep every 2s while any unacknowledged orders exist
+  // Loop alert sound while unacknowledged orders exist — stop when cleared
   useEffect(() => {
-    if (!alertEnabled || alertOrders.length === 0) return;
-    const interval = setInterval(async () => {
-      try {
-        const played = await playCustom(alertBufRef);
-        if (!played) {
-          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-          playBeep(audioCtxRef.current);
-        }
-      } catch {}
-      showBrowserNotification(
-        `⚠️ รอดำเนินการ (${alertOrders.length} รายการ)`,
-        alertOrders[0].orderName || `#${alertOrders[0].id}`
-      );
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [alertEnabled, alertOrders.length, alertSoundUrl]);
+    const hasAlerts = alertEnabled && alertOrders.length > 0;
 
-  // Repeat chime every 2s while kitchen-done orders are waiting to be served
+    // Stop any existing loop
+    if (alertLoopRef.current) {
+      try { alertLoopRef.current.stop(); } catch {}
+      alertLoopRef.current = null;
+    }
+
+    if (!hasAlerts) return;
+
+    let cancelled = false;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+
+    async function startLoop() {
+      if (alertBufRef.current) {
+        try {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const ctx = audioCtxRef.current;
+          if (ctx.state === "suspended") await ctx.resume();
+          if (cancelled) return;
+          const decoded = await ctx.decodeAudioData(alertBufRef.current.slice(0));
+          if (cancelled) return;
+          const src = ctx.createBufferSource();
+          src.buffer = decoded;
+          src.loop = true;
+          src.connect(ctx.destination);
+          src.start();
+          if (cancelled) { try { src.stop(); } catch {} return; }
+          alertLoopRef.current = src;
+          return;
+        } catch {}
+      }
+      // Fallback: synthesized beep on repeat (no notification spam)
+      if (!cancelled) {
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        playBeep(audioCtxRef.current);
+        fallbackInterval = setInterval(() => {
+          if (!cancelled && audioCtxRef.current) playBeep(audioCtxRef.current);
+        }, 2500);
+      }
+    }
+
+    void startLoop();
+
+    return () => {
+      cancelled = true;
+      if (alertLoopRef.current) {
+        try { alertLoopRef.current.stop(); } catch {}
+        alertLoopRef.current = null;
+      }
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertEnabled, alertOrders.length > 0, alertSoundUrl]);
+
+  // Loop kitchen chime while food-ready orders are unserved — stop when cleared
   useEffect(() => {
-    if (!alertEnabled || kitchenReadyOrders.length === 0) return;
-    const interval = setInterval(async () => {
-      const played = await playCustom(kitchenBufRef);
-      if (!played) playDoneChime();
-      showBrowserNotification(
-        `✅ อาหารพร้อม รอเสิร์ฟ (${kitchenReadyOrders.length} รายการ)`,
-        kitchenReadyOrders[0].orderName || `#${kitchenReadyOrders[0].id}`
-      );
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [alertEnabled, kitchenReadyOrders.length, kitchenSoundUrl]);
+    const hasReady = alertEnabled && kitchenReadyOrders.length > 0;
+
+    if (kitchenLoopRef.current) {
+      try { kitchenLoopRef.current.stop(); } catch {}
+      kitchenLoopRef.current = null;
+    }
+
+    if (!hasReady) return;
+
+    let cancelled = false;
+    let fallbackInterval: ReturnType<typeof setInterval> | null = null;
+
+    async function startLoop() {
+      if (kitchenBufRef.current) {
+        try {
+          if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+          const ctx = audioCtxRef.current;
+          if (ctx.state === "suspended") await ctx.resume();
+          if (cancelled) return;
+          const decoded = await ctx.decodeAudioData(kitchenBufRef.current.slice(0));
+          if (cancelled) return;
+          const src = ctx.createBufferSource();
+          src.buffer = decoded;
+          src.loop = true;
+          src.connect(ctx.destination);
+          src.start();
+          if (cancelled) { try { src.stop(); } catch {} return; }
+          kitchenLoopRef.current = src;
+          return;
+        } catch {}
+      }
+      // Fallback: chime on repeat
+      if (!cancelled) {
+        playDoneChime();
+        fallbackInterval = setInterval(() => {
+          if (!cancelled) playDoneChime();
+        }, 2500);
+      }
+    }
+
+    void startLoop();
+
+    return () => {
+      cancelled = true;
+      if (kitchenLoopRef.current) {
+        try { kitchenLoopRef.current.stop(); } catch {}
+        kitchenLoopRef.current = null;
+      }
+      if (fallbackInterval) clearInterval(fallbackInterval);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertEnabled, kitchenReadyOrders.length > 0, kitchenSoundUrl]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {
