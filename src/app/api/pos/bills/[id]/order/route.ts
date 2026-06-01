@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { generatePromptPayQR } from "@/lib/promptpay";
+import { sendTelegramNotify } from "@/lib/telegram-notify";
+import { sendPushToAll } from "@/lib/push-notify";
+import { sendFcmNotify } from "@/lib/fcm-notify";
+import { formatThaiTime } from "@/lib/thai-datetime";
 
 type LineItem = {
   menuItemId: number;
@@ -45,9 +49,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const validItems = items.filter((i) => i.menuItemId && i.qty > 0);
   const totalTHB = validItems.reduce((s, i) => s + i.unitPriceTHB * i.qty, 0);
 
-  // Deferred (UNSET) bills are placed by the cashier — skip the accept step and
-  // let them pick the payment method on the dashboard.
+  // UNSET = cashier deferred "pay at checkout" — stored as TAB so dashboard groups it with bill
   const isDeferred = paymentMethod === "UNSET";
+  const storedMethod = isDeferred ? "TAB" : paymentMethod;
 
   const order = await db.order.create({
     data: {
@@ -78,12 +82,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await db.payment.create({
       data: {
         orderId: order.id,
-        method: paymentMethod,
+        method: storedMethod,
         amountTHB: totalTHB,
         status: "PENDING",
         staffNote,
       },
     });
+  }
+
+  // Notify dashboard for deferred (TAB) orders — staff needs to see them in the queue
+  if (isDeferred && totalTHB > 0) {
+    const itemLines = validItems
+      .map((i) => `  • ${i.nameTh} x${i.qty} = ฿${i.unitPriceTHB * i.qty}`)
+      .join("\n");
+    const msg = `\n🔔 ออเดอร์ใหม่! 🧾 ตี้ ${bill.name} · โต๊ะ ${bill.table.number}\n${itemLines}\n💰 รวม ฿${totalTHB}\n🕐 ${formatThaiTime(order.createdAt)}`;
+    await Promise.allSettled([
+      sendTelegramNotify(msg),
+      sendPushToAll("🔔 ออเดอร์ใหม่!", `ตี้ ${bill.name} · ฿${totalTHB}`),
+      sendFcmNotify("🔔 ออเดอร์ใหม่!", `ตี้ ${bill.name} · ฿${totalTHB}`),
+    ]);
   }
 
   const config = await db.paymentConfig.findUnique({ where: { id: 1 } });

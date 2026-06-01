@@ -1295,12 +1295,6 @@ export default function AdminTimePage() {
                 {bill.sessions.length > 0 && (
                   <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
                 )}
-                {bill.tabTotal > 0 && (
-                  <button onClick={() => { setTabCheckoutBill(bill); setTabMemberCode(""); setTabMember(null); setTabMemberError(""); setTabDone(null); }}
-                    className="bg-amber-400/80 hover:bg-amber-400 text-navy text-xs font-bold px-4 py-2 rounded-xl transition-colors">
-                    💳 เช็คเอาท์ ฿{bill.tabTotal}
-                  </button>
-                )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>

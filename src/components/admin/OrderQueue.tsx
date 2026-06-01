@@ -385,6 +385,10 @@ export default function OrderQueue() {
   } | null>(null);
   const [billCashInputStr, setBillCashInputStr] = useState("");
   const [billGroupCashLoading, setBillGroupCashLoading] = useState(false);
+  const [billGroupScan, setBillGroupScan] = useState<{
+    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+  } | null>(null);
+  const [billScanLoading, setBillScanLoading] = useState(false);
   // QR data URLs for scan-at-counter, keyed by order id
   const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
@@ -474,16 +478,14 @@ export default function OrderQueue() {
   }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Orders that still need immediate staff action (alert beeps for these)
-  // Cashier-created orders (handledById set) and bill-linked TAB orders are excluded
+  // Cashier counter orders (handledById set) are excluded — staff created them intentionally
   const alertOrders = (orders ?? []).filter((o) => {
     if (o.handledById) return false; // counter order, staff already knows
     const m = o.payment?.method;
-    // Bill-linked TAB orders pay at checkout — no alert needed
-    if (m === "TAB" && o.billId) return false;
     // PENDING with payment method selected — needs staff to process
     if (o.status === "PENDING") return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
-    // CONFIRMED non-cashier orders waiting for payment
-    if (o.status === "CONFIRMED") return !m || m === "UNSET" || m === "CASH" || m === "PROMPTPAY";
+    // CONFIRMED orders waiting for payment — includes bill-linked TAB (alert until paid)
+    if (o.status === "CONFIRMED") return !m || m === "UNSET" || m === "CASH" || m === "PROMPTPAY" || (m === "TAB" && !!o.billId);
     return false;
   });
 
@@ -775,6 +777,22 @@ export default function OrderQueue() {
     }
   }
 
+  async function confirmBillGroupScan() {
+    if (!billGroupScan) return;
+    setBillScanLoading(true);
+    try {
+      await fetch(`/api/pos/bills/${billGroupScan.billId}/tab-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberUserId: null }),
+      });
+      setBillGroupScan(null);
+      await mutate();
+    } finally {
+      setBillScanLoading(false);
+    }
+  }
+
   async function confirmQrPayment(order: OrderWithItems) {
     if (!order.payment?.id) return;
     setLoading(order.id, true);
@@ -966,6 +984,14 @@ export default function OrderQueue() {
                       total: orders.reduce((s, o) => s + o.totalTHB, 0),
                     });
                     setBillCashInputStr("");
+                  }}
+                  onScanCheckout={(orders) => {
+                    setBillGroupScan({
+                      billId: orders[0].billId!,
+                      billName: orders[0].bill?.name ?? "",
+                      orders,
+                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
+                    });
                   }}
                 />
               ) : (
@@ -1220,6 +1246,37 @@ export default function OrderQueue() {
         );
       })()}
 
+      {/* Bill group scan confirm modal */}
+      {billGroupScan && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg text-center">📷 ยืนยันการสแกน</h3>
+            <p className="text-sm text-center text-gray-500">ตี้ {billGroupScan.billName} · {billGroupScan.orders.length} ออเดอร์</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+              <p className="text-xs text-blue-600 mb-1">ยอดรวมที่ต้องชำระ</p>
+              <p className="text-3xl font-black text-blue-700">฿{billGroupScan.total.toLocaleString()}</p>
+            </div>
+            <p className="text-xs text-center text-gray-400">ยืนยันว่าลูกค้าโอนเงินครบถ้วนแล้ว</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setBillGroupScan(null)}
+                disabled={billScanLoading}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold"
+              >
+                ยกเลิก
+              </button>
+              <button
+                onClick={confirmBillGroupScan}
+                disabled={billScanLoading}
+                className="flex-1 bg-blue-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40"
+              >
+                {billScanLoading ? "กำลังบันทึก..." : "✅ ยืนยันชำระแล้ว"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Confirm Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
@@ -1355,12 +1412,14 @@ function BillOrderGroupCard({
   onServeAck,
   isLoading,
   onOpenCashModal,
+  onScanCheckout,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
   onServeAck: (id: number) => void;
   isLoading: boolean;
   onOpenCashModal: (orders: OrderWithItems[]) => void;
+  onScanCheckout: (orders: OrderWithItems[]) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -1448,13 +1507,24 @@ function BillOrderGroupCard({
       )}
 
       {/* Payment */}
-      <button
-        onClick={() => onOpenCashModal(orders)}
-        disabled={isLoading}
-        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-      >
-        💵 {isLoading ? "กำลังบันทึก..." : `ชำระเงินสด ฿${totalTHB.toLocaleString()}`}
-      </button>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={() => onOpenCashModal(orders)}
+          disabled={isLoading}
+          className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+        >
+          <span className="text-xl">💵</span>
+          {isLoading ? "..." : "เงินสด"}
+        </button>
+        <button
+          onClick={() => onScanCheckout(orders)}
+          disabled={isLoading}
+          className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+        >
+          <span className="text-xl">📷</span>
+          {isLoading ? "..." : "สแกน"}
+        </button>
+      </div>
     </div>
   );
 }
