@@ -51,7 +51,6 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
         .then((r) => r.json())
         .then((data: PublicBill[]) => {
           setBills(data);
-          if (data.length === 1) setSelectedBillId(data[0].id);
         })
         .catch(() => setBills([]));
     }
