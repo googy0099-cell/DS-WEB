@@ -352,11 +352,16 @@ export default function OrderQueue() {
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
   const [servedAcked, setServedAcked] = useState<Set<number>>(new Set());
+  const [kitchenItemAcked, setKitchenItemAcked] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("servedAcked") ?? "[]") as number[];
       setServedAcked(new Set(stored));
+    } catch {}
+    try {
+      const stored = JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[];
+      setKitchenItemAcked(new Set(stored));
     } catch {}
   }, []);
 
@@ -365,6 +370,16 @@ export default function OrderQueue() {
       const next = new Set(prev);
       next.add(orderId);
       try { localStorage.setItem("servedAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
+
+  function ackKitchenItems(itemIds: number[]) {
+    if (itemIds.length === 0) return;
+    setKitchenItemAcked((prev) => {
+      const next = new Set(prev);
+      itemIds.forEach((id) => next.add(id));
+      try { localStorage.setItem("kitchenItemAcked", JSON.stringify([...next])); } catch {}
       return next;
     });
   }
@@ -490,21 +505,31 @@ export default function OrderQueue() {
     return false;
   });
 
-  // Orders where ALL items are kitchen-done but bill is not yet closed AND staff hasn't acknowledged serve
-  const kitchenReadyOrders = (orders ?? []).filter(
-    (o) => o.status !== "SERVED" && o.status !== "CANCELLED" &&
-           o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt) &&
-           !servedAcked.has(o.id)
+  // Per-item kitchen-done alert: each item that finishes triggers the loop until acked.
+  // Next item to finish triggers it again. "ยืนยันการเสิร์ฟ" (servedAcked) is separate.
+  const kitchenReadyItems = (orders ?? []).flatMap((o) =>
+    o.status === "SERVED" || o.status === "CANCELLED"
+      ? []
+      : o.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id))
   );
 
-  // Clean up servedAcked for orders no longer active (SERVED, CANCELLED, deleted)
+  // Clean up servedAcked / kitchenItemAcked for orders/items no longer active
   useEffect(() => {
     if (!orders) return;
-    const activeIds = new Set(orders.map((o) => o.id));
+    const activeOrderIds = new Set(orders.map((o) => o.id));
+    const activeItemIds = new Set(orders.flatMap((o) => o.items.map((i) => i.id)));
     setServedAcked((prev) => {
-      const next = new Set([...prev].filter((id) => activeIds.has(id)));
+      const next = new Set([...prev].filter((id) => activeOrderIds.has(id)));
       if (next.size !== prev.size) {
         try { localStorage.setItem("servedAcked", JSON.stringify([...next])); } catch {}
+        return next;
+      }
+      return prev;
+    });
+    setKitchenItemAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeItemIds.has(id)));
+      if (next.size !== prev.size) {
+        try { localStorage.setItem("kitchenItemAcked", JSON.stringify([...next])); } catch {}
         return next;
       }
       return prev;
@@ -627,7 +652,7 @@ export default function OrderQueue() {
 
   // Loop kitchen chime while food-ready orders are unserved — stop when cleared
   useEffect(() => {
-    const hasReady = alertEnabled && kitchenReadyOrders.length > 0;
+    const hasReady = alertEnabled && kitchenReadyItems.length > 0;
 
     if (kitchenLoopRef.current) {
       try { kitchenLoopRef.current.stop(); } catch {}
@@ -678,7 +703,7 @@ export default function OrderQueue() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, kitchenReadyOrders.length > 0, kitchenSoundUrl]);
+  }, [alertEnabled, kitchenReadyItems.length > 0, kitchenSoundUrl]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {
@@ -969,6 +994,8 @@ export default function OrderQueue() {
                 qrUrl={qrMap[order.id]}
                 servedAcked={servedAcked}
                 onServeAck={markServedAck}
+                kitchenItemAcked={kitchenItemAcked}
+                onAckKitchenItems={ackKitchenItems}
               />
             ))}
           </div>
@@ -1005,6 +1032,8 @@ export default function OrderQueue() {
                       total: orders.reduce((s, o) => s + o.totalTHB, 0),
                     });
                   }}
+                  kitchenItemAcked={kitchenItemAcked}
+                  onAckKitchenItems={ackKitchenItems}
                 />
               ) : (
                 <OrderCard
@@ -1024,6 +1053,8 @@ export default function OrderQueue() {
                   qrUrl={qrMap[item.order.id]}
                   servedAcked={servedAcked}
                   onServeAck={markServedAck}
+                  kitchenItemAcked={kitchenItemAcked}
+                  onAckKitchenItems={ackKitchenItems}
                 />
               )
             )}
@@ -1425,6 +1456,8 @@ function BillOrderGroupCard({
   isLoading,
   onOpenCashModal,
   onScanCheckout,
+  kitchenItemAcked,
+  onAckKitchenItems,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
@@ -1432,6 +1465,8 @@ function BillOrderGroupCard({
   isLoading: boolean;
   onOpenCashModal: (orders: OrderWithItems[]) => void;
   onScanCheckout: (orders: OrderWithItems[]) => void;
+  kitchenItemAcked: Set<number>;
+  onAckKitchenItems: (itemIds: number[]) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -1440,6 +1475,8 @@ function BillOrderGroupCard({
   const allItems = orders.flatMap((o) => o.items);
   const kitchenDone = allItems.length > 0 && allItems.every((i) => !!i.kitchenServedAt);
   const allServedAcked = orders.every((o) => servedAcked.has(o.id));
+  // Items in this bill that are kitchen-done but not yet acknowledged
+  const unackedReadyItems = allItems.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id));
 
   // Sort orders newest first within the group
   const sorted = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -1500,7 +1537,19 @@ function BillOrderGroupCard({
         </div>
       </div>
 
-      {/* Serve ack */}
+      {/* Per-item kitchen-done acknowledgment — dismiss alert as items complete */}
+      {unackedReadyItems.length > 0 && (
+        <div className="mb-2">
+          <button
+            onClick={() => onAckKitchenItems(unackedReadyItems.map((i) => i.id))}
+            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 text-navy font-bold py-2.5 rounded-xl text-sm transition-colors"
+          >
+            🔔 รับทราบ ({unackedReadyItems.length} เมนูพร้อม) — หยุดเสียงแจ้งเตือน
+          </button>
+        </div>
+      )}
+
+      {/* Confirm serve — only when ALL items done in the bill */}
       {kitchenDone && (
         <div className="mb-2">
           {!allServedAcked ? (
@@ -1508,7 +1557,7 @@ function BillOrderGroupCard({
               onClick={() => orders.forEach((o) => onServeAck(o.id))}
               className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
             >
-              🍽️ เสิร์ฟแล้ว — หยุดแจ้งเตือน
+              🍽️ ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)
             </button>
           ) : (
             <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
@@ -1557,6 +1606,8 @@ function OrderCard({
   qrUrl,
   servedAcked,
   onServeAck,
+  kitchenItemAcked,
+  onAckKitchenItems,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -1573,6 +1624,8 @@ function OrderCard({
   qrUrl?: string;
   servedAcked: Set<number>;
   onServeAck: (id: number) => void;
+  kitchenItemAcked: Set<number>;
+  onAckKitchenItems: (itemIds: number[]) => void;
 }) {
   const badge = resolveStatusBadge(order);
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
@@ -1728,7 +1781,23 @@ function OrderCard({
           </div>
         )}
 
-        {/* Serve acknowledgment — appears on ALL kitchen-done orders that aren't yet closed */}
+        {/* Per-item kitchen-done acknowledgment — dismiss alert as items complete */}
+        {order.status !== "SERVED" && order.status !== "CANCELLED" && (() => {
+          const unackedReady = order.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id));
+          if (unackedReady.length === 0) return null;
+          return (
+            <div className="mb-2">
+              <button
+                onClick={() => onAckKitchenItems(unackedReady.map((i) => i.id))}
+                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 text-navy font-bold py-2.5 rounded-xl text-sm transition-colors"
+              >
+                🔔 รับทราบ ({unackedReady.length} เมนูพร้อม) — หยุดเสียงแจ้งเตือน
+              </button>
+            </div>
+          );
+        })()}
+
+        {/* Confirm serve — only when ALL items done */}
         {kitchenDone && order.status !== "SERVED" && order.status !== "CANCELLED" && (
           <div className="mb-2">
             {!servedAcked.has(order.id) ? (
@@ -1736,7 +1805,7 @@ function OrderCard({
                 onClick={() => onServeAck(order.id)}
                 className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
               >
-                🍽️ เสิร์ฟแล้ว — หยุดแจ้งเตือน
+                🍽️ ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)
               </button>
             ) : (
               <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
