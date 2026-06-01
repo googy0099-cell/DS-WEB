@@ -591,7 +591,7 @@ export default function OrderQueue() {
       if (o.handledById) return false; // counter order — no alert
       const m = o.payment?.method;
       if (o.status === "CONFIRMED" || o.status === "PAID") return true;
-      return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
+      return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY" || m === "TAB");
     });
 
     const newKitchenDone = orders.filter(
@@ -605,6 +605,7 @@ export default function OrderQueue() {
             const played = await playCustom(alertBufRef);
             if (!played) {
               if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+              try { if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume(); } catch {}
               playBeep(audioCtxRef.current);
             }
           } catch {}
@@ -662,13 +663,17 @@ export default function OrderQueue() {
           return;
         } catch {}
       }
-      // Fallback: synthesized beep on repeat (no notification spam)
+      // Fallback: synthesized beep on repeat
       if (!cancelled) {
         if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-        playBeep(audioCtxRef.current);
-        fallbackInterval = setInterval(() => {
-          if (!cancelled && audioCtxRef.current) playBeep(audioCtxRef.current);
-        }, 2500);
+        const beepCtx = audioCtxRef.current;
+        try { if (beepCtx.state === "suspended") await beepCtx.resume(); } catch {}
+        if (!cancelled) {
+          playBeep(beepCtx);
+          fallbackInterval = setInterval(() => {
+            if (!cancelled) playBeep(beepCtx);
+          }, 2500);
+        }
       }
     }
 
