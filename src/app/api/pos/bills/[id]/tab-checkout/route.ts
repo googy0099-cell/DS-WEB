@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const orders = await db.order.findMany({
     where: {
       billId: Number(id),
-      status: { in: ["PENDING", "CONFIRMED"] },
+      status: { in: ["PENDING", "CONFIRMED", "SERVED"] },
       payment: { method: "TAB", status: "PENDING" },
     },
     include: {
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const orders = await db.order.findMany({
     where: {
       billId: Number(id),
-      status: { in: ["PENDING", "CONFIRMED"] },
+      status: { in: ["PENDING", "CONFIRMED", "SERVED"] },
       payment: { method: "TAB", status: "PENDING" },
     },
     include: { payment: { select: { id: true, amountTHB: true } } },
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const tabTotal = orders.reduce((sum, o) => sum + o.totalTHB, 0);
   const now = new Date();
 
-  // Mark SERVED only if kitchen has already finished; otherwise PAID (waiting kitchen to confirm)
+  // Mark SERVED only if kitchen has finished; already-SERVED orders stay SERVED; else PAID
   await db.$transaction([
     ...orders.map((o) =>
       db.payment.update({
@@ -58,12 +58,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         data: { status: "CONFIRMED", confirmedAt: now },
       })
     ),
-    ...orders.map((o) =>
-      db.order.update({
-        where: { id: o.id },
-        data: { status: o.kitchenServedAt ? "SERVED" : "PAID" },
-      })
-    ),
+    ...orders
+      .filter((o) => o.status !== "SERVED") // don't re-update already-served orders
+      .map((o) =>
+        db.order.update({
+          where: { id: o.id },
+          data: { status: o.kitchenServedAt ? "SERVED" : "PAID" },
+        })
+      ),
   ]);
 
   let pointsAwarded = 0;
@@ -81,10 +83,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     pointsAwarded = pts;
   }
 
-  // Deduct stock for orders that are now SERVED (kitchen was already done)
+  // Deduct stock only for orders that became SERVED NOW (not already-SERVED — stock was deducted when staff hit เสิร์ฟ)
   const staffId = Number(session.user.id);
-  const servedOrders = orders.filter((o) => o.kitchenServedAt);
-  await Promise.allSettled(servedOrders.map((o) => deductStockForOrder(o.id, staffId)));
+  const newlyServed = orders.filter((o) => o.kitchenServedAt && o.status !== "SERVED");
+  await Promise.allSettled(newlyServed.map((o) => deductStockForOrder(o.id, staffId)));
 
   return NextResponse.json({ tabTotal, ordersCount: orders.length, pointsAwarded });
 }

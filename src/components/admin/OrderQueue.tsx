@@ -1136,6 +1136,7 @@ function OrderCard({
   const isPending = order.status === "PENDING";
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
+  const kitchenDone = order.items.length > 0 && order.items.every((i) => !!i.kitchenServedAt);
 
   // PENDING payment cases (customer already selected method)
   const isPendingCash = isPending && method === "CASH";
@@ -1319,6 +1320,15 @@ function OrderCard({
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
               🧾 รอชำระตอนเช็กเอาท์ — เมื่อลูกค้าพร้อมชำระเลือกวิธีด้านล่าง
             </div>
+            {kitchenDone && (
+              <button
+                onClick={() => onUpdate(order.id, "SERVED")}
+                disabled={isLoading}
+                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+              >
+                🍽️ {isLoading ? "กำลังบันทึก..." : "เสิร์ฟแล้ว — หยุดแจ้งเตือน"}
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -1398,14 +1408,23 @@ function OrderCard({
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
           </button>
         ) : order.status === "PAID" && order.items.every((i) => !!i.kitchenServedAt) ? (
-          // Payment done + kitchen done → close order
-          <button
-            onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
-            disabled={isLoading}
-            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-orange text-white transition-opacity disabled:opacity-60"
-          >
-            {isLoading ? "กำลังบันทึก..." : "🖨️ พิมพ์ใบเสร็จ · ปิดออเดอร์"}
-          </button>
+          // Payment done + kitchen done → serve (+ optional print)
+          <div className="mb-2 space-y-2">
+            <button
+              onClick={() => onUpdate(order.id, "SERVED")}
+              disabled={isLoading}
+              className="w-full text-sm font-bold py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-60"
+            >
+              🍽️ {isLoading ? "กำลังบันทึก..." : "เสิร์ฟแล้ว · ปิดออเดอร์"}
+            </button>
+            <button
+              onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
+              disabled={isLoading}
+              className="w-full text-sm font-semibold py-2.5 rounded-xl bg-orange/10 text-orange border border-orange/30 hover:bg-orange/20 transition-colors disabled:opacity-60"
+            >
+              🖨️ พิมพ์ใบเสร็จ + ปิดออเดอร์
+            </button>
+          </div>
         ) : order.status === "PAID" ? (
           // Paid but kitchen still working — info only
           <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
