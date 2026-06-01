@@ -400,7 +400,6 @@ export default function OrderQueue() {
   }
 
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
-  const [partyCheckoutLoading, setPartyCheckoutLoading] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmState | null>(null);
   const [receiptSettings, setReceiptSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT);
   const [kitchenSettings, setKitchenSettings] = useState<KitchenSettings>(DEFAULT_KITCHEN);
@@ -502,29 +501,12 @@ export default function OrderQueue() {
     } catch { return false; }
   }
 
-  // All PENDING orders where customer has selected a payment method (excluding TAB+billId — shown in รวมบิล)
+  // All PENDING orders where customer has selected a payment method (including TAB) — newest first
   const pendingOrders = (orders?.filter((o) => {
     if (o.status !== "PENDING") return false;
     const m = o.payment?.method;
-    if (m === "TAB" && !!o.billId) return false;
     return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
   }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  // Group ALL active TAB+billId orders (PENDING + CONFIRMED) by billId for combined checkout
-  const partyBillMap = new Map<number, { billName: string; billColor: string; tableNumber: number; orders: OrderWithItems[] }>();
-  for (const order of orders ?? []) {
-    if (!order.billId || order.payment?.method !== "TAB") continue;
-    if (order.status !== "PENDING" && order.status !== "CONFIRMED") continue;
-    if (!partyBillMap.has(order.billId)) {
-      partyBillMap.set(order.billId, {
-        billName: order.bill?.name ?? "",
-        billColor: order.bill?.color ?? "indigo",
-        tableNumber: order.bill?.table?.number ?? 0,
-        orders: [],
-      });
-    }
-    partyBillMap.get(order.billId)!.orders.push(order);
-  }
 
   // Orders that still need immediate staff action (alert beeps for these)
   // Cashier counter orders (handledById set) are excluded — staff created them intentionally
@@ -831,51 +813,6 @@ export default function OrderQueue() {
     setCashInputStr("");
   }
 
-  async function openPartyCheckout(billId: number, billName: string, allOrders: OrderWithItems[], total: number) {
-    const pendingOnes = allOrders.filter((o) => o.status === "PENDING");
-    if (pendingOnes.length > 0) {
-      setPartyCheckoutLoading((prev) => new Set([...prev, billId]));
-      try {
-        await Promise.all(
-          pendingOnes.map((o) =>
-            fetch(`/api/orders/${o.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "CONFIRMED" }),
-            })
-          )
-        );
-      } finally {
-        setPartyCheckoutLoading((prev) => { const next = new Set(prev); next.delete(billId); return next; });
-      }
-    }
-    ackAlertOrders(allOrders.map((o) => o.id));
-    setBillGroupCash({ billId, billName, orders: allOrders, total });
-    setBillCashInputStr("");
-  }
-
-  async function openPartyScanCheckout(billId: number, billName: string, allOrders: OrderWithItems[], total: number) {
-    const pendingOnes = allOrders.filter((o) => o.status === "PENDING");
-    if (pendingOnes.length > 0) {
-      setPartyCheckoutLoading((prev) => new Set([...prev, billId]));
-      try {
-        await Promise.all(
-          pendingOnes.map((o) =>
-            fetch(`/api/orders/${o.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ status: "CONFIRMED" }),
-            })
-          )
-        );
-      } finally {
-        setPartyCheckoutLoading((prev) => { const next = new Set(prev); next.delete(billId); return next; });
-      }
-    }
-    ackAlertOrders(allOrders.map((o) => o.id));
-    setBillGroupScan({ billId, billName, orders: allOrders, total });
-  }
-
   async function confirmCashPayment() {
     if (!cashOrder) return;
     const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
@@ -1075,62 +1012,6 @@ export default function OrderQueue() {
         >
           🔕 ปิดเสียงแจ้งเตือน ({unackedAlertOrderCount} รายการ)
         </button>
-      )}
-
-      {/* รวมบิล — combined checkout for party bills */}
-      {partyBillMap.size > 0 && (
-        <div>
-          <h3 className="font-bold text-navy mb-3 flex items-center gap-2">
-            🧾 รวมบิล
-            <span className="bg-violet-100 text-violet-700 text-xs px-2 py-0.5 rounded-full">
-              {partyBillMap.size} ตี้
-            </span>
-          </h3>
-          <div className="space-y-3">
-            {[...partyBillMap.entries()].map(([billId, { billName, billColor, tableNumber, orders: pbOrders }]) => {
-              const bc = BILL_COLOR_MAP[billColor] ?? BILL_COLOR_MAP.indigo;
-              const total = pbOrders.reduce((s, o) => s + o.totalTHB, 0);
-              const pendingCount = pbOrders.filter((o) => o.status === "PENDING").length;
-              const isLoading = partyCheckoutLoading.has(billId);
-              return (
-                <div key={billId} className="bg-white rounded-xl shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <span className={`inline-block font-black text-base px-3 py-0.5 rounded-full ${bc.bg} ${bc.text} mb-1`}>
-                        ตี้ {billName}
-                      </span>
-                      <p className="text-xs text-gray-400">
-                        โต๊ะ {tableNumber} · {pbOrders.length} ออเดอร์
-                        {pendingCount > 0 && (
-                          <span className="ml-1.5 text-amber-600 font-semibold">· {pendingCount} รอรับ</span>
-                        )}
-                      </p>
-                    </div>
-                    <p className="text-xl font-black text-navy">฿{total.toLocaleString()}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => openPartyCheckout(billId, billName, pbOrders, total)}
-                      disabled={isLoading}
-                      className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-                    >
-                      <span className="text-xl">💵</span>
-                      {isLoading ? "..." : "เงินสด"}
-                    </button>
-                    <button
-                      onClick={() => openPartyScanCheckout(billId, billName, pbOrders, total)}
-                      disabled={isLoading}
-                      className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-                    >
-                      <span className="text-xl">📷</span>
-                      {isLoading ? "..." : "สแกน"}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
 
       {/* ออเดอร์ใหม่ PENDING */}
