@@ -76,8 +76,8 @@ export default function GamesSection() {
                     </>
                   ) : (
                     <>
-                      <p className="font-bold text-navy text-sm leading-tight">{game.nameTh}</p>
-                      {game.nameEn && <p className="text-gray-400 text-xs">{game.nameEn}</p>}
+                      <p className="font-bold text-navy text-sm leading-tight">{game.nameEn || game.nameTh}</p>
+                      {game.nameEn && game.nameTh && <p className="text-gray-400 text-xs">{game.nameTh}</p>}
                       <div className="flex gap-1 flex-wrap mt-auto">
                         <span className="text-xs bg-white text-navy px-2 py-0.5 rounded-full">
                           {game.minPlayers}–{game.maxPlayers} คน

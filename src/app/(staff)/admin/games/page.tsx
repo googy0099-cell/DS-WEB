@@ -476,8 +476,8 @@ export default function AdminGamesPage() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <span className="font-bold text-navy">{game.nameTh}</span>
-                    {game.nameEn && <span className="text-gray-400 text-xs">{game.nameEn}</span>}
+                    <span className="font-bold text-navy">{game.nameEn || game.nameTh}</span>
+                    {game.nameEn && game.nameTh && <span className="text-gray-400 text-xs">{game.nameTh}</span>}
                     <button
                       onClick={() => toggleActive(game)}
                       className={`text-xs px-2 py-0.5 rounded-full font-medium ${game.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}
