@@ -27,7 +27,14 @@ export async function POST(req: NextRequest) {
   if (!file || !key) return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
   if (key !== "alert_sound_url" && key !== "kitchen_sound_url")
     return NextResponse.json({ error: "key ไม่ถูกต้อง" }, { status: 400 });
-  if (!file.type.startsWith("audio/")) return NextResponse.json({ error: "รองรับเฉพาะไฟล์เสียง" }, { status: 400 });
+
+  const AUDIO_EXTS = ["wav", "mp3", "ogg", "aac", "m4a", "flac", "webm"];
+  const fileExt = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const isMimeAudio = file.type.startsWith("audio/") || file.type === "application/octet-stream" || file.type === "";
+  const isExtAudio = AUDIO_EXTS.includes(fileExt);
+  if (!isMimeAudio && !isExtAudio)
+    return NextResponse.json({ error: "รองรับเฉพาะไฟล์เสียง (WAV, MP3, AAC ฯลฯ)" }, { status: 400 });
+
   if (file.size > MAX_SIZE) return NextResponse.json({ error: "ไฟล์ใหญ่เกิน 20MB" }, { status: 400 });
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "wav";

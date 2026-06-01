@@ -236,9 +236,16 @@ export default function AdminSettingsPage() {
       fd.append("file", file);
       fd.append("key", key);
       const res = await fetch("/api/site-settings/alert-sound", { method: "POST", body: fd });
-      const d = await res.json();
-      if (d.url) { setUrl(d.url); await mutateSite(); }
-      else alert(d.error ?? "อัปโหลดไม่สำเร็จ");
+      let d: { url?: string; error?: string } = {};
+      try { d = await res.json(); } catch { /* non-JSON response (e.g. 413 from proxy) */ }
+      if (!res.ok || !d.url) {
+        alert(d.error ?? `อัปโหลดไม่สำเร็จ (HTTP ${res.status}) — ถ้าไฟล์ใหญ่เกิน 4.5MB ต้องตั้งค่า Vercel Blob Storage ก่อน`);
+        return;
+      }
+      setUrl(d.url);
+      await mutateSite();
+    } catch (err) {
+      alert("เกิดข้อผิดพลาด: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setUploading(false);
     }
@@ -253,6 +260,23 @@ export default function AdminSettingsPage() {
       body: JSON.stringify({ [key]: "" }),
     });
     await mutateSite();
+  }
+
+  async function testPlaySound(url: string) {
+    try {
+      const ctx = new AudioContext();
+      if (ctx.state === "suspended") await ctx.resume();
+      const res = await fetch(url);
+      if (!res.ok) { alert(`โหลดไฟล์ไม่ได้ (HTTP ${res.status}) — URL อาจไม่ถูกต้อง`); return; }
+      const buf = await res.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(buf);
+      const src = ctx.createBufferSource();
+      src.buffer = decoded;
+      src.connect(ctx.destination);
+      src.start();
+    } catch (err) {
+      alert("เล่นไม่ได้: " + (err instanceof Error ? err.message : String(err)));
+    }
   }
 
   async function handleSelectPrinter() {
@@ -782,10 +806,10 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
           {/* Order alert sound */}
           <div>
             <label className="text-sm font-semibold text-navy block mb-2">เสียงแจ้งเตือนออเดอร์ใหม่</label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <label className={`cursor-pointer inline-flex items-center gap-2 border-2 border-dashed rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${alertSoundUploading ? "border-gray-200 text-gray-400" : "border-orange/40 text-orange hover:border-orange hover:bg-orange/5"}`}>
-                {alertSoundUploading ? "⏳ กำลังอัปโหลด..." : alertSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลด WAV"}
-                <input type="file" accept="audio/*" className="hidden" disabled={alertSoundUploading}
+                {alertSoundUploading ? "⏳ กำลังอัปโหลด..." : alertSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลดไฟล์เสียง"}
+                <input type="file" accept="audio/*,.wav,.mp3,.aac,.m4a,.ogg,.flac" className="hidden" disabled={alertSoundUploading}
                   onChange={async (e) => {
                     const f = e.target.files?.[0]; if (!f) return;
                     await uploadAlertSound(f, "alert_sound_url");
@@ -794,21 +818,24 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
               </label>
               {alertSoundUrl && (
                 <>
-                  <audio controls src={alertSoundUrl} className="h-8 flex-1 min-w-0" />
-                  <button onClick={() => removeAlertSound("alert_sound_url")} className="text-xs text-red-400 hover:underline shrink-0">ลบ</button>
+                  <button onClick={() => testPlaySound(alertSoundUrl)} className="text-xs bg-navy text-cream px-3 py-2 rounded-xl font-semibold hover:bg-navy/80">▶ ทดสอบเล่น</button>
+                  <button onClick={() => removeAlertSound("alert_sound_url")} className="text-xs text-red-400 border border-red-200 px-3 py-2 rounded-xl hover:bg-red-50">ลบ</button>
                 </>
               )}
             </div>
+            {alertSoundUrl && (
+              <p className="text-[11px] text-gray-400 mt-1 break-all">📎 {alertSoundUrl}</p>
+            )}
             {!alertSoundUrl && <p className="text-xs text-gray-400 mt-1">ถ้าไม่ได้ตั้งค่า จะใช้เสียงบีปเริ่มต้น</p>}
           </div>
 
           {/* Kitchen done sound */}
           <div>
             <label className="text-sm font-semibold text-navy block mb-2">เสียงแจ้งเตือนอาหารพร้อม</label>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <label className={`cursor-pointer inline-flex items-center gap-2 border-2 border-dashed rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${kitchenSoundUploading ? "border-gray-200 text-gray-400" : "border-orange/40 text-orange hover:border-orange hover:bg-orange/5"}`}>
-                {kitchenSoundUploading ? "⏳ กำลังอัปโหลด..." : kitchenSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลด WAV"}
-                <input type="file" accept="audio/*" className="hidden" disabled={kitchenSoundUploading}
+                {kitchenSoundUploading ? "⏳ กำลังอัปโหลด..." : kitchenSoundUrl ? "🔄 เปลี่ยนเสียง" : "📁 อัปโหลดไฟล์เสียง"}
+                <input type="file" accept="audio/*,.wav,.mp3,.aac,.m4a,.ogg,.flac" className="hidden" disabled={kitchenSoundUploading}
                   onChange={async (e) => {
                     const f = e.target.files?.[0]; if (!f) return;
                     await uploadAlertSound(f, "kitchen_sound_url");
@@ -817,11 +844,14 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
               </label>
               {kitchenSoundUrl && (
                 <>
-                  <audio controls src={kitchenSoundUrl} className="h-8 flex-1 min-w-0" />
-                  <button onClick={() => removeAlertSound("kitchen_sound_url")} className="text-xs text-red-400 hover:underline shrink-0">ลบ</button>
+                  <button onClick={() => testPlaySound(kitchenSoundUrl)} className="text-xs bg-navy text-cream px-3 py-2 rounded-xl font-semibold hover:bg-navy/80">▶ ทดสอบเล่น</button>
+                  <button onClick={() => removeAlertSound("kitchen_sound_url")} className="text-xs text-red-400 border border-red-200 px-3 py-2 rounded-xl hover:bg-red-50">ลบ</button>
                 </>
               )}
             </div>
+            {kitchenSoundUrl && (
+              <p className="text-[11px] text-gray-400 mt-1 break-all">📎 {kitchenSoundUrl}</p>
+            )}
             {!kitchenSoundUrl && <p className="text-xs text-gray-400 mt-1">ถ้าไม่ได้ตั้งค่า จะใช้เสียงชิมเริ่มต้น</p>}
           </div>
         </div>
