@@ -348,6 +348,23 @@ export default function OrderQueue() {
   const kitchenBufRef = useRef<ArrayBuffer | null>(null);
   const [alertEnabled, setAlertEnabled] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  const [servedAcked, setServedAcked] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("servedAcked") ?? "[]") as number[];
+      setServedAcked(new Set(stored));
+    } catch {}
+  }, []);
+
+  function markServedAck(orderId: number) {
+    setServedAcked((prev) => {
+      const next = new Set(prev);
+      next.add(orderId);
+      try { localStorage.setItem("servedAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  }
 
   const [loadingIds, setLoadingIds] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmState | null>(null);
@@ -459,11 +476,26 @@ export default function OrderQueue() {
     return false;
   });
 
-  // Orders where ALL items are kitchen-done but bill is not yet closed
+  // Orders where ALL items are kitchen-done but bill is not yet closed AND staff hasn't acknowledged serve
   const kitchenReadyOrders = (orders ?? []).filter(
     (o) => o.status !== "SERVED" && o.status !== "CANCELLED" &&
-           o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)
+           o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt) &&
+           !servedAcked.has(o.id)
   );
+
+  // Clean up servedAcked for orders no longer active (SERVED, CANCELLED, deleted)
+  useEffect(() => {
+    if (!orders) return;
+    const activeIds = new Set(orders.map((o) => o.id));
+    setServedAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeIds.has(id)));
+      if (next.size !== prev.size) {
+        try { localStorage.setItem("servedAcked", JSON.stringify([...next])); } catch {}
+        return next;
+      }
+      return prev;
+    });
+  }, [orders]);
 
   // Fire beep when NEW orders arrive; fire chime when NEW kitchen-done events arrive
   useEffect(() => {
@@ -767,6 +799,8 @@ export default function OrderQueue() {
                 onConfirmQr={confirmQrPayment}
                 onChooseScan={chooseScan}
                 qrUrl={qrMap[order.id]}
+                servedAcked={servedAcked}
+                onServeAck={markServedAck}
               />
             ))}
           </div>
@@ -794,6 +828,8 @@ export default function OrderQueue() {
                 onConfirmQr={confirmQrPayment}
                 onChooseScan={chooseScan}
                 qrUrl={qrMap[order.id]}
+                servedAcked={servedAcked}
+                onServeAck={markServedAck}
               />
             ))}
           </div>
@@ -1112,6 +1148,8 @@ function OrderCard({
   onConfirmQr,
   onChooseScan,
   qrUrl,
+  servedAcked,
+  onServeAck,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -1126,6 +1164,8 @@ function OrderCard({
   onConfirmQr: (order: OrderWithItems) => void;
   onChooseScan: (order: OrderWithItems) => void;
   qrUrl?: string;
+  servedAcked: Set<number>;
+  onServeAck: (id: number) => void;
 }) {
   const badge = resolveStatusBadge(order);
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
@@ -1279,6 +1319,24 @@ function OrderCard({
           </div>
         )}
 
+        {/* Serve acknowledgment — appears on ALL kitchen-done orders that aren't yet closed */}
+        {kitchenDone && order.status !== "SERVED" && order.status !== "CANCELLED" && (
+          <div className="mb-2">
+            {!servedAcked.has(order.id) ? (
+              <button
+                onClick={() => onServeAck(order.id)}
+                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
+              >
+                🍽️ เสิร์ฟแล้ว — หยุดแจ้งเตือน
+              </button>
+            ) : (
+              <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
+                ✅ เสิร์ฟถึงโต๊ะแล้ว
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Primary action — payment state machine */}
         {isPendingTab ? (
           <div className="mb-2 space-y-2">
@@ -1320,15 +1378,6 @@ function OrderCard({
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
               🧾 รอชำระตอนเช็กเอาท์ — เมื่อลูกค้าพร้อมชำระเลือกวิธีด้านล่าง
             </div>
-            {kitchenDone && (
-              <button
-                onClick={() => onUpdate(order.id, "SERVED")}
-                disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-              >
-                🍽️ {isLoading ? "กำลังบันทึก..." : "เสิร์ฟแล้ว — หยุดแจ้งเตือน"}
-              </button>
-            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -1407,29 +1456,26 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
           </button>
-        ) : order.status === "PAID" && order.items.every((i) => !!i.kitchenServedAt) ? (
-          // Payment done + kitchen done → serve (+ optional print)
-          <div className="mb-2 space-y-2">
-            <button
-              onClick={() => onUpdate(order.id, "SERVED")}
-              disabled={isLoading}
-              className="w-full text-sm font-bold py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white transition-colors disabled:opacity-60"
-            >
-              🍽️ {isLoading ? "กำลังบันทึก..." : "เสิร์ฟแล้ว · ปิดออเดอร์"}
-            </button>
+        ) : order.status === "PAID" && kitchenDone ? (
+          // Payment done + kitchen done → close only after serve is acknowledged
+          servedAcked.has(order.id) ? (
             <button
               onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
               disabled={isLoading}
-              className="w-full text-sm font-semibold py-2.5 rounded-xl bg-orange/10 text-orange border border-orange/30 hover:bg-orange/20 transition-colors disabled:opacity-60"
+              className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-orange text-white hover:bg-orange/90 transition-colors disabled:opacity-60"
             >
-              🖨️ พิมพ์ใบเสร็จ + ปิดออเดอร์
+              🖨️ {isLoading ? "กำลังบันทึก..." : "พิมพ์ใบเสร็จ · ปิดออเดอร์"}
             </button>
-          </div>
+          ) : (
+            <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
+              ✋ กดเสิร์ฟแล้วข้างบนก่อน เพื่อยืนยันว่าส่งอาหารถึงโต๊ะแล้ว
+            </div>
+          )
         ) : order.status === "PAID" ? (
           // Paid but kitchen still working — info only
           <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
             <p className="font-semibold">🍳 ชำระแล้ว — รอครัวยืนยันว่าเสร็จ</p>
-            <p className="text-xs text-amber-500 mt-0.5">ออเดอร์จะปิดอัตโนมัติเมื่อครัวกดเสร็จแล้ว</p>
+            <p className="text-xs text-amber-500 mt-0.5">ออเดอร์จะพร้อมปิดเมื่อครัวกดเสร็จแล้ว</p>
           </div>
         ) : cfg.next ? (
           <button

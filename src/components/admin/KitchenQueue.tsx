@@ -81,6 +81,7 @@ interface QueueItem {
   selectedAddons: string | null;
   selectedOptions: string | null;
   quantity: number;
+  orderNote: string | null;
 }
 
 export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
@@ -145,6 +146,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         selectedAddons: item.selectedAddons,
         selectedOptions: item.selectedOptions,
         quantity: item.quantity,
+        orderNote: order.note ?? null,
       });
     }
   }
@@ -212,11 +214,6 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         const isFirst = idx === 0;
         const addons: { nameTh: string }[] = qi.selectedAddons ? JSON.parse(qi.selectedAddons) : [];
         const options: { groupName: string; choiceName: string }[] = qi.selectedOptions ? JSON.parse(qi.selectedOptions) : [];
-        const extras = [
-          qi.selectedSize ?? "",
-          addons.map((a) => a.nameTh).join(", "),
-          options.map((o) => o.choiceName).join(", "),
-        ].filter(Boolean).join(" · ");
 
         return (
           <div
@@ -233,8 +230,9 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
               )}
             </div>
 
-            {/* Middle — location + item info */}
-            <div className="flex-1 min-w-0 px-4 py-3 bg-white flex flex-col justify-center gap-0.5">
+            {/* Middle — full order details */}
+            <div className="flex-1 min-w-0 px-4 py-3 bg-white flex flex-col justify-start gap-1">
+              {/* Location + meta row */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-sm font-bold ${isFirst ? "text-orange" : "text-navy"}`}>
                   📍 {qi.location}
@@ -247,11 +245,50 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
                 )}
                 <ElapsedBadge createdAt={qi.orderCreatedAt} />
               </div>
-              <div className="flex items-center gap-2">
-                <span className="font-bold text-navy text-base">{qi.nameTh}</span>
-                <span className="text-lg font-black text-orange">×{qi.quantity}</span>
+
+              {/* Item name + quantity */}
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className={`font-black text-lg leading-tight ${isFirst ? "text-orange" : "text-navy"}`}>{qi.nameTh}</span>
+                <span className="text-xl font-black text-orange">×{qi.quantity}</span>
               </div>
-              {extras && <p className="text-xs text-gray-400">{extras}</p>}
+
+              {/* Size */}
+              {qi.selectedSize && (
+                <span className="self-start text-xs font-bold bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full">
+                  {qi.selectedSize}
+                </span>
+              )}
+
+              {/* Addons */}
+              {addons.length > 0 && (
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                  {addons.map((a, i) => (
+                    <span key={i} className="text-sm font-semibold text-emerald-700">
+                      + {a.nameTh}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Options (sweetness, spiciness, etc.) */}
+              {options.length > 0 && (
+                <div className="flex flex-col gap-0.5 mt-0.5">
+                  {options.map((o, i) => (
+                    <div key={i} className="flex items-center gap-1.5">
+                      <span className="text-xs text-gray-400 shrink-0">{o.groupName}:</span>
+                      <span className="text-sm font-bold text-purple-700">{o.choiceName}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Order note */}
+              {qi.orderNote && (
+                <div className="mt-1.5 flex items-start gap-1.5 bg-amber-50 border border-amber-300 rounded-lg px-2.5 py-1.5">
+                  <span className="text-sm shrink-0">📝</span>
+                  <span className="text-sm font-bold text-amber-800">{qi.orderNote}</span>
+                </div>
+              )}
             </div>
 
             {/* Right — done button */}
