@@ -324,37 +324,79 @@ export default function AdminSettingsPage() {
     setSerialTesting(false);
   }
 
-  function testReceiptPrint() {
+  async function testReceiptPrint() {
+    const sampleReceipt: Parameters<typeof buildReceiptEscPos>[0] = {
+      id: 999, orderName: "ทดสอบ", totalTHB: 150, note: "ไม่ใส่น้ำตาล",
+      createdAt: new Date().toISOString(),
+      items: [
+        { nameTh: "ชาไทย", selectedSize: "XL", selectedAddons: null, selectedOptions: null, quantity: 2, unitPriceTHB: 55 },
+        { nameTh: "กาแฟ", selectedSize: null, selectedAddons: null, selectedOptions: null, quantity: 1, unitPriceTHB: 40 },
+      ],
+    };
+
+    // Try serial first — silent print if printer connected
+    const hasPrinter = await getGrantedPrinter();
+    if (hasPrinter) {
+      setSerialTesting(true); setSerialStatus("");
+      const data = buildReceiptEscPos(sampleReceipt, {
+        shopName: rShopName, shopInfo: rShopInfo, footer: rFooter,
+        showOrderId: rShowOrderId, showDate: rShowDate, showCustomer: rShowCustomer,
+        showNote: rShowNote, showItemPrice: rShowItemPrice, showTotal: rShowTotal,
+        titleSize: rTitleSize, feedLines: rFeedLines, headerAlign: rHeaderAlign,
+      });
+      const ok = await printToSerial(data);
+      setSerialStatus(ok ? "ok" : "fail"); setSerialTesting(false);
+      if (ok) return;
+    }
+
+    // Fallback: browser print window
     const w = rPaperWidth === "A4" ? "210mm" : `${rPaperWidth}mm`;
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบเสร็จ</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${rHtmlFontSize}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:100px;max-height:50px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(rHtmlFontSize * 1.4)}px;font-weight:900;text-align:${rHeaderAlign};margin-bottom:2px}.sub{font-size:${Math.round(rHtmlFontSize * 0.85)}px;text-align:${rHeaderAlign};color:#555;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:${Math.round(rHtmlFontSize * 1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(rHtmlFontSize * 0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(rHtmlFontSize * 0.85)}px;color:#777;margin-top:6px}</style></head>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${rHtmlFontSize}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:100px;max-height:50px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(rHtmlFontSize*1.4)}px;font-weight:900;text-align:${rHeaderAlign};margin-bottom:2px}.sub{font-size:${Math.round(rHtmlFontSize*0.85)}px;text-align:${rHeaderAlign};color:#555;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.tr{font-weight:bold;font-size:${Math.round(rHtmlFontSize*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(rHtmlFontSize*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(rHtmlFontSize*0.85)}px;color:#777;margin-top:6px}</style></head>
 <body>
 ${rLogoUrl ? `<img src="${rLogoUrl}" class="logo" alt="logo"/>` : ""}
 <h1>${rLogoUrl ? "" : "🎲 "}${rShopName}</h1><div class="sub">${rShopInfo} • ใบเสร็จรับเงิน</div><hr class="div"/>
-<div style="font-size:12px;margin-bottom:4px">
+<div style="font-size:${Math.round(rHtmlFontSize*0.92)}px;margin-bottom:4px">
 ${rShowCustomer ? `<div><b>ออเดอร์:</b> ทดสอบ</div>` : ""}
 ${rShowOrderId ? `<div><b>เลขที่:</b> #999</div>` : ""}
 ${rShowDate ? `<div><b>วันที่:</b> ทดสอบ</div>` : ""}
 </div><hr class="div"/>
 <table><tbody>
-<tr><td style="padding:4px 2px">ชาไทย (XL) ×2</td>${rShowItemPrice ? `<td style="text-align:right;padding:4px 2px">฿110</td>` : ""}</tr>
-<tr><td style="padding:4px 2px">กาแฟ ×1</td>${rShowItemPrice ? `<td style="text-align:right;padding:4px 2px">฿40</td>` : ""}</tr>
-</tbody>${rShowTotal ? `<tfoot><tr><td style="font-weight:bold;padding-top:6px;border-top:1px dashed #aaa">รวมทั้งหมด</td><td style="font-weight:bold;text-align:right;padding-top:6px;border-top:1px dashed #aaa">฿150</td></tr></tfoot>` : ""}</table>
+<tr><td style="padding:3px 2px">ชาไทย (XL) ×2</td>${rShowItemPrice ? `<td style="text-align:right;padding:3px 2px">฿110</td>` : ""}</tr>
+<tr><td style="padding:3px 2px">กาแฟ ×1</td>${rShowItemPrice ? `<td style="text-align:right;padding:3px 2px">฿40</td>` : ""}</tr>
+</tbody>${rShowTotal ? `<tfoot><tr><td style="font-weight:bold;padding-top:4px;border-top:1px dashed #aaa">รวมทั้งหมด</td><td style="font-weight:bold;text-align:right;padding-top:4px;border-top:1px dashed #aaa">฿150</td></tr></tfoot>` : ""}</table>
 ${rShowNote ? `<div class="note">📝 หมายเหตุ: ไม่ใส่น้ำตาล</div>` : ""}
 <div class="footer">${rFooter}</div>
 </body></html>`;
-    const win = window.open("", "_blank", "width=400,height=600");
+    const win = window.open("", "_blank", "width=380,height=600");
     if (!win) return;
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 300);
+    setTimeout(() => { win.print(); win.close(); }, 300);
   }
 
-  function testKitchenPrint() {
+  async function testKitchenPrint() {
+    // Try serial first
+    const hasPrinter = await getGrantedPrinter();
+    if (hasPrinter) {
+      const sampleKitchen: Parameters<typeof buildKitchenEscPos>[0] = {
+        id: 999, orderName: "ทดสอบ", totalTHB: 150, note: "ไม่ใส่น้ำตาล",
+        createdAt: new Date().toISOString(), tableId: 3,
+        items: [
+          { nameTh: "ชาไทย", selectedSize: "XL", selectedAddons: null, selectedOptions: null, quantity: 2, unitPriceTHB: 55 },
+          { nameTh: "กาแฟ", selectedSize: null, selectedAddons: null, selectedOptions: null, quantity: 1, unitPriceTHB: 40 },
+        ],
+      };
+      const data = buildKitchenEscPos(sampleKitchen, { showTable: kShowTable, showNote: kShowNote });
+      const ok = await printToSerial(data);
+      if (ok) return;
+    }
+
+    // Fallback: browser print window
     const w = kPaperWidth === "A4" ? "210mm" : `${kPaperWidth}mm`;
     const html = `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ทดสอบใบครัว</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:16px;font-weight:900;text-align:center;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:6px 0}.item{padding:3px 0;font-size:14px}@media print{body{width:100%}}</style></head>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0;padding:3mm 4mm}h1{font-size:16px;font-weight:900;text-align:center;margin-bottom:4px}.div{border:none;border-top:1px dashed #aaa;margin:4px 0}.item{padding:3px 0}</style></head>
 <body>
 <h1>🍳 ใบแจ้งครัว (ทดสอบ)</h1>
 ${kShowTable ? `<div style="font-size:12px;text-align:center">โต๊ะ 3 — ออเดอร์ #999 — ทดสอบ</div>` : `<div style="font-size:12px;text-align:center">ออเดอร์ #999 — ทดสอบ</div>`}
@@ -363,12 +405,12 @@ ${kShowTable ? `<div style="font-size:12px;text-align:center">โต๊ะ 3 —
 <div class="item">• กาแฟ ×1</div>
 ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส่น้ำตาล</div>` : ""}
 </body></html>`;
-    const win = window.open("", "_blank", "width=400,height=500");
+    const win = window.open("", "_blank", "width=380,height=500");
     if (!win) return;
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 300);
+    setTimeout(() => { win.print(); win.close(); }, 300);
   }
 
   const [promptPayId, setPromptPayId] = useState("");
