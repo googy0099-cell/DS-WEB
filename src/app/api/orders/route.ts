@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
 import { sendFcmNotify } from "@/lib/fcm-notify";
@@ -45,6 +46,7 @@ function getBangkokHHMM(): string {
 }
 
 export async function POST(req: NextRequest) {
+  const session = await auth();
   const body = await req.json();
   const { orderName, userId, items, note, source, billId } = body as {
     orderName: string;
@@ -159,10 +161,13 @@ export async function POST(req: NextRequest) {
     resolvedPlayerSessionId = ps?.id ?? null;
   }
 
+  const staffId = isCashier && session?.user?.id ? Number(session.user.id) : null;
+
   const order = await db.order.create({
     data: {
       orderName: finalName,
       userId: userId ?? null,
+      handledById: staffId,
       billId: billId ?? null,
       tableId: resolvedTableId,
       playerSessionId: resolvedPlayerSessionId,

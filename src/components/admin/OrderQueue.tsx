@@ -465,10 +465,12 @@ export default function OrderQueue() {
   }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Orders that still need immediate staff action (alert beeps for these)
-  // Cashier-created orders (handledById set) are excluded — staff already knows about them
+  // Cashier-created orders (handledById set) and bill-linked TAB orders are excluded
   const alertOrders = (orders ?? []).filter((o) => {
-    if (o.handledById) return false; // counter order, no alert needed
+    if (o.handledById) return false; // counter order, staff already knows
     const m = o.payment?.method;
+    // Bill-linked TAB orders pay at checkout — no alert needed
+    if (m === "TAB" && o.billId) return false;
     // PENDING with payment method selected — needs staff to process
     if (o.status === "PENDING") return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
     // CONFIRMED non-cashier orders waiting for payment
@@ -1190,7 +1192,9 @@ function OrderCard({
   const isCashPay = isConfirmed && method === "CASH";
   const isQrSlip = isConfirmed && method === "PROMPTPAY" && hasSlip;
   const isQrNoSlip = isConfirmed && method === "PROMPTPAY" && !hasSlip;
-  const isTabOrder = method === "TAB" && isConfirmed;
+  // TAB order linked to a bill → pays via bill checkout, NOT per-order buttons
+  const isTabOrder = method === "TAB" && isConfirmed && !order.billId;
+  const isBillTab = method === "TAB" && isConfirmed && !!order.billId;
 
   return (
     <div
@@ -1374,6 +1378,12 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${order.totalTHB.toLocaleString()}`}
           </button>
+        ) : isBillTab ? (
+          // TAB order linked to a bill — payment happens at bill checkout, not here
+          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
+            <p className="font-semibold">🧾 รวมในบิลตี้ {order.bill?.name}</p>
+            <p className="text-xs text-amber-500 mt-0.5">ชำระรวมตอนเช็กเอาท์ตี้</p>
+          </div>
         ) : isTabOrder ? (
           <div className="mb-2 space-y-2">
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
