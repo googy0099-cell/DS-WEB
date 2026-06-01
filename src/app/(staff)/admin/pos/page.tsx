@@ -435,6 +435,8 @@ export default function AdminTimePage() {
     setLiveExpired(new Map());
   }
 
+  const [loading, setLoading] = useState(true);
+
   // Loop the time-up sound while there are unacked expired sessions
   useEffect(() => {
     if (liveExpired.size === 0) {
@@ -449,7 +451,9 @@ export default function AdminTimePage() {
   }, [liveExpired.size]);
 
   // Cleanup: drop ack/live entries for sessions that are gone or got time extended
+  // Guard: skip before bills have loaded — otherwise empty bills would wipe expiredAcked
   useEffect(() => {
+    if (loading) return;
     const activeMap = new Map<number, number>(); // sessionId -> timeRemaining
     bills.forEach((b) => b.sessions.forEach((s) => activeMap.set(s.id, s.timeRemaining)));
     setExpiredAcked((prev) => {
@@ -462,14 +466,13 @@ export default function AdminTimePage() {
       const next = new Map([...prev].filter(([id]) => activeMap.has(id) && activeMap.get(id) === 0));
       return next.size === prev.size ? prev : next;
     });
-  }, [bills]);
+  }, [bills, loading]);
 
 
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [allMenuItems, setAllMenuItems] = useState<DrinkItem[]>([]);
   const [gametimeItems, setGametimeItems] = useState<DrinkItem[]>([]);
   const [allGametimeItems, setAllGametimeItems] = useState<DrinkItem[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // new-bill flow: step 0=dashboard, 1=bill, 2=players, 3=method, 4=QR+slip
   const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
