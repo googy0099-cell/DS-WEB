@@ -129,6 +129,75 @@ ${settings.showNote && order.note ? `<div class="note">📝 หมายเห�
 </body></html>`);
 }
 
+async function printBillGroupReceipt(orders: OrderWithItems[], settings: ReceiptSettings = DEFAULT_RECEIPT) {
+  if (orders.length === 0) return;
+  const first = orders[0];
+  const bill = first.bill;
+  const allItems = orders.flatMap((o) =>
+    o.items.map((i) => ({
+      nameTh: i.menuItem.nameTh,
+      selectedSize: i.selectedSize,
+      selectedAddons: i.selectedAddons,
+      selectedOptions: i.selectedOptions,
+      quantity: i.quantity,
+      unitPriceTHB: i.unitPriceTHB,
+    }))
+  );
+  const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
+  const orderName = bill ? `ตี้ ${bill.name} · โต๊ะ ${bill.table.number}` : `โต๊ะ ${first.tableId ?? ""}`;
+
+  const hasPrinter = await getGrantedPrinter();
+  if (hasPrinter) {
+    const data = buildReceiptEscPos(
+      { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems },
+      { shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
+        showOrderId: false, showDate: settings.showDate, showCustomer: true,
+        showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal }
+    );
+    const ok = await printToSerial(data);
+    if (ok) return;
+  }
+
+  // Fallback: browser print window
+  const dateStr = formatThaiDateTime(first.createdAt);
+  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
+  const itemsHtml = allItems
+    .map((item) => {
+      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+      const subtotal = item.unitPriceTHB * item.quantity;
+      const extras = [
+        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
+        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
+      ].filter(Boolean).join(" | ");
+      return `<tr>
+        <td style="padding:4px 2px;vertical-align:top">
+          ${item.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
+          ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
+        </td>
+        ${settings.showItemPrice ? `<td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>` : ""}
+      </tr>`;
+    })
+    .join("");
+
+  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ ${orderName}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:13px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:18px;font-weight:900;text-align:center;margin-bottom:2px}.sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}.divider{border:none;border-top:1px dashed #aaa;margin:6px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:15px;padding-top:6px;border-top:1px dashed #aaa}.footer{text-align:center;font-size:11px;color:#777;margin-top:10px}@media print{body{width:100%}}</style>
+</head><body>
+<h1>🎲 ${settings.shopName}</h1>
+<div class="sub">${settings.shopInfo} • ใบเสร็จรับเงิน</div>
+<hr class="divider"/>
+<div style="font-size:12px;margin-bottom:4px">
+<div><b>ตี้:</b> ${orderName}</div>
+${settings.showDate ? `<div><b>วันที่:</b> ${dateStr}</div>` : ""}
+</div>
+<hr class="divider"/>
+<table><tbody>${itemsHtml}</tbody>
+${settings.showTotal ? `<tfoot><tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${totalTHB}</td></tr></tfoot>` : ""}
+</table>
+<div class="footer">${settings.footer}</div>
+</body></html>`);
+}
+
 async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
   // Try silent serial print first
   const hasPrinter = await getGrantedPrinter();
@@ -841,15 +910,17 @@ export default function OrderQueue() {
     if (!billGroupCash) return;
     const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
     if (received < billGroupCash.total) return;
+    const snapshot = billGroupCash;
     setBillGroupCashLoading(true);
     try {
-      await fetch(`/api/pos/bills/${billGroupCash.billId}/tab-checkout`, {
+      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memberUserId: null }),
       });
       setBillGroupCash(null);
       setBillCashInputStr("");
+      void printBillGroupReceipt(snapshot.orders, receiptSettings);
       await mutate();
     } finally {
       setBillGroupCashLoading(false);
@@ -858,14 +929,16 @@ export default function OrderQueue() {
 
   async function confirmBillGroupScan() {
     if (!billGroupScan) return;
+    const snapshot = billGroupScan;
     setBillScanLoading(true);
     try {
-      await fetch(`/api/pos/bills/${billGroupScan.billId}/tab-checkout`, {
+      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memberUserId: null }),
       });
       setBillGroupScan(null);
+      void printBillGroupReceipt(snapshot.orders, receiptSettings);
       await mutate();
     } finally {
       setBillScanLoading(false);
@@ -1089,6 +1162,7 @@ export default function OrderQueue() {
                   }}
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
+                  onPrintReceipt={(orders) => void printBillGroupReceipt(orders, receiptSettings)}
                 />
               ) : (
                 <OrderCard
@@ -1513,6 +1587,7 @@ function BillOrderGroupCard({
   onScanCheckout,
   kitchenItemAcked,
   onAckKitchenItems,
+  onPrintReceipt,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
@@ -1522,6 +1597,7 @@ function BillOrderGroupCard({
   onScanCheckout: (orders: OrderWithItems[]) => void;
   kitchenItemAcked: Set<number>;
   onAckKitchenItems: (itemIds: number[]) => void;
+  onPrintReceipt: (orders: OrderWithItems[]) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -1641,6 +1717,14 @@ function BillOrderGroupCard({
           {isLoading ? "..." : "สแกน"}
         </button>
       </div>
+
+      {/* Print receipt */}
+      <button
+        onClick={() => onPrintReceipt(orders)}
+        className="mt-2 w-full flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm transition-colors"
+      >
+        🖨️ พิมพ์ใบเสร็จรวมบิล
+      </button>
     </div>
   );
 }

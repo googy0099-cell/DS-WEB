@@ -27,7 +27,7 @@ const BOLD_OFF   = b(0x1b, 0x45, 0x00);
 const DOUBLE     = b(0x1d, 0x21, 0x11);
 const NORMAL     = b(0x1d, 0x21, 0x00);
 const FEED3      = b(0x1b, 0x64, 0x03);
-const CUT        = b(0x1d, 0x56, 0x41, 0x03);
+const CUT        = b(0x1d, 0x56, 0x01);       // partial cut — most widely supported
 const SEP        = ln("--------------------------------");
 
 export interface ReceiptEscPosSettings {
@@ -185,7 +185,7 @@ export async function printToSerial(data: Uint8Array): Promise<boolean> {
     await port.open({ baudRate });
     const writer = port.writable!.getWriter();
     await writer.write(data);
-    writer.releaseLock();
+    await writer.close(); // flush before closing port
     await port.close();
     return true;
   } catch (e) {
