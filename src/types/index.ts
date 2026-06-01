@@ -79,6 +79,7 @@ export interface OrderWithItems {
   orderName: string;
   tableId: number | null;
   billId: number | null;
+  handledById: number | null;
   status: OrderStatus;
   totalTHB: number;
   note: string | null;

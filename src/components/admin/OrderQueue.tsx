@@ -457,22 +457,22 @@ export default function OrderQueue() {
     } catch { return false; }
   }
 
-  // All PENDING orders where customer has selected a payment method (including TAB)
+  // All PENDING orders where customer has selected a payment method (including TAB) — newest first
   const pendingOrders = (orders?.filter((o) => {
     if (o.status !== "PENDING") return false;
     const m = o.payment?.method;
     return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
-  }) ?? []).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Orders that still need immediate staff action (alert beeps for these)
+  // Cashier-created orders (handledById set) are excluded — staff already knows about them
   const alertOrders = (orders ?? []).filter((o) => {
+    if (o.handledById) return false; // counter order, no alert needed
     const m = o.payment?.method;
     // PENDING with payment method selected — needs staff to process
     if (o.status === "PENDING") return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
-    // CONFIRMED cashier orders waiting for payment selection/collection
+    // CONFIRMED non-cashier orders waiting for payment
     if (o.status === "CONFIRMED") return !m || m === "UNSET" || m === "CASH" || m === "PROMPTPAY";
-    // CONFIRMED+TAB = accepted, in kitchen → no more alert needed
-    // PAID = payment done → no alert (kitchen chime handles food-ready)
     return false;
   });
 
@@ -503,6 +503,7 @@ export default function OrderQueue() {
 
     const newOrders = orders.filter((o) => {
       if (prevIdsRef.current.has(o.id)) return false;
+      if (o.handledById) return false; // counter order — no alert
       const m = o.payment?.method;
       if (o.status === "CONFIRMED" || o.status === "PAID") return true;
       return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY");
@@ -744,7 +745,7 @@ export default function OrderQueue() {
   }
 
   const activeOrders = (orders?.filter((o) => o.status !== "PENDING") ?? [])
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   if (!orders) return <div className="text-center py-8 text-gray-400">กำลังโหลด...</div>;
 
