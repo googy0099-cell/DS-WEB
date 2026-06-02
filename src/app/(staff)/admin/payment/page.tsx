@@ -227,30 +227,19 @@ export default function AdminPaymentPage() {
         </div>
       )}
 
-      {/* Receipt prompt after confirmation */}
+      {/* Payment confirmed — receipt is printed when closing the bill in the dashboard */}
       {confirmedOrderId && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 text-center">
             <div className="text-5xl">✅</div>
             <h3 className="font-bold text-navy text-lg">ยืนยันการชำระเงินแล้ว</h3>
-            <p className="text-sm text-gray-500">ต้องการพิมพ์ใบเสร็จให้ลูกค้าหรือไม่?</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirmedOrderId(null)}
-                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold"
-              >
-                ไม่พิมพ์
-              </button>
-              <a
-                href={`/api/receipt/${confirmedOrderId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => setConfirmedOrderId(null)}
-                className="flex-1 bg-navy text-white py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5"
-              >
-                🖨️ พิมพ์ใบเสร็จ
-              </a>
-            </div>
+            <p className="text-sm text-gray-500">กรุณาเสิร์ฟอาหารและกดปิดออเดอร์ที่แดชบอร์ดเพื่อพิมพ์ใบเสร็จ</p>
+            <button
+              onClick={() => setConfirmedOrderId(null)}
+              className="w-full bg-navy text-white py-3 rounded-2xl text-sm font-bold"
+            >
+              รับทราบ
+            </button>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@ import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 import { deductStockForOrder } from "@/lib/stock-deduct";
+import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 const STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "✅ ยืนยันออเดอร์แล้ว",
@@ -26,19 +27,55 @@ export async function PATCH(
   const handledById = session?.user?.id ? Number(session.user.id) : undefined;
   const orderId = Number(id);
 
-  // Edit items + note mode
+  // Edit items + note + optional bill change mode
   if ("items" in body) {
-    const { items, note } = body as {
+    const { items, note, newBillId } = body as {
       items: { id: number; quantity: number }[];
       note?: string;
+      newBillId?: number | null;
     };
 
-    const toDelete = items.filter((i) => i.quantity <= 0).map((i) => i.id);
+    const toRemoveIds = items.filter((i) => i.quantity <= 0).map((i) => i.id);
     const toUpdate = items.filter((i) => i.quantity > 0);
 
-    if (toDelete.length > 0) {
-      await db.orderItem.deleteMany({ where: { id: { in: toDelete } } });
+    // Fetch order status and items being cancelled to decide soft vs hard delete
+    const orderStatus = await db.order.findUnique({
+      where: { id: orderId },
+      select: { status: true, orderName: true },
+    });
+    const isActive = orderStatus?.status === "CONFIRMED" || orderStatus?.status === "PAID";
+
+    if (toRemoveIds.length > 0) {
+      const cancellingItems = await db.orderItem.findMany({
+        where: { id: { in: toRemoveIds } },
+        include: { menuItem: { select: { nameTh: true, queueTarget: true } } },
+      });
+
+      const now = new Date();
+      const inKitchen = isActive
+        ? cancellingItems.filter((i) => i.kitchenServedAt == null && i.menuItem.queueTarget !== "none")
+        : [];
+      const notInKitchen = cancellingItems.filter((i) => !inKitchen.includes(i));
+
+      // Soft-delete items being prepared in kitchen/bar
+      if (inKitchen.length > 0) {
+        await db.orderItem.updateMany({
+          where: { id: { in: inKitchen.map((i) => i.id) } },
+          data: { cancelledAt: now },
+        });
+        // Notify kitchen/bar via Telegram
+        const itemList = inKitchen.map((i) => `• ${i.menuItem.nameTh} ×${i.quantity}`).join("\n");
+        await sendTelegramNotify(
+          `❌ ยกเลิกรายการระหว่างทำ\nออเดอร์: ${orderStatus?.orderName ?? `#${orderId}`}\n${itemList}`
+        ).catch(() => {});
+      }
+
+      // Hard-delete items not being prepared
+      if (notInKitchen.length > 0) {
+        await db.orderItem.deleteMany({ where: { id: { in: notInKitchen.map((i) => i.id) } } });
+      }
     }
+
     for (const item of toUpdate) {
       await db.orderItem.update({
         where: { id: item.id },
@@ -46,12 +83,33 @@ export async function PATCH(
       });
     }
 
-    const remaining = await db.orderItem.findMany({ where: { orderId } });
+    // Total: only non-cancelled items
+    const remaining = await db.orderItem.findMany({
+      where: { orderId, cancelledAt: null },
+    });
     const totalTHB = remaining.reduce((sum, i) => sum + i.unitPriceTHB * i.quantity, 0);
+
+    const updateData: Record<string, unknown> = { totalTHB, note: note ?? null };
+    if (newBillId !== undefined) {
+      if (newBillId === null) {
+        updateData.billId = null;
+      } else {
+        // Fetch new bill's table to update tableId too
+        const bill = await db.bill.findUnique({ where: { id: newBillId }, select: { tableId: true } });
+        updateData.billId = newBillId;
+        if (bill?.tableId) updateData.tableId = bill.tableId;
+      }
+    }
+
+    // Also update PENDING payment amount to reflect new total
+    await db.payment.updateMany({
+      where: { orderId, status: "PENDING" },
+      data: { amountTHB: totalTHB },
+    });
 
     const order = await db.order.update({
       where: { id: orderId },
-      data: { totalTHB, note: note ?? null },
+      data: updateData,
       include: { items: { include: { menuItem: true } }, payment: true, user: true },
     });
 

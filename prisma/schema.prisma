@@ -216,6 +216,7 @@ model OrderItem {
   selectedAddons  String?
   selectedOptions String?
   kitchenServedAt DateTime?
+  cancelledAt     DateTime? @map("cancelled_at")
 }
 
 model Payment {

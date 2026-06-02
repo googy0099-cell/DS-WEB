@@ -21,12 +21,12 @@ export async function PATCH(
     select: { orderId: true },
   });
 
-  // Check if ALL items in this order are now kitchen-done
+  // Check if ALL non-cancelled items in this order are now kitchen-done
   const allItems = await db.orderItem.findMany({
-    where: { orderId: item.orderId },
+    where: { orderId: item.orderId, cancelledAt: null },
     select: { kitchenServedAt: true },
   });
-  const allDone = allItems.every((i) => i.kitchenServedAt != null);
+  const allDone = allItems.length > 0 && allItems.every((i) => i.kitchenServedAt != null);
 
   if (allDone) {
     const order = await db.order.findUnique({

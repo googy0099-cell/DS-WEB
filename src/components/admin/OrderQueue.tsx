@@ -343,7 +343,8 @@ const BILL_COLOR_MAP: Record<string, { bg: string; text: string; border: string 
 function resolveStatusBadge(order: OrderWithItems) {
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
-  const kitchenDone = order.items.length > 0 && order.items.every((i) => !!i.kitchenServedAt);
+  const activeItems = order.items.filter((i) => !i.cancelledAt);
+  const kitchenDone = activeItems.length > 0 && activeItems.every((i) => !!i.kitchenServedAt);
 
   if (order.status === "PENDING") {
     if (method === "CASH")
@@ -425,6 +426,11 @@ export default function OrderQueue() {
     "/api/orders?status=today",
     fetcher,
     { refreshInterval: 10000 }
+  );
+  const { data: activeBills } = useSWR<{ id: number; name: string; color: string; table: { number: number } }[]>(
+    "/api/pos/bills",
+    fetcher,
+    { refreshInterval: 30000 }
   );
 
   const prevIdsRef = useRef<Set<number>>(new Set());
@@ -516,6 +522,7 @@ export default function OrderQueue() {
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
   const [editNote, setEditNote] = useState("");
+  const [editBillId, setEditBillId] = useState<number | null | undefined>(undefined);
   const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
@@ -630,7 +637,7 @@ export default function OrderQueue() {
   const kitchenReadyItems = (orders ?? []).flatMap((o) =>
     o.status === "SERVED" || o.status === "CANCELLED"
       ? []
-      : o.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id))
+      : o.items.filter((i) => !i.cancelledAt && i.kitchenServedAt && !kitchenItemAcked.has(i.id))
   );
 
   // Clean up servedAcked / kitchenItemAcked / alertOrderAcked for orders/items no longer active
@@ -1046,15 +1053,18 @@ export default function OrderQueue() {
   function openEdit(order: OrderWithItems) {
     setEditOrder(order);
     setEditItems(
-      order.items.map((item) => ({
-        id: item.id,
-        nameTh: item.menuItem.nameTh,
-        selectedSize: item.selectedSize,
-        unitPrice: item.unitPriceTHB,
-        quantity: item.quantity,
-      }))
+      order.items
+        .filter((item) => !item.cancelledAt)
+        .map((item) => ({
+          id: item.id,
+          nameTh: item.menuItem.nameTh,
+          selectedSize: item.selectedSize,
+          unitPrice: item.unitPriceTHB,
+          quantity: item.quantity,
+        }))
     );
     setEditNote(order.note ?? "");
+    setEditBillId(undefined); // undefined = no change
   }
 
   function changeQty(itemId: number, delta: number) {
@@ -1074,13 +1084,15 @@ export default function OrderQueue() {
     }
     setSavingEdit(true);
     try {
+      const body: Record<string, unknown> = {
+        items: editItems.map((i) => ({ id: i.id, quantity: i.quantity })),
+        note: editNote,
+      };
+      if (editBillId !== undefined) body.newBillId = editBillId;
       await fetch(`/api/orders/${editOrder.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: editItems.map((i) => ({ id: i.id, quantity: i.quantity })),
-          note: editNote,
-        }),
+        body: JSON.stringify(body),
       });
       await mutate();
       setEditOrder(null);
@@ -1125,6 +1137,7 @@ export default function OrderQueue() {
   const editTotal = editItems
     .filter((i) => i.quantity > 0)
     .reduce((sum, i) => sum + i.unitPrice * i.quantity, 0);
+
 
   return (
     <div className="space-y-6">
@@ -1656,6 +1669,42 @@ export default function OrderQueue() {
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange/30"
                 />
               </div>
+
+              {/* Bill change */}
+              {activeBills && activeBills.length > 0 && (
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">🪑 เปลี่ยนตี้ (กรณีลูกค้าลงโต๊ะผิด)</label>
+                  <select
+                    value={editBillId === undefined ? "__nochange__" : editBillId === null ? "__none__" : String(editBillId)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "__nochange__") setEditBillId(undefined);
+                      else if (v === "__none__") setEditBillId(null);
+                      else setEditBillId(Number(v));
+                    }}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange/30 bg-white"
+                  >
+                    <option value="__nochange__">
+                      {editOrder.bill ? `ตี้ ${editOrder.bill.name} · โต๊ะ ${editOrder.bill.table?.number} (ไม่เปลี่ยน)` : "ไม่ได้เชื่อมตี้ (ไม่เปลี่ยน)"}
+                    </option>
+                    {activeBills
+                      .filter((b) => b.id !== editOrder.billId)
+                      .map((b) => (
+                        <option key={b.id} value={String(b.id)}>
+                          ตี้ {b.name} · โต๊ะ {b.table.number}
+                        </option>
+                      ))}
+                    {editOrder.billId && (
+                      <option value="__none__">ยกเลิกการเชื่อมตี้</option>
+                    )}
+                  </select>
+                  {editBillId !== undefined && editBillId !== null && (
+                    <p className="text-xs text-orange mt-1">
+                      จะย้ายออเดอร์ไปตี้ที่เลือก
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -1735,7 +1784,7 @@ function BillOrderGroupCard({
   const bill = first.bill;
   const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
   const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
-  const allItems = orders.flatMap((o) => o.items);
+  const allItems = orders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
   const kitchenDone = allItems.length > 0 && allItems.every((i) => !!i.kitchenServedAt);
   const allServedAcked = orders.every((o) => servedAcked.has(o.id));
   // Items in this bill that are kitchen-done but not yet acknowledged
@@ -1911,7 +1960,8 @@ function OrderCard({
   const isPending = order.status === "PENDING";
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
-  const kitchenDone = order.items.length > 0 && order.items.every((i) => !!i.kitchenServedAt);
+  const activeItems = order.items.filter((i) => !i.cancelledAt);
+  const kitchenDone = activeItems.length > 0 && activeItems.every((i) => !!i.kitchenServedAt);
 
   // PENDING payment cases (customer already selected method)
   const isPendingCash = isPending && method === "CASH";
@@ -1984,7 +2034,7 @@ function OrderCard({
 
         {/* Items */}
         <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
-          {order.items.map((item) => {
+          {order.items.filter((item) => !item.cancelledAt).map((item) => {
             const addons: { nameTh: string }[] = item.selectedAddons
               ? JSON.parse(item.selectedAddons)
               : [];
@@ -2029,6 +2079,11 @@ function OrderCard({
               </div>
             );
           })}
+          {order.items.some((i) => i.cancelledAt) && (
+            <p className="text-xs text-red-400 border-t border-red-100 pt-1.5">
+              ❌ {order.items.filter((i) => i.cancelledAt).length} รายการถูกยกเลิก
+            </p>
+          )}
           <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold text-navy">
             <span>รวม</span>
             <span>฿{order.totalTHB}</span>
@@ -2058,7 +2113,7 @@ function OrderCard({
 
         {/* Per-item kitchen-done acknowledgment — dismiss alert as items complete */}
         {order.status !== "SERVED" && order.status !== "CANCELLED" && (() => {
-          const unackedReady = order.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id));
+          const unackedReady = order.items.filter((i) => !i.cancelledAt && i.kitchenServedAt && !kitchenItemAcked.has(i.id));
           if (unackedReady.length === 0) return null;
           return (
             <div className="mb-2">

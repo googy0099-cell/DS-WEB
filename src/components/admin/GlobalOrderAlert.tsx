@@ -8,6 +8,9 @@ import type { OrderWithItems } from "@/types";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
+type PosSession = { id: number; nickname: string; timeRemaining: number; };
+type PosBill = { id: number; name: string; prepRemaining: number; table: { number: number }; sessions: PosSession[]; };
+
 function playBeep(ctx: AudioContext) {
   const now = ctx.currentTime;
   const pattern = [0, 0.15, 0.3, 0.45];
@@ -44,18 +47,45 @@ function playDoneChime(ctx: AudioContext) {
   });
 }
 
-// Wrapper: skip on /admin dashboard (OrderQueue handles alerts there)
+function playTimeUpBeep() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [0, 0.35, 0.7].forEach((t, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.setValueAtTime(880 - i * 120, now + t);
+      gain.gain.setValueAtTime(0.5, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
+      osc.start(now + t); osc.stop(now + t + 0.28);
+    });
+  } catch {}
+}
+
+// No longer skips /admin — time alerts are needed on dashboard too
 export default function GlobalOrderAlert() {
-  const pathname = usePathname();
-  if (pathname === "/admin") return null;
   return <GlobalOrderAlertInner />;
 }
 
 function GlobalOrderAlertInner() {
+  const pathname = usePathname();
+  // Order/kitchen alerts don't fire on /admin (OrderQueue handles them there)
+  const showOrderAlerts = pathname !== "/admin";
+  // Time expiry alerts don't fire on /admin/pos (POS page handles its own)
+  const showTimeAlerts = pathname !== "/admin/pos";
+
   const { data: orders } = useSWR<OrderWithItems[]>(
-    "/api/orders?status=active",
+    showOrderAlerts ? "/api/orders?status=active" : null,
     fetcher,
     { refreshInterval: 2000 }
+  );
+
+  const { data: bills } = useSWR<PosBill[]>(
+    showTimeAlerts ? "/api/pos/bills" : null,
+    fetcher,
+    { refreshInterval: 10000 }
   );
 
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -63,6 +93,7 @@ function GlobalOrderAlertInner() {
   const kitchenBufRef = useRef<ArrayBuffer | null>(null);
   const alertLoopRef = useRef<AudioBufferSourceNode | null>(null);
   const kitchenLoopRef = useRef<AudioBufferSourceNode | null>(null);
+  const timeLoopRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevIdsRef = useRef<Set<number>>(new Set());
   const prevKitchenDoneRef = useRef<Set<number>>(new Set());
   const firstRenderRef = useRef(true);
@@ -81,6 +112,12 @@ function GlobalOrderAlertInner() {
     try {
       if (typeof window === "undefined") return new Set<number>();
       return new Set(JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[]);
+    } catch { return new Set<number>(); }
+  });
+  const [timeExpiredAcked, setTimeExpiredAcked] = useState<Set<number>>(() => {
+    try {
+      if (typeof window === "undefined") return new Set<number>();
+      return new Set(JSON.parse(localStorage.getItem("posExpiredAcked") ?? "[]") as number[]);
     } catch { return new Set<number>(); }
   });
 
@@ -129,7 +166,7 @@ function GlobalOrderAlertInner() {
     });
   }
 
-  // Alert orders (same logic as OrderQueue)
+  // ---- Order alert logic ----
   const alertOrders = (orders ?? []).filter((o) => {
     if (o.handledById) return false;
     const m = o.payment?.method;
@@ -146,7 +183,17 @@ function GlobalOrderAlertInner() {
       : o.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id))
   );
 
-  // Clean up stale acks
+  // ---- Time expiry logic ----
+  const expiredSessions = (bills ?? []).flatMap((bill) => {
+    if (bill.prepRemaining > 0) return [];
+    return bill.sessions
+      .filter((s) => s.timeRemaining < 86400 && s.timeRemaining === 0)
+      .map((s) => ({ id: s.id, nickname: s.nickname, billName: bill.name, tableNumber: bill.table.number }));
+  });
+
+  const unackedExpired = expiredSessions.filter((s) => !timeExpiredAcked.has(s.id));
+
+  // Clean up stale order acks
   useEffect(() => {
     if (!orders) return;
     const activeAlertIds = new Set(alertOrders.map((o) => o.id));
@@ -160,6 +207,21 @@ function GlobalOrderAlertInner() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orders]);
+
+  // Clean up stale time acks (only keep acks for sessions still expired)
+  useEffect(() => {
+    if (!bills) return;
+    const activeExpiredIds = new Set(expiredSessions.map((s) => s.id));
+    setTimeExpiredAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeExpiredIds.has(id)));
+      if (next.size !== prev.size) {
+        try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+        return next;
+      }
+      return prev;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bills]);
 
   // Fire sounds on new orders / kitchen done
   useEffect(() => {
@@ -209,7 +271,7 @@ function GlobalOrderAlertInner() {
     );
   }, [orders, alertEnabled]);
 
-  // Loop alert sound while unacked
+  // Loop order alert sound while unacked
   useEffect(() => {
     const hasAlerts = alertEnabled && unackedAlertOrders.length > 0;
 
@@ -306,13 +368,52 @@ function GlobalOrderAlertInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alertEnabled, kitchenReadyItems.length > 0, kitchenSoundUrl]);
 
-  const hasUnacked = unackedAlertOrders.length > 0;
-  const hasKitchenReady = kitchenReadyItems.length > 0;
+  // Loop time-up beep while unacked expired sessions
+  useEffect(() => {
+    if (timeLoopRef.current) { clearInterval(timeLoopRef.current); timeLoopRef.current = null; }
+    if (unackedExpired.length === 0) return;
+    playTimeUpBeep();
+    timeLoopRef.current = setInterval(() => playTimeUpBeep(), 3000);
+    return () => { if (timeLoopRef.current) { clearInterval(timeLoopRef.current); timeLoopRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unackedExpired.length]);
 
-  if (!hasUnacked && !hasKitchenReady) return null;
+  const hasUnacked = showOrderAlerts && unackedAlertOrders.length > 0;
+  const hasKitchenReady = showOrderAlerts && kitchenReadyItems.length > 0;
+  const hasTimeExpired = showTimeAlerts && unackedExpired.length > 0;
+
+  if (!hasUnacked && !hasKitchenReady && !hasTimeExpired) return null;
 
   return (
     <div className="fixed bottom-24 right-4 z-40 md:bottom-6 md:right-20 flex flex-col gap-2 items-end">
+      {hasTimeExpired && (
+        <div className="flex items-center gap-2 bg-red-900 border border-red-400/30 rounded-2xl shadow-xl px-3 py-2">
+          <span className="relative flex items-center">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-50 animate-ping" />
+            <span className="text-red-300 text-lg">⏰</span>
+          </span>
+          <div className="flex flex-col leading-tight">
+            <span className="text-white text-xs font-bold">{unackedExpired.length} เซสชั่นหมดเวลา</span>
+            <span className="text-red-300 text-[10px] max-w-[130px] truncate">
+              {unackedExpired.map((s) => s.nickname).join(", ")}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              setTimeExpiredAcked((prev) => {
+                const next = new Set(prev);
+                expiredSessions.forEach((s) => next.add(s.id));
+                try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+                return next;
+              });
+            }}
+            className="ml-1 text-white/40 hover:text-white text-lg leading-none"
+            aria-label="รับทราบ"
+          >
+            ×
+          </button>
+        </div>
+      )}
       {hasUnacked && (
         <div className="flex items-center gap-2 bg-navy border border-orange/30 rounded-2xl shadow-xl px-3 py-2">
           <span className="relative flex items-center">

@@ -81,6 +81,8 @@ interface QueueItem {
   selectedOptions: string | null;
   quantity: number;
   orderNote: string | null;
+  cancelled?: boolean;
+  cancelledAt?: string | null;
 }
 
 export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
@@ -124,6 +126,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
   }
 
   // Build a flat list of pending items, one entry per item
+  // Also include recently-cancelled items so kitchen staff can see what was cancelled
   const queueItems: QueueItem[] = [];
   for (const order of allOrders ?? []) {
     if (!isReadyForKitchen(order)) continue;
@@ -132,6 +135,12 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
       const isRelevant = type === "drink" ? target === "bar" : target === "kitchen";
       if (!isRelevant) continue;
       if (item.kitchenServedAt) continue; // already done
+      // Show cancelled items for up to 10 minutes so kitchen staff can see the cancellation
+      const isCancelled = !!item.cancelledAt;
+      if (isCancelled) {
+        const ageMs = Date.now() - new Date(item.cancelledAt!).getTime();
+        if (ageMs > 10 * 60 * 1000) continue; // hide after 10 minutes
+      }
       queueItems.push({
         itemId: item.id,
         orderId: order.id,
@@ -145,11 +154,16 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         selectedOptions: item.selectedOptions,
         quantity: item.quantity,
         orderNote: order.note ?? null,
+        cancelled: isCancelled,
+        cancelledAt: item.cancelledAt,
       });
     }
   }
-  // FIFO: sort by order creation time
-  queueItems.sort((a, b) => new Date(a.orderCreatedAt).getTime() - new Date(b.orderCreatedAt).getTime());
+  // Cancelled items go to the bottom; active items sorted FIFO
+  queueItems.sort((a, b) => {
+    if (a.cancelled !== b.cancelled) return a.cancelled ? 1 : -1;
+    return new Date(a.orderCreatedAt).getTime() - new Date(b.orderCreatedAt).getTime();
+  });
 
   // Flash tab title when new items arrive
   useEffect(() => {
@@ -193,6 +207,8 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
     );
   }
 
+  const activeQueueItems = queueItems.filter((qi) => !qi.cancelled);
+
   if (queueItems.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -209,9 +225,43 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
     <div className="flex flex-col gap-3">
       {queueItems.map((qi, idx) => {
         const isLoading = loadingIds.has(qi.itemId);
-        const isFirst = idx === 0;
+        // Number only counts active (non-cancelled) items
+        const activeIdx = activeQueueItems.indexOf(qi);
+        const isFirst = !qi.cancelled && activeIdx === 0;
         const addons: { nameTh: string }[] = qi.selectedAddons ? JSON.parse(qi.selectedAddons) : [];
         const options: { groupName: string; choiceName: string }[] = qi.selectedOptions ? JSON.parse(qi.selectedOptions) : [];
+
+        if (qi.cancelled) {
+          return (
+            <div
+              key={qi.itemId}
+              className="rounded-2xl overflow-hidden flex flex-row items-stretch bg-red-50 border border-red-200 opacity-80"
+            >
+              <div className="flex flex-col items-center justify-center px-4 py-3 shrink-0 bg-red-400">
+                <span className="text-white font-black text-lg leading-none">❌</span>
+              </div>
+              <div className="flex-1 min-w-0 px-4 py-3 flex flex-col justify-start gap-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold bg-red-200 text-red-700 px-2 py-0.5 rounded-full">ยกเลิกแล้ว</span>
+                  <span className="text-sm font-bold text-red-600">📍 {qi.location}</span>
+                  {qi.orderName && <span className="text-xs text-gray-400">· 👤 {qi.orderName}</span>}
+                </div>
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <span className="font-black text-lg leading-tight text-red-500 line-through">{qi.nameTh}</span>
+                  <span className="text-lg font-black text-red-400">×{qi.quantity}</span>
+                </div>
+                {qi.selectedSize && (
+                  <span className="self-start text-xs font-bold bg-red-100 text-red-500 px-2 py-0.5 rounded-full">
+                    {qi.selectedSize}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center px-3 py-3 bg-red-50 shrink-0">
+                <span className="text-xs font-bold text-red-400 whitespace-nowrap">ไม่ต้องทำ</span>
+              </div>
+            </div>
+          );
+        }
 
         return (
           <div
@@ -222,7 +272,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
           >
             {/* Left accent — number + badge */}
             <div className={`flex flex-col items-center justify-center px-4 py-3 shrink-0 ${isFirst ? "bg-orange" : "bg-navy"}`}>
-              <span className="text-white font-black text-xl leading-none">#{idx + 1}</span>
+              <span className="text-white font-black text-xl leading-none">#{activeIdx + 1}</span>
               {isFirst && (
                 <span className="text-white/80 text-[10px] font-semibold mt-1">ต่อไป</span>
               )}

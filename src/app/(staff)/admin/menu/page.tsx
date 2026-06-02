@@ -148,15 +148,27 @@ export default function AdminMenuPage() {
     setSaving(true);
     const { addonGroups: _ag, optionGroups: _og, ...payload } = editing as MenuItem;
     const method = editing.id ? "PATCH" : "POST";
-    await fetch("/api/menu", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...payload,
-        addonGroupIds: selectedAddonGroupIds,
-        optionGroupIds: selectedOptionGroupIds,
-      }),
-    });
+    try {
+      const res = await fetch("/api/menu", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          addonGroupIds: selectedAddonGroupIds,
+          optionGroupIds: selectedOptionGroupIds,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        alert(`บันทึกไม่สำเร็จ: ${err.error ?? res.status}`);
+        setSaving(false);
+        return;
+      }
+    } catch {
+      alert("บันทึกไม่สำเร็จ — ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้");
+      setSaving(false);
+      return;
+    }
     await mutate();
     setShowModal(false);
     setSaving(false);

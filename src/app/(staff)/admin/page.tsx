@@ -2,6 +2,7 @@ import OrderQueue from "@/components/admin/OrderQueue";
 import { DashboardClock } from "@/components/admin/DashboardClock";
 import CashierOrderButton from "@/components/admin/CashierOrderButton";
 import DiceRedeemButton from "@/components/admin/DiceRedeemButton";
+import BillTimeStatus from "@/components/admin/BillTimeStatus";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import db from "@/lib/db";
@@ -52,6 +53,8 @@ export default async function AdminPage() {
         </div>
         <DashboardClock />
       </div>
+
+      <BillTimeStatus />
 
       <div className="flex items-center justify-between mb-3">
         <h2 className="font-bold text-navy">ออเดอร์ที่รอดำเนินการ</h2>
