@@ -71,13 +71,13 @@ export default function GlobalOrderAlert() {
 
 function GlobalOrderAlertInner() {
   const pathname = usePathname();
-  // Order/kitchen alerts don't fire on /admin (OrderQueue handles them there)
-  const showOrderAlerts = pathname !== "/admin";
+  // OrderQueue on /admin handles sounds — GlobalOrderAlert only fires sounds on other pages
+  const isBoardPage = pathname === "/admin";
   // Time expiry alerts don't fire on /admin/pos (POS page handles its own)
   const showTimeAlerts = pathname !== "/admin/pos";
 
   const { data: orders } = useSWR<OrderWithItems[]>(
-    showOrderAlerts ? "/api/orders?status=active" : null,
+    "/api/orders?status=active",
     fetcher,
     { refreshInterval: 2000 }
   );
@@ -108,12 +108,24 @@ function GlobalOrderAlertInner() {
       return new Set(JSON.parse(localStorage.getItem("alertOrderAcked") ?? "[]") as number[]);
     } catch { return new Set<number>(); }
   });
-  const [kitchenItemAcked] = useState<Set<number>>(() => {
+  const [kitchenItemAcked, setKitchenItemAcked] = useState<Set<number>>(() => {
     try {
       if (typeof window === "undefined") return new Set<number>();
       return new Set(JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[]);
     } catch { return new Set<number>(); }
   });
+
+  // Sync acks when OrderQueue (on /admin) writes to localStorage
+  useEffect(() => {
+    function sync() {
+      try {
+        setAlertOrderAcked(new Set(JSON.parse(localStorage.getItem("alertOrderAcked") ?? "[]") as number[]));
+        setKitchenItemAcked(new Set(JSON.parse(localStorage.getItem("kitchenItemAcked") ?? "[]") as number[]));
+      } catch {}
+    }
+    window.addEventListener("alertAckSync", sync);
+    return () => window.removeEventListener("alertAckSync", sync);
+  }, []);
   const [timeExpiredAcked, setTimeExpiredAcked] = useState<Set<number>>(() => {
     try {
       if (typeof window === "undefined") return new Set<number>();
@@ -180,7 +192,7 @@ function GlobalOrderAlertInner() {
   const kitchenReadyItems = (orders ?? []).flatMap((o) =>
     o.status === "SERVED" || o.status === "CANCELLED"
       ? []
-      : o.items.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id))
+      : o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none" && i.kitchenServedAt && !kitchenItemAcked.has(i.id))
   );
 
   // ---- Time expiry logic ----
@@ -193,7 +205,7 @@ function GlobalOrderAlertInner() {
 
   const unackedExpired = expiredSessions.filter((s) => !timeExpiredAcked.has(s.id));
 
-  // Clean up stale order acks
+  // Clean up stale order acks (remove acks for orders no longer in alert list)
   useEffect(() => {
     if (!orders) return;
     const activeAlertIds = new Set(alertOrders.map((o) => o.id));
@@ -205,8 +217,7 @@ function GlobalOrderAlertInner() {
       }
       return prev;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orders]);
+  }, [orders]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Clean up stale time acks (only keep acks for sessions still expired)
   useEffect(() => {
@@ -234,7 +245,16 @@ function GlobalOrderAlertInner() {
       );
       return;
     }
-    if (!alertEnabled) return;
+    if (!alertEnabled || isBoardPage) {
+      prevIdsRef.current = new Set(orders.map((o) => o.id));
+      prevKitchenDoneRef.current = new Set(
+        orders.filter((o) => {
+          const kItems = o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none");
+          return kItems.length > 0 && kItems.every((i) => !!i.kitchenServedAt);
+        }).map((o) => o.id)
+      );
+      return;
+    }
 
     const newOrders = orders.filter((o) => {
       if (prevIdsRef.current.has(o.id)) return false;
@@ -244,9 +264,11 @@ function GlobalOrderAlertInner() {
       return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY" || m === "TAB");
     });
 
-    const newKitchenDone = orders.filter(
-      (o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt) && !prevKitchenDoneRef.current.has(o.id)
-    );
+    const newKitchenDone = orders.filter((o) => {
+      if (prevKitchenDoneRef.current.has(o.id)) return false;
+      const kItems = o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none");
+      return kItems.length > 0 && kItems.every((i) => !!i.kitchenServedAt);
+    });
 
     void (async () => {
       if (newOrders.length > 0) {
@@ -378,8 +400,8 @@ function GlobalOrderAlertInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unackedExpired.length]);
 
-  const hasUnacked = showOrderAlerts && unackedAlertOrders.length > 0;
-  const hasKitchenReady = showOrderAlerts && kitchenReadyItems.length > 0;
+  const hasUnacked = unackedAlertOrders.length > 0;
+  const hasKitchenReady = kitchenReadyItems.length > 0;
   const hasTimeExpired = showTimeAlerts && unackedExpired.length > 0;
 
   if (!hasUnacked && !hasKitchenReady && !hasTimeExpired) return null;

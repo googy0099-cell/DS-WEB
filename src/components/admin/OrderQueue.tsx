@@ -279,11 +279,15 @@ const BILL_COLOR_MAP: Record<string, { bg: string; text: string; border: string 
   pink:    { bg: "bg-pink-500",    text: "text-white", border: "border-pink-600" },
 };
 
+function isKitchenDone(items: OrderWithItems["items"]) {
+  const kitchenItems = items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none");
+  return kitchenItems.length === 0 || kitchenItems.every((i) => !!i.kitchenServedAt);
+}
+
 function resolveStatusBadge(order: OrderWithItems) {
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
-  const activeItems = order.items.filter((i) => !i.cancelledAt);
-  const kitchenDone = activeItems.length > 0 && activeItems.every((i) => !!i.kitchenServedAt);
+  const kitchenDone = isKitchenDone(order.items);
 
   if (order.status === "PENDING") {
     if (method === "CASH")
@@ -415,7 +419,10 @@ export default function OrderQueue() {
     setKitchenItemAcked((prev) => {
       const next = new Set(prev);
       itemIds.forEach((id) => next.add(id));
-      try { localStorage.setItem("kitchenItemAcked", JSON.stringify([...next])); } catch {}
+      try {
+        localStorage.setItem("kitchenItemAcked", JSON.stringify([...next]));
+        window.dispatchEvent(new Event("alertAckSync"));
+      } catch {}
       return next;
     });
   }
@@ -425,7 +432,10 @@ export default function OrderQueue() {
     setAlertOrderAcked((prev) => {
       const next = new Set(prev);
       orderIds.forEach((id) => next.add(id));
-      try { localStorage.setItem("alertOrderAcked", JSON.stringify([...next])); } catch {}
+      try {
+        localStorage.setItem("alertOrderAcked", JSON.stringify([...next]));
+        window.dispatchEvent(new Event("alertAckSync"));
+      } catch {}
       return next;
     });
   }
@@ -629,7 +639,7 @@ export default function OrderQueue() {
       firstRenderRef.current = false;
       prevIdsRef.current = new Set(orders.map((o) => o.id));
       prevKitchenDoneRef.current = new Set(
-        orders.filter((o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)).map((o) => o.id)
+        orders.filter((o) => isKitchenDone(o.items) && o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none").length > 0).map((o) => o.id)
       );
       return;
     }
@@ -642,9 +652,11 @@ export default function OrderQueue() {
       return o.status === "PENDING" && (m === "CASH" || m === "PROMPTPAY" || m === "TAB");
     });
 
-    const newKitchenDone = orders.filter(
-      (o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt) && !prevKitchenDoneRef.current.has(o.id)
-    );
+    const newKitchenDone = orders.filter((o) => {
+      if (prevKitchenDoneRef.current.has(o.id)) return false;
+      const kitchenItems = o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none");
+      return kitchenItems.length > 0 && kitchenItems.every((i) => !!i.kitchenServedAt);
+    });
 
     if (alertEnabled) {
       void (async () => {
@@ -673,7 +685,10 @@ export default function OrderQueue() {
 
     prevIdsRef.current = new Set(orders.map((o) => o.id));
     prevKitchenDoneRef.current = new Set(
-      orders.filter((o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)).map((o) => o.id)
+      orders.filter((o) => {
+        const kitchenItems = o.items.filter((i) => !i.cancelledAt && i.menuItem.queueTarget !== "none");
+        return kitchenItems.length > 0 && kitchenItems.every((i) => !!i.kitchenServedAt);
+      }).map((o) => o.id)
     );
   }, [orders, alertEnabled]);
 
@@ -1777,7 +1792,7 @@ function BillOrderGroupCard({
   const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
   const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
   const allItems = orders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
-  const kitchenDone = allItems.length > 0 && allItems.every((i) => !!i.kitchenServedAt);
+  const kitchenDone = isKitchenDone(allItems);
   const allServedAcked = orders.every((o) => servedAcked.has(o.id));
   // Items in this bill that are kitchen-done but not yet acknowledged
   const unackedReadyItems = allItems.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id));
@@ -1971,7 +1986,7 @@ function OrderCard({
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
   const activeItems = order.items.filter((i) => !i.cancelledAt);
-  const kitchenDone = activeItems.length > 0 && activeItems.every((i) => !!i.kitchenServedAt);
+  const kitchenDone = isKitchenDone(order.items);
 
   // PENDING payment cases (customer already selected method)
   const isPendingCash = isPending && method === "CASH";
