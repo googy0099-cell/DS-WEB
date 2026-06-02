@@ -133,14 +133,27 @@ export async function PATCH(
     const { receivedAmount, changeAmount } = body as { receivedAmount: number; changeAmount?: number };
     const orderFull = await db.order.findUnique({
       where: { id: orderId },
-      select: { totalTHB: true, userId: true, kitchenServedAt: true },
+      select: {
+        totalTHB: true, userId: true, kitchenServedAt: true,
+        orderName: true, tableId: true,
+        bill: { select: { name: true, table: { select: { number: true } } } },
+        items: {
+          where: { cancelledAt: null },
+          select: {
+            quantity: true, unitPriceTHB: true, selectedSize: true,
+            selectedAddons: true, selectedOptions: true,
+            menuItem: { select: { nameTh: true } },
+          },
+        },
+      },
     });
     if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
+    const confirmedAt = new Date();
     const confirmData = {
       method: "CASH" as const,
       amountTHB: orderFull.totalTHB,
       status: "CONFIRMED",
-      confirmedAt: new Date(),
+      confirmedAt,
       receivedAmount,
       changeAmount: changeAmount ?? 0,
     };
@@ -170,6 +183,19 @@ export async function PATCH(
       select: { id: true, orderName: true, status: true },
     });
     if (newStatus === "SERVED" && handledById) await deductStockForOrder(orderId, handledById);
+    // Save digital receipt
+    const locationLabel = orderFull.bill
+      ? `${orderFull.bill.name} · โต๊ะ ${orderFull.bill.table.number}`
+      : orderFull.tableId ? `โต๊ะ ${orderFull.tableId}` : "-";
+    await db.receipt.upsert({
+      where: { orderId },
+      create: {
+        orderId, orderName: orderFull.orderName ?? "",
+        totalTHB: orderFull.totalTHB, paymentMethod: "CASH",
+        locationLabel, itemsJson: JSON.stringify(orderFull.items), confirmedAt,
+      },
+      update: {},
+    });
     return NextResponse.json(updated);
   }
 

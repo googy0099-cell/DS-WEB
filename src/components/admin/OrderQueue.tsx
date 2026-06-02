@@ -1284,6 +1284,7 @@ export default function OrderQueue() {
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
                   onPrintReceipt={(orders) => void printBillGroupReceipt(orders, receiptSettings)}
+                  onEdit={openEdit}
                 />
               ) : (
                 <OrderCard
@@ -1341,52 +1342,106 @@ export default function OrderQueue() {
           <div className="mt-3 space-y-2">
             {!todayOrders || todayOrders.length === 0 ? (
               <p className="text-center text-gray-400 py-6 text-sm">ยังไม่มีออเดอร์ที่เสร็จแล้ววันนี้</p>
-            ) : (
-              todayOrders.map((order) => (
-                <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm opacity-80">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="font-semibold text-navy">👤 {order.orderName || `ออเดอร์ #${order.id}`}</p>
-                      <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
-                    </div>
-                    <span
-                      className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.color ?? "bg-gray-100 text-gray-500"}`}
-                    >
-                      {STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.label ?? order.status}
-                    </span>
-                  </div>
-                  <div className="bg-gray-50 rounded-lg p-2 space-y-1">
-                    {order.items.map((item) => (
-                      <div key={item.id} className="flex justify-between text-xs text-gray-600">
-                        <span>
-                          {item.menuItem.nameTh} ×{item.quantity}
-                        </span>
-                        <span>฿{item.unitPriceTHB * item.quantity}</span>
+            ) : (() => {
+              // Group orders by billId (same bill → one card)
+              const billHistoryMap = new Map<number, OrderWithItems[]>();
+              const standaloneHistory: OrderWithItems[] = [];
+              for (const order of todayOrders) {
+                if (order.billId) {
+                  const grp = billHistoryMap.get(order.billId) ?? [];
+                  grp.push(order);
+                  billHistoryMap.set(order.billId, grp);
+                } else {
+                  standaloneHistory.push(order);
+                }
+              }
+              const historyItems = [
+                ...[...billHistoryMap.entries()].map(([billId, grpOrders]) => ({
+                  kind: "billGroup" as const, billId, orders: grpOrders,
+                  ts: Math.max(...grpOrders.map((o) => new Date(o.createdAt).getTime())),
+                })),
+                ...standaloneHistory.map((order) => ({
+                  kind: "single" as const, order,
+                  ts: new Date(order.createdAt).getTime(),
+                })),
+              ].sort((a, b) => b.ts - a.ts);
+
+              return historyItems.map((item) => {
+                if (item.kind === "billGroup") {
+                  const { orders: grpOrders } = item;
+                  const bill = grpOrders[0]?.bill;
+                  const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
+                  const totalTHB = grpOrders.reduce((s, o) => s + o.totalTHB, 0);
+                  const allItems = grpOrders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
+                  return (
+                    <div key={`hist-bill-${item.billId}`} className="bg-white rounded-xl p-4 shadow-sm opacity-80">
+                      <div className="flex items-start justify-between mb-2">
+                        <div>
+                          <span className={`inline-block font-black text-sm px-2.5 py-0.5 rounded-full ${bc.bg} ${bc.text} mb-1`}>
+                            ตี้ {bill?.name}
+                          </span>
+                          <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {grpOrders.length} ออเดอร์</p>
+                          <p className="text-xs text-gray-400">{formatThaiDateTime(grpOrders[0].createdAt)}</p>
+                        </div>
+                        <p className="font-bold text-navy">฿{totalTHB.toLocaleString()}</p>
                       </div>
-                    ))}
-                    <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
-                      <span>รวม</span>
-                      <span>฿{order.totalTHB}</span>
+                      <div className="bg-gray-50 rounded-lg p-2 space-y-1">
+                        {allItems.slice(0, 8).map((item, i) => (
+                          <div key={i} className="flex justify-between text-xs text-gray-600">
+                            <span>{item.menuItem.nameTh}{item.selectedSize ? ` (${item.selectedSize})` : ""} ×{item.quantity}</span>
+                            <span>฿{item.unitPriceTHB * item.quantity}</span>
+                          </div>
+                        ))}
+                        {allItems.length > 8 && <p className="text-xs text-gray-400">+ อีก {allItems.length - 8} รายการ</p>}
+                        <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
+                          <span>รวมทั้งหมด</span>
+                          <span>฿{totalTHB.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className="mt-2 flex gap-3">
+                        <button onClick={() => void printBillGroupReceipt(grpOrders, receiptSettings)} className="text-xs text-gray-500 hover:text-gray-700">
+                          🖨️ พิมพ์ใบเสร็จรวมบิล
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+                const { order } = item;
+                return (
+                  <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm opacity-80">
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="font-semibold text-navy">👤 {order.orderName || `ออเดอร์ #${order.id}`}</p>
+                        <p className="text-xs text-gray-400">{formatThaiDateTime(order.createdAt)}</p>
+                      </div>
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full border ${STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.color ?? "bg-gray-100 text-gray-500"}`}>
+                        {STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG]?.label ?? order.status}
+                      </span>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-2 space-y-1">
+                      {order.items.filter((i) => !i.cancelledAt).map((item) => (
+                        <div key={item.id} className="flex justify-between text-xs text-gray-600">
+                          <span>{item.menuItem.nameTh} ×{item.quantity}</span>
+                          <span>฿{item.unitPriceTHB * item.quantity}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
+                        <span>รวม</span>
+                        <span>฿{order.totalTHB}</span>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex gap-3">
+                      <button onClick={() => printReceipt(order, receiptSettings)} className="text-xs text-gray-500 hover:text-gray-700">
+                        🖨️ พิมพ์ใบเสร็จ
+                      </button>
+                      <button onClick={() => handleDelete(order.id)} disabled={loadingIds.has(order.id)} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-40">
+                        🗑️ ลบ
+                      </button>
                     </div>
                   </div>
-                  <div className="mt-2 flex gap-3">
-                    <button
-                      onClick={() => printReceipt(order)}
-                      className="text-xs text-gray-500 hover:text-gray-700"
-                    >
-                      🖨️ พิมพ์ใบเสร็จ
-                    </button>
-                    <button
-                      onClick={() => handleDelete(order.id)}
-                      disabled={loadingIds.has(order.id)}
-                      className="text-xs text-red-400 hover:text-red-600 disabled:opacity-40"
-                    >
-                      🗑️ ลบ
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
+                );
+              });
+            })()}
           </div>
         )}
       </div>
@@ -1769,6 +1824,7 @@ function BillOrderGroupCard({
   kitchenItemAcked,
   onAckKitchenItems,
   onPrintReceipt,
+  onEdit,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
@@ -1779,6 +1835,7 @@ function BillOrderGroupCard({
   kitchenItemAcked: Set<number>;
   onAckKitchenItems: (itemIds: number[]) => void;
   onPrintReceipt: (orders: OrderWithItems[]) => void;
+  onEdit: (order: OrderWithItems) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -1803,9 +1860,19 @@ function BillOrderGroupCard({
           </span>
           <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {orders.length} ออเดอร์รวมกัน</p>
         </div>
-        <span className="text-xs font-semibold px-2 py-1 rounded-full border shrink-0 bg-amber-100 text-amber-800 border-amber-300">
-          🧾 รอชำระรวม
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          {orders.length === 1 && (
+            <button
+              onClick={() => onEdit(orders[0])}
+              className="text-xs font-semibold text-gray-500 hover:text-navy border border-gray-200 rounded-xl px-2 py-1"
+            >
+              ✏️ แก้ไข
+            </button>
+          )}
+          <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-300">
+            🧾 รอชำระรวม
+          </span>
+        </div>
       </div>
 
       {/* All items from all orders */}
@@ -1813,9 +1880,17 @@ function BillOrderGroupCard({
         {sorted.map((order, oi) => (
           <div key={order.id}>
             {orders.length > 1 && (
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
-                ออเดอร์ {oi + 1} · 👤 {order.orderName} · {formatThaiDateTime(order.createdAt)}
-              </p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
+                  ออเดอร์ {oi + 1} · 👤 {order.orderName} · {formatThaiDateTime(order.createdAt)}
+                </p>
+                <button
+                  onClick={() => onEdit(order)}
+                  className="text-[10px] font-semibold text-gray-400 hover:text-navy border border-gray-200 rounded-lg px-1.5 py-0.5"
+                >
+                  ✏️ แก้ไข
+                </button>
+              </div>
             )}
             {order.items.map((item) => {
               const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];

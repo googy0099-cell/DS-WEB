@@ -40,7 +40,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       status: { in: ["PENDING", "CONFIRMED", "SERVED"] },
       payment: { method: "TAB", status: "PENDING" },
     },
-    include: { payment: { select: { id: true, amountTHB: true } } },
+    include: {
+      payment: { select: { id: true, amountTHB: true } },
+      bill: { select: { name: true, table: { select: { number: true } } } },
+      items: {
+        where: { cancelledAt: null },
+        select: {
+          quantity: true, unitPriceTHB: true, selectedSize: true,
+          selectedAddons: true, selectedOptions: true,
+          menuItem: { select: { nameTh: true } },
+        },
+      },
+    },
   });
 
   if (orders.length === 0) {
@@ -87,6 +98,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const staffId = Number(session.user.id);
   const newlyServed = orders.filter((o) => o.kitchenServedAt && o.status !== "SERVED");
   await Promise.allSettled(newlyServed.map((o) => deductStockForOrder(o.id, staffId)));
+
+  // Save a digital receipt for each order in the tab
+  await Promise.allSettled(orders.map((o) => {
+    const locationLabel = o.bill
+      ? `${o.bill.name} · โต๊ะ ${o.bill.table.number}`
+      : "-";
+    return db.receipt.upsert({
+      where: { orderId: o.id },
+      create: {
+        orderId: o.id,
+        orderName: o.orderName ?? "",
+        totalTHB: o.totalTHB,
+        paymentMethod: "TAB",
+        locationLabel,
+        itemsJson: JSON.stringify(o.items),
+        confirmedAt: now,
+      },
+      update: {},
+    });
+  }));
 
   return NextResponse.json({ tabTotal, ordersCount: orders.length, pointsAwarded });
 }
