@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { createSign } from "crypto";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const session = await auth();
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const result: Record<string, unknown> = {};
 
   // 1. Check env var

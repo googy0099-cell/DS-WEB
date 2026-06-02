@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { PREP_SECONDS, remainingSeconds, prepRemaining } from "@/lib/pos-time";
 
 export async function GET() {
@@ -32,6 +33,11 @@ export async function GET() {
 const BILL_COLORS = ["indigo", "emerald", "rose", "amber", "violet", "teal", "sky", "pink"];
 
 export async function POST(req: NextRequest) {
+  const staffSession = await auth();
+  if (!staffSession?.user?.role || !["CASHIER", "STAFF", "OWNER"].includes(staffSession.user.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { name, tableId, color } = (await req.json()) as { name?: string; tableId?: number; color?: string };
 
   if (!name?.trim() || !tableId) {

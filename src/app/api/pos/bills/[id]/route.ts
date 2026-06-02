@@ -23,10 +23,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await db.bill.update({ where: { id: billId }, data: { color: body.color } });
   }
 
-  // Change table → update bill + all its active sessions (table is just a label)
+  // Change table → snapshot each session's remaining time before writing (updateMany bumps updatedAt)
   if (body.tableId !== undefined) {
     await db.bill.update({ where: { id: billId }, data: { tableId: body.tableId } });
-    await db.playerSession.updateMany({ where: { billId }, data: { tableId: body.tableId } });
+    const now = Date.now();
+    for (const s of bill.sessions) {
+      const current = remainingSeconds(s.timeRemaining, bill.startsAt, s.updatedAt, now);
+      await db.playerSession.update({
+        where: { id: s.id },
+        data: { tableId: body.tableId, timeRemaining: current },
+      });
+    }
     await db.table.update({ where: { id: body.tableId }, data: { isOccupied: true } });
   }
 
@@ -52,6 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Close bill → close all sessions, credit member hours, free table
   if (body.status === "CLOSED") {
+    if (bill.status === "CLOSED") return NextResponse.json({ ok: true });
     const now = Date.now();
     for (const s of bill.sessions) {
       const played = remainingSeconds(s.timeRemaining, bill.startsAt, s.updatedAt, now);

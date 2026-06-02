@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 
 export async function GET() {
+  const session = await auth();
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const user = await db.user.findUnique({
       where: { email: "admin@diceshop.com" },

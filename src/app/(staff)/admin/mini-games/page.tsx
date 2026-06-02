@@ -30,12 +30,13 @@ export default function AdminMiniGamesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<EditingGame | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const htmlInputRef = useRef<HTMLInputElement>(null);
 
-  function openAdd() { setEditing({ ...EMPTY }); setUploadError(""); setShowModal(true); }
-  function openEdit(g: MiniGame) { setEditing({ ...g }); setUploadError(""); setShowModal(true); }
+  function openAdd() { setEditing({ ...EMPTY }); setUploadError(""); setSaveError(""); setShowModal(true); }
+  function openEdit(g: MiniGame) { setEditing({ ...g }); setUploadError(""); setSaveError(""); setShowModal(true); }
 
   async function uploadHtml(file: File) {
     setUploading(true); setUploadError("");
@@ -50,16 +51,25 @@ export default function AdminMiniGamesPage() {
 
   async function save() {
     if (!editing?.name || !editing?.htmlUrl) return;
-    setSaving(true);
-    const method = editing.id ? "PATCH" : "POST";
-    await fetch("/api/mini-games", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(editing),
-    });
-    await mutate();
-    setShowModal(false);
-    setSaving(false);
+    setSaving(true); setSaveError("");
+    try {
+      const res = await fetch("/api/mini-games", {
+        method: editing.id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editing),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setSaveError(d.error ?? "บันทึกไม่สำเร็จ");
+        return;
+      }
+      await mutate();
+      setShowModal(false);
+    } catch {
+      setSaveError("เกิดข้อผิดพลาด กรุณาลองใหม่");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActive(g: MiniGame) {
@@ -229,6 +239,7 @@ export default function AdminMiniGamesPage() {
                 {saving ? "กำลังบันทึก..." : "บันทึก"}
               </button>
             </div>
+            {saveError && <p className="text-xs text-red-500 mt-2 text-center">{saveError}</p>}
           </div>
         </div>
       )}

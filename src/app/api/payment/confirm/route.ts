@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 
 export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session?.user?.role || !["CASHIER", "STAFF", "OWNER"].includes(session.user.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { paymentId, userId, receivedAmount, changeAmount } = await req.json();
 
   const confirmedAt = new Date();

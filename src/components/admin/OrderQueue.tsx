@@ -1235,6 +1235,7 @@ export default function OrderQueue() {
                   onAckKitchenItems={ackKitchenItems}
                   onPrintReceipt={(orders) => void printBillGroupReceipt(orders, receiptSettings)}
                   onEdit={openEdit}
+                  onCancelOrder={(id) => handleUpdate(id, "CANCELLED")}
                 />
               ) : (
                 <OrderCard
@@ -1775,6 +1776,7 @@ function BillOrderGroupCard({
   onAckKitchenItems,
   onPrintReceipt,
   onEdit,
+  onCancelOrder,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
@@ -1786,6 +1788,7 @@ function BillOrderGroupCard({
   onAckKitchenItems: (itemIds: number[]) => void;
   onPrintReceipt: (orders: OrderWithItems[]) => void;
   onEdit: (order: OrderWithItems) => void;
+  onCancelOrder: (id: number) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -1811,14 +1814,6 @@ function BillOrderGroupCard({
           <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {orders.length} ออเดอร์รวมกัน</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {orders.length === 1 && (
-            <button
-              onClick={() => onEdit(orders[0])}
-              className="text-xs font-semibold text-gray-500 hover:text-navy border border-gray-200 rounded-xl px-2 py-1"
-            >
-              ✏️ แก้ไข
-            </button>
-          )}
           <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-300">
             🧾 รอชำระรวม
           </span>
@@ -1834,12 +1829,22 @@ function BillOrderGroupCard({
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
                   ออเดอร์ {oi + 1} · 👤 {order.orderName} · {formatThaiDateTime(order.createdAt)}
                 </p>
-                <button
-                  onClick={() => onEdit(order)}
-                  className="text-[10px] font-semibold text-gray-400 hover:text-navy border border-gray-200 rounded-lg px-1.5 py-0.5"
-                >
-                  ✏️ แก้ไข
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => onEdit(order)}
+                    className="text-[10px] font-semibold text-gray-400 hover:text-navy border border-gray-200 rounded-lg px-1.5 py-0.5"
+                  >
+                    ✏️ แก้ไข
+                  </button>
+                  {(order.status === "PENDING" || order.status === "CONFIRMED") && (
+                    <button
+                      onClick={() => onCancelOrder(order.id)}
+                      className="text-[10px] font-semibold text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-1.5 py-0.5"
+                    >
+                      ❌ ยกเลิก
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             {order.items.map((item) => {
@@ -1933,6 +1938,26 @@ function BillOrderGroupCard({
       >
         🖨️ พิมพ์ใบเสร็จรวมบิล
       </button>
+
+      {/* Secondary actions — edit + cancel (single-order bill groups only) */}
+      {orders.length === 1 && (orders[0].status === "PENDING" || orders[0].status === "CONFIRMED") && (
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={() => onEdit(orders[0])}
+            disabled={isLoading}
+            className="flex-1 bg-gray-50 text-gray-600 border border-gray-200 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
+          >
+            ✏️ แก้ไข
+          </button>
+          <button
+            onClick={() => onCancelOrder(orders[0].id)}
+            disabled={isLoading}
+            className="flex-1 bg-red-50 text-red-600 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
+          >
+            ❌ ยกเลิก
+          </button>
+        </div>
+      )}
     </div>
   );
 }

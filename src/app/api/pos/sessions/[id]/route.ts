@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { remainingSeconds } from "@/lib/pos-time";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const staffSession = await auth();
+  if (!staffSession?.user?.role || !["CASHIER", "STAFF", "OWNER"].includes(staffSession.user.role)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { id } = await params;
   const body = (await req.json()) as {
     status?: string; addSeconds?: number; setSeconds?: number; upgradeToAllDay?: boolean; addExtraSpend?: number;

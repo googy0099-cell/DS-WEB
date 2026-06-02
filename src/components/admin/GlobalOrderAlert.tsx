@@ -8,7 +8,7 @@ import type { OrderWithItems } from "@/types";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-type PosSession = { id: number; nickname: string; timeRemaining: number; };
+type PosSession = { id: number; nickname: string; timeRemaining: number; packageType: string; };
 type PosBill = { id: number; name: string; prepRemaining: number; table: { number: number }; sessions: PosSession[]; };
 
 function playBeep(ctx: AudioContext) {
@@ -199,7 +199,7 @@ function GlobalOrderAlertInner() {
   const expiredSessions = (bills ?? []).flatMap((bill) => {
     if (bill.prepRemaining > 0) return [];
     return bill.sessions
-      .filter((s) => s.timeRemaining < 86400 && s.timeRemaining === 0)
+      .filter((s) => s.timeRemaining < 86400 && s.timeRemaining === 0 && s.packageType !== "MANUAL")
       .map((s) => ({ id: s.id, nickname: s.nickname, billName: bill.name, tableNumber: bill.table.number }));
   });
 
