@@ -53,15 +53,19 @@ export default function MobileNav({ items, username, role }: { items: NavItem[];
 
         {/* Nav items list */}
         <nav className="p-3 flex flex-col gap-1 max-h-[65vh] overflow-y-auto pb-8">
-          <Link
-            href="/"
-            onClick={() => setOpen(false)}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-cream/70 hover:bg-cream/10 hover:text-cream transition-colors"
-          >
-            <span className="text-xl">🏠</span>
-            <span className="text-sm font-medium">กลับหน้าหลัก</span>
-          </Link>
-          <div className="my-1 border-t border-cream/10" />
+          {role === "OWNER" && (
+            <>
+              <Link
+                href="/"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl text-cream/70 hover:bg-cream/10 hover:text-cream transition-colors"
+              >
+                <span className="text-xl">🏠</span>
+                <span className="text-sm font-medium">กลับหน้าหลัก</span>
+              </Link>
+              <div className="my-1 border-t border-cream/10" />
+            </>
+          )}
           {items.map((item) => {
             const active = pathname === item.href;
             return (

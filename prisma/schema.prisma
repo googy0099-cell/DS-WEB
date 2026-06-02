@@ -518,6 +518,18 @@ model StockAlert {
   @@map("stock_alerts")
 }
 
+model Receipt {
+  id            Int      @id @default(autoincrement())
+  orderId       Int      @unique
+  orderName     String   @default("")
+  totalTHB      Int
+  paymentMethod String
+  locationLabel String   @default("")
+  itemsJson     String
+  confirmedAt   DateTime
+  createdAt     DateTime @default(now())
+}
+
 model ShopSession {
   id         Int       @id @default(1)
   isOpen     Boolean   @default(false) @map("is_open")

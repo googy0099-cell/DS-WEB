@@ -49,6 +49,14 @@ const MODULES = [
     color: "bg-rose-50 border-rose-200",
     iconBg: "bg-rose-100 text-rose-600",
   },
+  {
+    href: "/admin/analytics/receipts",
+    icon: "🧾",
+    title: "ใบเสร็จดิจิตอล",
+    desc: "ประวัติใบเสร็จทุกใบ กรองตามวันที่ ดูและดาวน์โหลด PDF สำหรับฝ่ายบัญชี",
+    color: "bg-teal-50 border-teal-200",
+    iconBg: "bg-teal-100 text-teal-700",
+  },
 ];
 
 export default function AnalyticsHubPage() {

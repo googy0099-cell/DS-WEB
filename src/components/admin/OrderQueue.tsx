@@ -509,6 +509,9 @@ export default function OrderQueue() {
   // QR data URLs for scan-at-counter, keyed by order id
   const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
+  // Slip lightbox
+  const [slipLightbox, setSlipLightbox] = useState<string | null>(null);
+
   // Edit modal state
   const [editOrder, setEditOrder] = useState<OrderWithItems | null>(null);
   const [editItems, setEditItems] = useState<EditItem[]>([]);
@@ -1013,10 +1016,18 @@ export default function OrderQueue() {
     setLoading(order.id, false);
   }
 
-  // Cashier picked "สแกน": generate an amount-embedded QR and lock method to PROMPTPAY
+  // Cashier picked "สแกน": confirm order (if still PENDING), then generate QR and lock method to PROMPTPAY
   async function chooseScan(order: OrderWithItems) {
     setLoading(order.id, true);
     try {
+      // If order is still PENDING (e.g. online counter-payment order), confirm it first
+      if (order.status === "PENDING") {
+        await fetch(`/api/orders/${order.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: "CONFIRMED" }),
+        });
+      }
       const res = await fetch("/api/payment/qr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1218,6 +1229,7 @@ export default function OrderQueue() {
                 onServeAck={markServedAck}
                 kitchenItemAcked={kitchenItemAcked}
                 onAckKitchenItems={ackKitchenItems}
+                onOpenSlip={setSlipLightbox}
               />
             ))}
           </div>
@@ -1280,6 +1292,7 @@ export default function OrderQueue() {
                   onServeAck={markServedAck}
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
+                  onOpenSlip={setSlipLightbox}
                 />
               )
             )}
@@ -1670,6 +1683,29 @@ export default function OrderQueue() {
           </div>
         </div>
       )}
+
+      {/* Slip lightbox */}
+      {slipLightbox && (
+        <div
+          className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4"
+          onClick={() => setSlipLightbox(null)}
+        >
+          <div className="relative max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSlipLightbox(null)}
+              className="absolute -top-10 right-0 text-white/70 hover:text-white text-3xl leading-none"
+            >
+              ×
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={slipLightbox}
+              alt="สลิป"
+              className="w-full max-h-[80vh] object-contain rounded-2xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1776,23 +1812,25 @@ function BillOrderGroupCard({
         </div>
       )}
 
-      {/* Confirm serve — only when ALL items done in the bill */}
-      {kitchenDone && (
-        <div className="mb-2">
-          {!allServedAcked ? (
-            <button
-              onClick={() => orders.forEach((o) => onServeAck(o.id))}
-              className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
-            >
-              🍽️ ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)
-            </button>
-          ) : (
-            <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
-              ✅ เสิร์ฟถึงโต๊ะแล้ว
-            </div>
-          )}
-        </div>
-      )}
+      {/* Confirm serve — required for all bill groups */}
+      <div className="mb-2">
+        {!allServedAcked ? (
+          <button
+            onClick={() => orders.forEach((o) => onServeAck(o.id))}
+            className={`w-full flex items-center justify-center gap-2 font-bold py-3 rounded-xl text-sm transition-colors ${
+              kitchenDone
+                ? "bg-green-500 hover:bg-green-600 text-white"
+                : "bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
+            }`}
+          >
+            🍽️ {kitchenDone ? "ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)" : "ยืนยันการเสิร์ฟ"}
+          </button>
+        ) : (
+          <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
+            ✅ เสิร์ฟถึงโต๊ะแล้ว
+          </div>
+        )}
+      </div>
 
       {/* Payment */}
       <div className="grid grid-cols-2 gap-2">
@@ -1843,6 +1881,7 @@ function OrderCard({
   onServeAck,
   kitchenItemAcked,
   onAckKitchenItems,
+  onOpenSlip,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -1861,6 +1900,7 @@ function OrderCard({
   onServeAck: (id: number) => void;
   kitchenItemAcked: Set<number>;
   onAckKitchenItems: (itemIds: number[]) => void;
+  onOpenSlip: (url: string) => void;
 }) {
   const badge = resolveStatusBadge(order);
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
@@ -2005,13 +2045,13 @@ function OrderCard({
         {/* Slip */}
         {order.payment?.slipUrl && (
           <div className="mb-3">
-            <p className="text-xs text-gray-400 mb-1">💳 สลิปจากลูกค้า</p>
+            <p className="text-xs text-gray-400 mb-1">💳 สลิปจากลูกค้า — แตะเพื่อดูเต็มจอ</p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={order.payment.slipUrl}
               alt="slip"
-              className="w-full max-h-48 object-contain rounded-xl border border-sand cursor-pointer"
-              onClick={() => window.open(order.payment!.slipUrl!, "_blank")}
+              className="w-full max-h-48 object-contain rounded-xl border border-sand cursor-pointer active:opacity-80"
+              onClick={() => onOpenSlip(order.payment!.slipUrl!)}
             />
           </div>
         )}
@@ -2032,15 +2072,19 @@ function OrderCard({
           );
         })()}
 
-        {/* Confirm serve — only when ALL items done */}
-        {kitchenDone && order.status !== "SERVED" && order.status !== "CANCELLED" && (
+        {/* Confirm serve — required for ALL CONFIRMED/PAID orders */}
+        {(order.status === "CONFIRMED" || order.status === "PAID") && !isBillTab && (
           <div className="mb-2">
             {!servedAcked.has(order.id) ? (
               <button
                 onClick={() => onServeAck(order.id)}
-                className="w-full flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl text-sm transition-colors"
+                className={`w-full flex items-center justify-center gap-2 font-bold py-3 rounded-xl text-sm transition-colors ${
+                  kitchenDone
+                    ? "bg-green-500 hover:bg-green-600 text-white"
+                    : "bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
+                }`}
               >
-                🍽️ ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)
+                🍽️ {kitchenDone ? "ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)" : "ยืนยันการเสิร์ฟ"}
               </button>
             ) : (
               <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
@@ -2066,13 +2110,25 @@ function OrderCard({
             </button>
           </div>
         ) : isPendingCash ? (
-          <button
-            onClick={() => onUpdate(order.id, "PAID")}
-            disabled={isLoading}
-            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-indigo-600 text-white transition-opacity disabled:opacity-60"
-          >
-            {isLoading ? "กำลังบันทึก..." : `💵 รับชำระแล้ว ฿${order.totalTHB.toLocaleString()}`}
-          </button>
+          <div className="mb-2">
+            <p className="text-xs text-gray-400 mb-1.5 text-center">รับออเดอร์ · เลือกวิธีชำระเงิน</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onOpenCashModal(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+              >
+                <span className="text-xl">💵</span>เงินสด
+              </button>
+              <button
+                onClick={() => onChooseScan(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+              >
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
+              </button>
+            </div>
+          </div>
         ) : isPendingQrNoSlip ? (
           <div className="mb-2 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center text-sm text-blue-600">
             <p className="font-semibold">📷 รอสลิปจากลูกค้า</p>
@@ -2135,13 +2191,25 @@ function OrderCard({
             </div>
           </div>
         ) : isCashPay ? (
-          <button
-            onClick={() => onOpenCashModal(order)}
-            disabled={isLoading}
-            className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-green-600 text-white transition-opacity disabled:opacity-60"
-          >
-            {isLoading ? "กำลังบันทึก..." : `💵 ชำระเงิน ฿${order.totalTHB.toLocaleString()}`}
-          </button>
+          <div className="mb-2">
+            <p className="text-xs text-gray-400 mb-1.5 text-center">เลือกวิธีชำระเงิน</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onOpenCashModal(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+              >
+                <span className="text-xl">💵</span>เงินสด
+              </button>
+              <button
+                onClick={() => onChooseScan(order)}
+                disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+              >
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
+              </button>
+            </div>
+          </div>
         ) : isQrNoSlip ? (
           <div className="mb-2 space-y-2">
             {qrUrl ? (
@@ -2175,8 +2243,8 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
           </button>
-        ) : order.status === "PAID" && kitchenDone ? (
-          // Payment done + kitchen done → close only after serve is acknowledged
+        ) : order.status === "PAID" ? (
+          // Payment done → close only after serve is acknowledged
           servedAcked.has(order.id) ? (
             <button
               onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
@@ -2187,15 +2255,9 @@ function OrderCard({
             </button>
           ) : (
             <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
-              ✋ กดเสิร์ฟแล้วข้างบนก่อน เพื่อยืนยันว่าส่งอาหารถึงโต๊ะแล้ว
+              ✋ กดยืนยันการเสิร์ฟข้างบนก่อน เพื่อยืนยันว่าส่งอาหารถึงโต๊ะแล้ว
             </div>
           )
-        ) : order.status === "PAID" ? (
-          // Paid but kitchen still working — info only
-          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
-            <p className="font-semibold">🍳 ชำระแล้ว — รอครัวยืนยันว่าเสร็จ</p>
-            <p className="text-xs text-amber-500 mt-0.5">ออเดอร์จะพร้อมปิดเมื่อครัวกดเสร็จแล้ว</p>
-          </div>
         ) : cfg.next ? (
           <button
             onClick={() => onUpdate(order.id, cfg.next!)}

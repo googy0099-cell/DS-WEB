@@ -5,21 +5,40 @@ import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 export async function PATCH(req: NextRequest) {
   const { paymentId, userId, receivedAmount, changeAmount } = await req.json();
 
+  const confirmedAt = new Date();
+
   const payment = await db.payment.update({
     where: { id: Number(paymentId) },
     data: {
       status: "CONFIRMED",
-      confirmedAt: new Date(),
+      confirmedAt,
       ...(receivedAmount != null ? { receivedAmount, changeAmount: changeAmount ?? 0 } : {}),
     },
-    select: { orderId: true, amountTHB: true, staffNote: true },
+    select: { orderId: true, amountTHB: true, staffNote: true, method: true },
   });
 
-  // Only mark SERVED if kitchen has already finished; otherwise PAID (waiting for kitchen)
   const existingOrder = await db.order.findUnique({
     where: { id: payment.orderId },
-    select: { kitchenServedAt: true, userId: true, totalTHB: true },
+    select: {
+      kitchenServedAt: true,
+      userId: true,
+      totalTHB: true,
+      orderName: true,
+      tableId: true,
+      bill: { select: { name: true, table: { select: { number: true } } } },
+      items: {
+        select: {
+          quantity: true,
+          unitPriceTHB: true,
+          selectedSize: true,
+          selectedAddons: true,
+          selectedOptions: true,
+          menuItem: { select: { nameTh: true } },
+        },
+      },
+    },
   });
+
   const newStatus = existingOrder?.kitchenServedAt ? "SERVED" : "PAID";
 
   await db.order.update({
@@ -44,5 +63,26 @@ export async function PATCH(req: NextRequest) {
 
   await createSessionsFromStaffNote(payment.staffNote);
 
-  return NextResponse.json(payment);
+  // Auto-save digital receipt snapshot
+  if (existingOrder) {
+    const locationLabel = existingOrder.bill
+      ? `${existingOrder.bill.name} · โต๊ะ ${existingOrder.bill.table.number}`
+      : existingOrder.tableId ? `โต๊ะ ${existingOrder.tableId}` : "-";
+
+    await db.receipt.upsert({
+      where: { orderId: payment.orderId },
+      create: {
+        orderId: payment.orderId,
+        orderName: existingOrder.orderName ?? "",
+        totalTHB: existingOrder.totalTHB,
+        paymentMethod: payment.method,
+        locationLabel,
+        itemsJson: JSON.stringify(existingOrder.items),
+        confirmedAt,
+      },
+      update: {},
+    });
+  }
+
+  return NextResponse.json({ ...payment, orderId: payment.orderId });
 }

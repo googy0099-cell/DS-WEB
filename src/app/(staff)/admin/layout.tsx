@@ -1,11 +1,10 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import Image from "next/image";
 import type { Metadata } from "next";
 import RegisterSW from "@/components/admin/RegisterSW";
 import MobileNav from "@/components/admin/MobileNav";
 import SidebarNav from "@/components/admin/SidebarNav";
+import GlobalOrderAlert from "@/components/admin/GlobalOrderAlert";
 
 export const metadata: Metadata = {
   manifest: "/manifest-admin.json",
@@ -65,37 +64,24 @@ export default async function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="hidden md:flex flex-col w-56 bg-navy min-h-screen shrink-0">
-        <div className="p-4 border-b border-cream/10">
-          <Link href="/">
-            <Image
-              src="/แแแแ-Photoroom.png"
-              alt="Dice Shop"
-              width={180}
-              height={64}
-              className="object-contain brightness-0 invert h-30 w-auto"
-            />
-          </Link>
-          <p className="text-cream/40 text-xs mt-1">Admin Panel</p>
-        </div>
-
-        <SidebarNav items={allNav} />
-
-        <div className="p-4 border-t border-cream/10">
-          <p className="text-cream/60 text-xs">{session.user.username}</p>
-          <p className="text-orange text-xs font-semibold">{session.user.role}</p>
-        </div>
-      </aside>
+      {/* Collapsible sidebar */}
+      <SidebarNav
+        items={allNav}
+        username={session.user.username ?? ""}
+        role={session.user.role ?? ""}
+      />
 
       {/* Mobile hamburger nav */}
       <MobileNav items={allNav} username={session.user.username ?? ""} role={session.user.role ?? ""} />
 
       {/* Main content */}
-      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full overflow-x-hidden">
+      <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full overflow-x-hidden min-w-0">
         <RegisterSW />
         {children}
       </main>
+
+      {/* Global order alert — sounds on every admin page (skips dashboard, OrderQueue handles it there) */}
+      <GlobalOrderAlert />
     </div>
   );
 }

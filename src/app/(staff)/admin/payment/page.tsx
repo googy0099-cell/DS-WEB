@@ -43,18 +43,25 @@ export default function AdminPaymentPage() {
 
   const [cashModal, setCashModal] = useState<PendingPayment | null>(null);
   const [cashInputStr, setCashInputStr] = useState("");
+  const [confirmedOrderId, setConfirmedOrderId] = useState<number | null>(null);
+  const [slipLightbox, setSlipLightbox] = useState<string | null>(null);
 
   async function confirm(paymentId: number, receivedAmount?: number) {
+    const targetPayment = payments?.find((p) => p.id === paymentId);
     const changeAmount = receivedAmount != null
       ? Math.max(0, receivedAmount - (cashModal?.amountTHB ?? 0))
       : undefined;
-    await fetch("/api/payment/confirm", {
+    const res = await fetch("/api/payment/confirm", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentId, receivedAmount, changeAmount }),
     });
+    const data = await res.json();
     mutate();
     setCashModal(null);
+    if (data?.orderId ?? targetPayment?.order?.id) {
+      setConfirmedOrderId(data?.orderId ?? targetPayment!.order.id);
+    }
   }
 
   function openCashModal(p: PendingPayment) {
@@ -123,8 +130,8 @@ export default function AdminPaymentPage() {
                         <img
                           src={p.slipUrl}
                           alt="slip"
-                          className="w-full max-h-56 object-contain rounded-xl border border-sand cursor-pointer"
-                          onClick={() => window.open(p.slipUrl!, "_blank")}
+                          className="w-full max-h-56 object-contain rounded-xl border border-sand cursor-pointer active:opacity-80"
+                          onClick={() => setSlipLightbox(p.slipUrl!)}
                         />
                       </div>
                     ) : (
@@ -200,6 +207,53 @@ export default function AdminPaymentPage() {
       <div className="mt-8 text-center">
         <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับหน้า Dashboard</Link>
       </div>
+
+      {/* Slip lightbox */}
+      {slipLightbox && (
+        <div
+          className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4"
+          onClick={() => setSlipLightbox(null)}
+        >
+          <div className="relative max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSlipLightbox(null)}
+              className="absolute -top-10 right-0 text-white/70 hover:text-white text-3xl leading-none"
+            >
+              ×
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={slipLightbox} alt="สลิป" className="w-full max-h-[80vh] object-contain rounded-2xl" />
+          </div>
+        </div>
+      )}
+
+      {/* Receipt prompt after confirmation */}
+      {confirmedOrderId && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4 text-center">
+            <div className="text-5xl">✅</div>
+            <h3 className="font-bold text-navy text-lg">ยืนยันการชำระเงินแล้ว</h3>
+            <p className="text-sm text-gray-500">ต้องการพิมพ์ใบเสร็จให้ลูกค้าหรือไม่?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmedOrderId(null)}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold"
+              >
+                ไม่พิมพ์
+              </button>
+              <a
+                href={`/api/receipt/${confirmedOrderId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => setConfirmedOrderId(null)}
+                className="flex-1 bg-navy text-white py-3 rounded-2xl text-sm font-bold flex items-center justify-center gap-1.5"
+              >
+                🖨️ พิมพ์ใบเสร็จ
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cash amount modal */}
       {cashModal && (
