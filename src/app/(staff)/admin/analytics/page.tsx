@@ -102,8 +102,8 @@ export default function AnalyticsHubPage() {
       const data = await res.json() as { url?: string; error?: string };
       if (!res.ok || !data.url) { setDriveError(data.error ?? "อัปโหลดไม่สำเร็จ"); return; }
       setDriveUrl(data.url);
-    } catch {
-      setDriveError("เกิดข้อผิดพลาด กรุณาลองใหม่");
+    } catch (e) {
+      setDriveError("เกิดข้อผิดพลาด: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setUploading(false);
     }
