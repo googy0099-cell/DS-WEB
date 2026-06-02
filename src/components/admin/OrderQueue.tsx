@@ -980,7 +980,7 @@ export default function OrderQueue() {
       await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null }),
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "CASH" }),
       });
       setBillGroupCash(null);
       setBillCashInputStr("");
@@ -999,7 +999,7 @@ export default function OrderQueue() {
       await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null }),
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY" }),
       });
       setBillGroupScan(null);
       void printBillGroupReceipt(snapshot.orders, receiptSettings);

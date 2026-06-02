@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { memberUserId } = await req.json();
+  const { memberUserId, paymentMethod } = await req.json() as { memberUserId?: number | null; paymentMethod?: string };
 
   const orders = await db.order.findMany({
     where: {
@@ -99,25 +99,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const newlyServed = orders.filter((o) => o.kitchenServedAt && o.status !== "SERVED");
   await Promise.allSettled(newlyServed.map((o) => deductStockForOrder(o.id, staffId)));
 
-  // Save a digital receipt for each order in the tab
-  await Promise.allSettled(orders.map((o) => {
-    const locationLabel = o.bill
-      ? `${o.bill.name} · โต๊ะ ${o.bill.table.number}`
-      : "-";
-    return db.receipt.upsert({
-      where: { orderId: o.id },
-      create: {
-        orderId: o.id,
-        orderName: o.orderName ?? "",
-        totalTHB: o.totalTHB,
-        paymentMethod: "TAB",
-        locationLabel,
-        itemsJson: JSON.stringify(o.items),
-        confirmedAt: now,
-      },
-      update: {},
-    });
-  }));
+  // Save ONE combined digital receipt for the whole bill group
+  const firstOrder = orders[0];
+  const locationLabel = firstOrder.bill
+    ? `${firstOrder.bill.name} · โต๊ะ ${firstOrder.bill.table.number}`
+    : "-";
+  const billName = firstOrder.bill?.name ?? `บิล ${id}`;
+  const allItems = orders.flatMap((o) => o.items);
+  const actualPaymentMethod = paymentMethod === "CASH" ? "CASH" : "PROMPTPAY";
+  await db.receipt.upsert({
+    where: { orderId: firstOrder.id },
+    create: {
+      orderId: firstOrder.id,
+      orderName: `ตี้ ${billName}`,
+      totalTHB,
+      paymentMethod: actualPaymentMethod,
+      locationLabel,
+      itemsJson: JSON.stringify(allItems),
+      confirmedAt: now,
+    },
+    update: {},
+  });
 
   return NextResponse.json({ tabTotal, ordersCount: orders.length, pointsAwarded });
 }
