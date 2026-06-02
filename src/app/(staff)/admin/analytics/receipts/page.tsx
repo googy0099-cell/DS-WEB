@@ -13,6 +13,17 @@ function addDays(d: string, n: number) {
   dt.setUTCDate(dt.getUTCDate() + n);
   return dt.toISOString().slice(0, 10);
 }
+function startOfWeekBKK() {
+  const now = new Date(Date.now() + 7 * 3600_000);
+  const day = now.getUTCDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() - ((day + 6) % 7));
+  return monday.toISOString().slice(0, 10);
+}
+function startOfMonthBKK() {
+  const d = todayBKK();
+  return d.slice(0, 7) + "-01";
+}
 function formatBKK(iso: string) {
   return new Date(iso).toLocaleString("th-TH", {
     timeZone: "Asia/Bangkok",
@@ -41,6 +52,12 @@ const METHOD_COLORS: Record<string, string> = {
   UNSET: "bg-gray-100 text-gray-500",
 };
 
+const PERIODS = [
+  { label: "วันนี้", getRange: () => { const t = todayBKK(); return [t, t] as [string, string]; } },
+  { label: "สัปดาห์นี้", getRange: () => [startOfWeekBKK(), todayBKK()] as [string, string] },
+  { label: "เดือนนี้", getRange: () => [startOfMonthBKK(), todayBKK()] as [string, string] },
+];
+
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type Receipt = {
@@ -65,6 +82,7 @@ export default function ReceiptsPage() {
   const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
   const [page, setPage] = useState(1);
+  const [downloading, setDownloading] = useState(false);
 
   const params = new URLSearchParams({ from, to, page: String(page) });
   const { data, isLoading } = useSWR<ReceiptsData>(
@@ -74,6 +92,28 @@ export default function ReceiptsPage() {
 
   const totalAmount = data?.receipts.reduce((s, r) => s + r.totalTHB, 0) ?? 0;
 
+  function setPeriod(f: string, t: string) {
+    setFrom(f);
+    setTo(t);
+    setPage(1);
+  }
+
+  async function downloadCsv() {
+    setDownloading(true);
+    try {
+      const url = `/api/receipts/export?from=${from}&to=${to}`;
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `receipts_${from}_to_${to}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center gap-3 mb-5">
@@ -81,8 +121,36 @@ export default function ReceiptsPage() {
         <h1 className="text-xl font-bold text-navy">ใบเสร็จดิจิตอล</h1>
       </div>
 
-      <div className="mb-4">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
+      {/* Period shortcuts */}
+      <div className="flex gap-2 mb-3 flex-wrap">
+        {PERIODS.map((p) => {
+          const [f, t] = p.getRange();
+          const active = from === f && to === t;
+          return (
+            <button
+              key={p.label}
+              onClick={() => setPeriod(f, t)}
+              className={`px-4 py-1.5 text-sm rounded-xl font-semibold border transition-colors ${
+                active ? "bg-navy text-white border-navy" : "bg-white text-navy border-sand hover:border-orange"
+              }`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-4 flex items-end gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
+        </div>
+        <button
+          onClick={downloadCsv}
+          disabled={downloading || !data?.total}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors shrink-0"
+        >
+          {downloading ? "⏳" : "⬇️"} ดาวน์โหลด CSV
+        </button>
       </div>
 
       {data && (

@@ -8,6 +8,8 @@ import {
   buildReceiptEscPos, buildKitchenEscPos, printToSerial,
   getGrantedPrinter,
 } from "@/lib/thermal-print";
+import { buildReceiptHtml } from "@/lib/receipt-html";
+import type { ReceiptHtmlSettings } from "@/lib/receipt-html";
 
 interface ReceiptSettings {
   shopName: string;
@@ -96,49 +98,17 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
     if (ok) return;
   }
   // Fallback: browser print window
-  const dateStr = formatThaiDateTime(order.createdAt);
-  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
-  const fs = settings.htmlFontSize ?? 13;
-  const hAlign = settings.headerAlign ?? "center";
-  const itemsHtml = order.items
-    .map((item) => {
-      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
-      const subtotal = item.unitPriceTHB * item.quantity;
-      const extras = [
-        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
-        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
-      ].filter(Boolean).join(" | ");
-      return `<tr>
-        <td style="padding:4px 2px;vertical-align:top">
-          ${item.menuItem.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
-          ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
-        </td>
-        ${settings.showItemPrice ? `<td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>` : ""}
-      </tr>`;
-    })
-    .join("");
-
-  const logoSz = settings.logoSize ?? 80;
-  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ #${order.id}</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:${logoSz}px;max-height:${logoSz}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(fs*0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
-</head><body>
-${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="logo"/>` : ""}
-<h1>${settings.logoUrl ? "" : "🎲 "}${settings.shopName}</h1>
-<div class="sub">${settings.shopInfo} • ใบเสร็จรับเงิน</div>
-<hr class="divider"/>
-<div style="font-size:12px;margin-bottom:4px">
-${settings.showCustomer ? `<div><b>ออเดอร์:</b> ${order.orderName || `#${order.id}`}</div>` : ""}
-${settings.showOrderId ? `<div><b>เลขที่:</b> #${order.id}</div>` : ""}
-${settings.showDate ? `<div><b>วันที่:</b> ${dateStr}</div>` : ""}
-</div>
-<hr class="divider"/>
-<table><tbody>${itemsHtml}</tbody>
-${settings.showTotal ? `<tfoot><tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${order.totalTHB}</td></tr></tfoot>` : ""}
-</table>
-${settings.showNote && order.note ? `<div class="note">📝 หมายเหตุ: ${order.note}</div>` : ""}
-<div class="footer">${settings.footer}</div>
-</body></html>`);
+  openPrintWindow(buildReceiptHtml(
+    {
+      orderId: order.id,
+      orderName: order.orderName,
+      totalTHB: order.totalTHB,
+      note: order.note,
+      dateStr: formatThaiDateTime(order.createdAt),
+      items: order.items.map((i) => ({ ...i, nameTh: i.menuItem.nameTh })),
+    },
+    settings as ReceiptHtmlSettings
+  ));
 }
 
 async function printBillGroupReceipt(orders: OrderWithItems[], settings: ReceiptSettings = DEFAULT_RECEIPT) {
@@ -172,47 +142,16 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
   }
 
   // Fallback: browser print window
-  const dateStr = formatThaiDateTime(first.createdAt);
-  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
-  const fs = settings.htmlFontSize ?? 13;
-  const hAlign = settings.headerAlign ?? "center";
-  const itemsHtml = allItems
-    .map((item) => {
-      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
-      const subtotal = item.unitPriceTHB * item.quantity;
-      const extras = [
-        addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
-        options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
-      ].filter(Boolean).join(" | ");
-      return `<tr>
-        <td style="padding:4px 2px;vertical-align:top">
-          ${item.nameTh}${item.selectedSize ? ` (${item.selectedSize})` : ""} ×${item.quantity}
-          ${extras ? `<br/><small style="color:#888">${extras}</small>` : ""}
-        </td>
-        ${settings.showItemPrice ? `<td style="padding:4px 2px;text-align:right;vertical-align:top;white-space:nowrap">฿${subtotal}</td>` : ""}
-      </tr>`;
-    })
-    .join("");
-
-  const logoSzB = settings.logoSize ?? 80;
-  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบเสร็จ ${orderName}</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0;padding:3mm 4mm}.logo{display:block;max-width:${logoSzB}px;max-height:${logoSzB}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs*1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs*0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs*1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.footer{text-align:center;font-size:${Math.round(fs*0.85)}px;color:#777;margin-top:6px}</style>
-</head><body>
-${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="logo"/>` : ""}
-<h1>${settings.logoUrl ? "" : "🎲 "}${settings.shopName}</h1>
-<div class="sub">${settings.shopInfo} • ใบเสร็จรับเงิน</div>
-<hr class="divider"/>
-<div style="font-size:12px;margin-bottom:4px">
-<div><b>ตี้:</b> ${orderName}</div>
-${settings.showDate ? `<div><b>วันที่:</b> ${dateStr}</div>` : ""}
-</div>
-<hr class="divider"/>
-<table><tbody>${itemsHtml}</tbody>
-${settings.showTotal ? `<tfoot><tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${totalTHB}</td></tr></tfoot>` : ""}
-</table>
-<div class="footer">${settings.footer}</div>
-</body></html>`);
+  openPrintWindow(buildReceiptHtml(
+    {
+      orderId: first.id,
+      orderName,
+      totalTHB,
+      dateStr: formatThaiDateTime(first.createdAt),
+      items: allItems,
+    },
+    settings as ReceiptHtmlSettings
+  ));
 }
 
 async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
@@ -941,7 +880,6 @@ export default function OrderQueue() {
     });
     setCashOrder(null);
     setCashInputStr("");
-    printReceipt(order, receiptSettings);
     await mutate();
     setLoading(order.id, false);
   }
@@ -984,7 +922,6 @@ export default function OrderQueue() {
       });
       setBillGroupCash(null);
       setBillCashInputStr("");
-      void printBillGroupReceipt(snapshot.orders, receiptSettings);
       await mutate();
     } finally {
       setBillGroupCashLoading(false);
@@ -1002,7 +939,6 @@ export default function OrderQueue() {
         body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY" }),
       });
       setBillGroupScan(null);
-      void printBillGroupReceipt(snapshot.orders, receiptSettings);
       await mutate();
     } finally {
       setBillScanLoading(false);
@@ -1018,7 +954,6 @@ export default function OrderQueue() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentId: order.payment.id }),
     });
-    printReceipt(order, receiptSettings);
     await mutate();
     setLoading(order.id, false);
   }
