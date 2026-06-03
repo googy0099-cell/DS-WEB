@@ -7,6 +7,7 @@ import MobileNav from "@/components/admin/MobileNav";
 import SidebarNav from "@/components/admin/SidebarNav";
 import GlobalOrderAlert from "@/components/admin/GlobalOrderAlert";
 import AppointmentBanner from "@/components/admin/AppointmentBanner";
+import ChecklistStatusBanner from "@/components/admin/ChecklistStatusBanner";
 
 export const metadata: Metadata = {
   manifest: "/manifest-admin.json",
@@ -85,6 +86,7 @@ const GROUP_HR: NavGroup = {
     { href: "/admin/hr/schedule", label: "ตารางพนักงาน", icon: "hr-schedule" },
     { href: "/admin/hr/payroll", label: "เงินเดือน", icon: "hr-payroll" },
     { href: "/admin/hr/payment-calendar", label: "ปฏิทินจ่ายเงิน", icon: "hr-calendar" },
+    { href: "/admin/hr/checklist", label: "เช็คลิสต์", icon: "hr-checklist" },
   ],
 };
 
@@ -120,6 +122,7 @@ export default async function AdminLayout({
         <RegisterSW />
         <WakeLock />
         {role === "OWNER" && <AppointmentBanner />}
+        <ChecklistStatusBanner />
         {children}
       </main>
 

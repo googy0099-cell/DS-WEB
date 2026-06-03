@@ -8,10 +8,13 @@ import {
   getTodaySchedule,
 } from "@/lib/hr-attendance";
 
+const BKK = 7 * 3600_000;
+
 export async function POST(req: NextRequest) {
-  const { staffId, photoBase64 } = (await req.json()) as {
+  const { staffId, photoBase64, force } = (await req.json()) as {
     staffId: number;
     photoBase64: string;
+    force?: boolean;
   };
 
   if (!staffId || !photoBase64) {
@@ -63,6 +66,33 @@ export async function POST(req: NextRequest) {
   });
 
   if (openRecord) {
+    // Block checkout if CLOSE checklist is incomplete
+    if (!force) {
+      const bkkNow = new Date(Date.now() + BKK);
+      const dateStr = bkkNow.toISOString().slice(0, 10);
+      const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
+      const tomorrowBKK = new Date(todayBKK.getTime() + 86400_000);
+      const closeChecklist = await db.hrChecklist.findFirst({
+        where: { type: "CLOSE", date: { gte: todayBKK, lt: tomorrowBKK } },
+        include: { items: { select: { done: true } } },
+      });
+      if (closeChecklist && closeChecklist.items.length > 0) {
+        const doneCount = closeChecklist.items.filter((i) => i.done).length;
+        const totalCount = closeChecklist.items.length;
+        if (doneCount < totalCount) {
+          const staffWithRole = await db.hrStaff.findUnique({ where: { id: staff.id }, include: { user: { select: { role: true } } } });
+          return NextResponse.json({
+            error: `เช็คลิสต์ปิดร้านยังไม่เสร็จ (${doneCount}/${totalCount} รายการ)`,
+            checklistIncomplete: true,
+            doneCount,
+            totalCount,
+            canForce: staffWithRole?.user.role === "OWNER",
+            similarity: result.similarity,
+          }, { status: 403 });
+        }
+      }
+    }
+
     const status = computeCheckOutStatus(now, schedule);
     const record = await db.hrAttendance.update({
       where: { id: openRecord.id },

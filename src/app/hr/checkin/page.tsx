@@ -84,6 +84,10 @@ export default function HrCheckinPage() {
     status: string | null;
     similarity: number;
   } | null>(null);
+  const [checklistBlock, setChecklistBlock] = useState<{
+    doneCount: number; totalCount: number; canForce: boolean;
+    staffId: number; photo: string;
+  } | null>(null);
 
   // register state
   const [regStep, setRegStep] = useState<RegisterStep>("pick");
@@ -279,16 +283,23 @@ export default function HrCheckinPage() {
     livenessLoopRef.current = requestAnimationFrame(tick);
   }
 
-  async function submitIdentify(staffId: number, photo: string) {
+  async function submitIdentify(staffId: number, photo: string, force = false) {
     setCheckinStep("identifying");
+    setChecklistBlock(null);
     try {
       const res = await fetch("/api/hr/face/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffId, photoBase64: photo }),
+        body: JSON.stringify({ staffId, photoBase64: photo, force }),
       });
       const data = await res.json();
       if (!res.ok) {
+        if (data.checklistIncomplete) {
+          setChecklistBlock({ doneCount: data.doneCount, totalCount: data.totalCount, canForce: data.canForce, staffId, photo });
+          setCheckinStep("idle");
+          stopCamera();
+          return;
+        }
         setCheckinError(data.error ?? "เช็คอินไม่สำเร็จ");
         setCheckinStep("idle");
         setCheckinTarget(null);
@@ -538,6 +549,34 @@ export default function HrCheckinPage() {
             <div className="flex-1 flex flex-col items-center justify-center gap-4">
               <div className="w-16 h-16 border-4 border-[#fb8500] border-t-transparent rounded-full animate-spin" />
               <p className="text-[#f8f1e5]/70">กำลังตรวจสอบตัวตน...</p>
+            </div>
+          )}
+
+          {checklistBlock && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+              <div className="text-5xl">🌙</div>
+              <p className="text-xl font-bold text-[#fb8500]">เช็คลิสต์ปิดร้านยังไม่เสร็จ</p>
+              <p className="text-[#f8f1e5]/60 text-sm">
+                ทำแล้ว {checklistBlock.doneCount}/{checklistBlock.totalCount} รายการ<br/>
+                ต้องทำให้ครบก่อนจึงจะเช็คเอาท์ได้
+              </p>
+              <button
+                onClick={() => { setChecklistBlock(null); window.location.href = "/hr/checklist"; }}
+                className="w-full bg-[#fb8500] text-white font-bold py-4 rounded-2xl text-base"
+              >
+                ไปทำเช็คลิสต์ปิดร้าน →
+              </button>
+              {checklistBlock.canForce && (
+                <button
+                  onClick={() => { submitIdentify(checklistBlock.staffId, checklistBlock.photo, true); }}
+                  className="text-sm text-red-400 border border-red-400/30 px-4 py-2 rounded-xl"
+                >
+                  บังคับออก (Owner เท่านั้น)
+                </button>
+              )}
+              <button onClick={() => setChecklistBlock(null)} className="text-[#f8f1e5]/40 text-sm mt-1">
+                ยกเลิก
+              </button>
             </div>
           )}
 

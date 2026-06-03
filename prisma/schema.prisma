@@ -572,6 +572,7 @@ model HrStaff {
   user                  User         @relation("HrStaff", fields: [userId], references: [id])
   attendances           HrAttendance[]
   checklists            HrChecklist[]
+  checklistItemsDone    HrChecklistItem[] @relation("ChecklistItemDoneBy")
   tasks                 HrTask[]     @relation("HrTaskAssignee")
   kpis                  HrKpi[]
   schedules             HrSchedule[]
@@ -631,14 +632,33 @@ model HrChecklist {
 }
 
 model HrChecklistItem {
-  id          Int         @id @default(autoincrement())
-  checklistId Int         @map("checklist_id")
-  label       String
-  done        Boolean     @default(false)
-  photoUrl    String?     @map("photo_url")
-  doneAt      DateTime?   @map("done_at")
-  checklist   HrChecklist @relation(fields: [checklistId], references: [id])
+  id            Int                  @id @default(autoincrement())
+  checklistId   Int                  @map("checklist_id")
+  templateId    Int?                 @map("template_id")
+  label         String
+  section       String?
+  done          Boolean              @default(false)
+  photoUrl      String?              @map("photo_url")
+  doneAt        DateTime?            @map("done_at")
+  doneBy        Int?                 @map("done_by")
+  requiresPhoto Boolean              @default(false) @map("requires_photo")
+  checklist     HrChecklist          @relation(fields: [checklistId], references: [id])
+  template      HrChecklistTemplate? @relation(fields: [templateId], references: [id])
+  doneByStaff   HrStaff?             @relation("ChecklistItemDoneBy", fields: [doneBy], references: [id])
   @@map("hr_checklist_item")
+}
+
+model HrChecklistTemplate {
+  id            Int               @id @default(autoincrement())
+  type          String            // "OPEN" | "CLOSE"
+  section       String?
+  label         String
+  order         Int               @default(0)
+  requiresPhoto Boolean           @default(false) @map("requires_photo")
+  isActive      Boolean           @default(true) @map("is_active")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  items         HrChecklistItem[]
+  @@map("hr_checklist_template")
 }
 
 model HrTask {

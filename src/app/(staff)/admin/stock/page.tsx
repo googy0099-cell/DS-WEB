@@ -97,6 +97,17 @@ export default function StockPage() {
     mutate();
   }
 
+  async function deleteItem(item: StockItem) {
+    if (!confirm(`ลบ "${item.name}" ออกจากระบบ?\nประวัติการรับ-จ่ายจะถูกลบด้วย`)) return;
+    const res = await fetch(`/api/stock/items?id=${item.id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error ?? "เกิดข้อผิดพลาด");
+      return;
+    }
+    mutate();
+  }
+
   // ── Stock-in ──────────────────────────────────────────────────────────────
 
   async function submitStockIn() {
@@ -206,6 +217,10 @@ export default function StockPage() {
                       <button onClick={() => toggleActive(item)}
                         className={`text-xs px-2 py-1 rounded-lg border ${item.isActive ? "border-red-200 text-red-400 hover:bg-red-50" : "border-green-200 text-green-600 hover:bg-green-50"}`}>
                         {item.isActive ? "ปิด" : "เปิด"}
+                      </button>
+                      <button onClick={() => deleteItem(item)}
+                        className="text-xs px-2 py-1 rounded-lg border border-red-300 text-red-500 hover:bg-red-50">
+                        ลบ
                       </button>
                     </div>
                   </td>

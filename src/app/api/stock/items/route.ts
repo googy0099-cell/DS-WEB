@@ -55,3 +55,23 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(item, { status: 201 });
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await requireStaff();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const id = Number(searchParams.get("id"));
+  if (!id) return NextResponse.json({ error: "id จำเป็น" }, { status: 400 });
+
+  const recipes = await db.menuStockRecipe.count({ where: { stockItemId: id } });
+  if (recipes > 0)
+    return NextResponse.json({ error: "ไม่สามารถลบได้ — มีสูตรอาหารที่ใช้วัตถุดิบนี้อยู่" }, { status: 409 });
+
+  await db.stockAlert.deleteMany({ where: { stockItemId: id } });
+  await db.stockInLog.deleteMany({ where: { stockItemId: id } });
+  await db.stockOutLog.deleteMany({ where: { stockItemId: id } });
+  await db.stockItem.delete({ where: { id } });
+
+  return NextResponse.json({ ok: true });
+}

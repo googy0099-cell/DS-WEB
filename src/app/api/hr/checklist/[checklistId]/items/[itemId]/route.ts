@@ -12,13 +12,18 @@ export async function PATCH(
   const { checklistId, itemId } = await params;
   const { done, photoBase64 } = (await req.json()) as { done: boolean; photoBase64?: string };
 
+  const userId = Number(session.user.id);
+  const hrStaff = await db.hrStaff.findUnique({ where: { userId } });
+
   const item = await db.hrChecklistItem.update({
     where: { id: Number(itemId), checklistId: Number(checklistId) },
     data: {
       done,
       doneAt: done ? new Date() : null,
-      photoUrl: photoBase64 ?? undefined,
+      doneBy: done ? (hrStaff?.id ?? null) : null,
+      photoUrl: photoBase64 !== undefined ? (photoBase64 || null) : undefined,
     },
+    include: { doneByStaff: { include: { user: { select: { firstName: true } } } } },
   });
 
   return NextResponse.json(item);

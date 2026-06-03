@@ -8,7 +8,7 @@ import {
   SlidersHorizontal, ChefHat, GlassWater, Package, BookOpen,
   Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
   KeyRound, BarChart3, ScrollText, QrCode, Settings2,
-  CalendarDays, Wallet, CalendarCheck,
+  CalendarDays, Wallet, CalendarCheck, ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +41,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "hr-schedule": CalendarDays,
   "hr-payroll": Wallet,
   "hr-calendar": CalendarCheck,
+  "hr-checklist": ClipboardList,
 };
 
 export default function MobileNav({

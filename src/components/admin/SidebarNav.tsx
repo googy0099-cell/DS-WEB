@@ -9,7 +9,7 @@ import {
   SlidersHorizontal, ChefHat, GlassWater, Package, BookOpen,
   Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
   KeyRound, BarChart3, ScrollText, QrCode, Settings2,
-  CalendarDays, Wallet, CalendarCheck,
+  CalendarDays, Wallet, CalendarCheck, ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +42,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   "hr-schedule": CalendarDays,
   "hr-payroll": Wallet,
   "hr-calendar": CalendarCheck,
+  "hr-checklist": ClipboardList,
 };
 
 const SIDEBAR_KEY = "admin-sidebar-collapsed";
@@ -164,7 +165,7 @@ export default function SidebarNav({
               )}
 
               {(collapsed || groupOpen) && (
-                <div className="space-y-0.5">
+                <div className={`space-y-0.5 ${!collapsed && group.label ? "bg-white/5 rounded-xl px-1 py-0.5" : ""}`}>
                   {group.items.map((item) => {
                     const active = isActive(item.href);
                     const IconComp = ICON_MAP[item.icon] ?? LayoutDashboard;

@@ -4,14 +4,15 @@ import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import HrNav from "@/components/hr/HrNav";
-import { CHECKLIST_TEMPLATES } from "@/lib/hr-checklist-template";
 
 type ChecklistItem = {
   id: number;
   label: string;
+  section: string | null;
   done: boolean;
   photoUrl: string | null;
   requiresPhoto: boolean;
+  doneByStaff: { user: { firstName: string } } | null;
 };
 
 type Checklist = {
@@ -20,12 +21,28 @@ type Checklist = {
   items: ChecklistItem[];
 };
 
+type Section = { name: string | null; items: ChecklistItem[] };
+
+function groupBySections(items: ChecklistItem[]): Section[] {
+  const sections: Section[] = [];
+  let current: Section | null = null;
+  for (const item of items) {
+    if (!current || current.name !== item.section) {
+      current = { name: item.section, items: [] };
+      sections.push(current);
+    }
+    current.items.push(item);
+  }
+  return sections;
+}
+
 export default function ChecklistPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [type, setType] = useState<"OPEN" | "CLOSE" | null>(null);
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(false);
+  const [savingId, setSavingId] = useState<number | null>(null);
   const [cameraItem, setCameraItem] = useState<ChecklistItem | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -61,15 +78,13 @@ export default function ChecklistPage() {
 
   async function toggleItem(item: ChecklistItem) {
     if (!checklist) return;
-    if (!item.done && item.requiresPhoto) {
-      setCameraItem(item);
-      return;
-    }
+    if (!item.done && item.requiresPhoto) { setCameraItem(item); return; }
     await patchItem(item.id, !item.done);
   }
 
   async function patchItem(itemId: number, done: boolean, photoBase64?: string) {
     if (!checklist) return;
+    setSavingId(itemId);
     const res = await fetch(`/api/hr/checklist/${checklist.id}/items/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -77,8 +92,9 @@ export default function ChecklistPage() {
     });
     const updated = await res.json();
     setChecklist((c) =>
-      c ? { ...c, items: c.items.map((i) => (i.id === updated.id ? { ...i, ...updated, requiresPhoto: i.requiresPhoto } : i)) } : c
+      c ? { ...c, items: c.items.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)) } : c
     );
+    setSavingId(null);
   }
 
   async function capturePhoto() {
@@ -96,16 +112,20 @@ export default function ChecklistPage() {
   const doneCount = checklist?.items.filter((i) => i.done).length ?? 0;
   const totalCount = checklist?.items.length ?? 0;
   const allDone = totalCount > 0 && doneCount === totalCount;
+  const sections = checklist ? groupBySections(checklist.items) : [];
 
-  if (status === "loading") return <div className="min-h-screen flex items-center justify-center text-[#f8f1e5]/40 text-sm">กำลังโหลด...</div>;
+  if (status === "loading") return (
+    <div className="min-h-screen flex items-center justify-center text-[#f8f1e5]/40 text-sm">กำลังโหลด...</div>
+  );
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-6">
       <h1 className="text-lg font-bold mb-1">เช็คลิสต์ประจำวัน</h1>
       <p className="text-[#f8f1e5]/50 text-xs mb-5">
-        {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" })}
+        {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
       </p>
 
+      {/* Type selector */}
       {!type && (
         <div className="grid grid-cols-2 gap-4 mt-8">
           {(["OPEN", "CLOSE"] as const).map((t) => (
@@ -116,28 +136,26 @@ export default function ChecklistPage() {
             >
               <span className="text-4xl">{t === "OPEN" ? "🌅" : "🌙"}</span>
               <span className="font-semibold">{t === "OPEN" ? "เปิดร้าน" : "ปิดร้าน"}</span>
-              <span className="text-[#f8f1e5]/40 text-xs">{CHECKLIST_TEMPLATES[t].length} รายการ</span>
             </button>
           ))}
         </div>
       )}
 
+      {/* Checklist view */}
       {type && (
         <>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-3">
             <button onClick={() => { setType(null); setChecklist(null); }} className="text-[#f8f1e5]/40 text-sm">
               ← กลับ
             </button>
-            <span className="text-sm font-semibold">
-              {type === "OPEN" ? "🌅 เปิดร้าน" : "🌙 ปิดร้าน"}
-            </span>
+            <span className="text-sm font-semibold">{type === "OPEN" ? "🌅 เปิดร้าน" : "🌙 ปิดร้าน"}</span>
             <span className="text-[#fb8500] text-sm font-bold">{doneCount}/{totalCount}</span>
           </div>
 
           {/* Progress bar */}
-          <div className="w-full h-1.5 bg-white/10 rounded-full mb-5">
+          <div className="w-full h-2 bg-white/10 rounded-full mb-5">
             <div
-              className="h-1.5 bg-[#fb8500] rounded-full transition-all"
+              className={`h-2 rounded-full transition-all ${allDone ? "bg-emerald-500" : "bg-[#fb8500]"}`}
               style={{ width: totalCount ? `${(doneCount / totalCount) * 100}%` : "0%" }}
             />
           </div>
@@ -145,43 +163,61 @@ export default function ChecklistPage() {
           {loading ? (
             <div className="text-center text-[#f8f1e5]/40 text-sm py-10">กำลังโหลด...</div>
           ) : (
-            <div className="flex flex-col gap-3">
-              {checklist?.items.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => toggleItem(item)}
-                  className={`flex items-center gap-3 p-4 rounded-2xl border transition-colors text-left ${
-                    item.done
-                      ? "bg-emerald-500/10 border-emerald-500/30"
-                      : "bg-white/5 border-white/10"
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 ${
-                    item.done ? "bg-emerald-500 border-emerald-500" : "border-white/30"
-                  }`}>
-                    {item.done && <span className="text-white text-xs">✓</span>}
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-medium ${item.done ? "line-through text-[#f8f1e5]/40" : ""}`}>
-                      {item.label}
+            <div className="space-y-4">
+              {sections.map((sec, si) => (
+                <div key={si}>
+                  {sec.name && (
+                    <p className="text-xs font-bold text-[#fb8500]/80 uppercase tracking-wider mb-2 px-1">
+                      {sec.name}
                     </p>
-                    {item.requiresPhoto && !item.done && (
-                      <p className="text-[#fb8500] text-xs mt-0.5">📷 ต้องถ่ายรูป</p>
-                    )}
-                  </div>
-                  {item.done && item.photoUrl && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.photoUrl} alt="" className="w-10 h-10 rounded-lg object-cover" />
                   )}
-                </button>
+                  <div className="flex flex-col gap-2">
+                    {sec.items.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => toggleItem(item)}
+                        disabled={savingId === item.id}
+                        className={`flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-colors ${
+                          item.done
+                            ? "bg-emerald-500/10 border-emerald-500/30"
+                            : "bg-white/5 border-white/10 active:bg-white/10"
+                        } ${savingId === item.id ? "opacity-50" : ""}`}
+                      >
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2 ${
+                          item.done ? "bg-emerald-500 border-emerald-500" : "border-white/30"
+                        }`}>
+                          {item.done && <span className="text-white text-xs font-bold">✓</span>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium leading-snug ${item.done ? "line-through text-[#f8f1e5]/40" : ""}`}>
+                            {item.label}
+                          </p>
+                          {item.requiresPhoto && !item.done && (
+                            <p className="text-[#fb8500] text-xs mt-0.5">📷 ต้องถ่ายรูป</p>
+                          )}
+                          {item.done && item.doneByStaff && (
+                            <p className="text-[#f8f1e5]/30 text-xs mt-0.5">โดย {item.doneByStaff.user.firstName}</p>
+                          )}
+                        </div>
+                        {item.done && item.photoUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={item.photoUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           )}
 
           {allDone && (
             <div className="mt-6 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-center">
-              <p className="text-emerald-400 font-bold">เสร็จสมบูรณ์ ✓</p>
+              <p className="text-emerald-400 font-bold text-lg">เสร็จสมบูรณ์ ✓</p>
               <p className="text-[#f8f1e5]/50 text-xs mt-1">เช็คลิสต์ครบทุกรายการแล้ว</p>
+              {type === "CLOSE" && (
+                <p className="text-emerald-400/70 text-xs mt-2">สามารถเช็คเอาท์ได้แล้ว</p>
+              )}
             </div>
           )}
         </>
