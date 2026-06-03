@@ -332,34 +332,46 @@ export default function CashierPage() {
           🛍️ บันทึกรายจ่ายจากเก๊ะ / พนักงานออกเงินเอง
         </button>
 
-        {/* Today's expenses */}
-        {(summary?.pettyExpenses?.length ?? 0) > 0 && (
-          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-            <p className="text-sm font-bold text-navy px-4 py-3 border-b border-sand">🛍️ รายจ่ายวันนี้</p>
-            <div className="divide-y divide-sand/50 max-h-48 overflow-y-auto">
+        {/* Today's expenses — always visible */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-amber-100">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-sand">
+            <p className="text-sm font-bold text-navy">🛍️ รายจ่ายวันนี้</p>
+            {(summary?.pettyExpenses?.length ?? 0) > 0 && (
+              <span className="text-xs text-gray-400">{summary!.pettyExpenses.length} รายการ</span>
+            )}
+          </div>
+          {(summary?.pettyExpenses?.length ?? 0) === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">ยังไม่มีรายจ่ายวันนี้</p>
+          ) : (
+            <div className="divide-y divide-sand/50 max-h-52 overflow-y-auto">
               {summary!.pettyExpenses.map((e) => (
                 <div key={e.id} className="flex items-start gap-3 px-4 py-2.5">
-                  <span className="text-lg shrink-0">{e.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
+                  <span className="text-base shrink-0">{e.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-navy truncate">{e.description}</p>
-                    <p className="text-xs text-gray-400">{e.type === "PETTY_CASH" ? "ซื้อของเข้าร้าน" : "พนักงานออกเองก่อน"}{e.type === "STAFF_ADVANCE" && e.reimbursed ? " · คืนแล้ว ✅" : ""}</p>
+                    <p className="text-xs text-gray-400">
+                      {e.type === "PETTY_CASH" ? "ซื้อของเข้าร้าน" : "พนักงานออกเองก่อน"}
+                      {e.type === "STAFF_ADVANCE" && e.reimbursed ? " · คืนแล้ว ✅" : ""}
+                    </p>
                   </div>
                   <p className="text-sm font-bold text-red-600 shrink-0">-฿{e.amount.toLocaleString()}</p>
                 </div>
               ))}
             </div>
+          )}
+          {(summary?.pettyTotal ?? 0) > 0 && (
             <div className="px-4 py-2.5 border-t border-sand bg-amber-50 flex justify-between text-sm">
               <span className="text-amber-700 font-semibold">รวมรายจ่ายเก๊ะ</span>
               <span className="font-bold text-red-600">-฿{(summary?.pettyTotal ?? 0).toLocaleString()}</span>
             </div>
-            {(summary?.advanceTotal ?? 0) > 0 && (
-              <div className="px-4 py-2 bg-purple-50 flex justify-between text-sm">
-                <span className="text-purple-700 font-semibold">ค้างจ่ายคืนพนักงาน</span>
-                <span className="font-bold text-purple-700">฿{(summary?.advanceTotal ?? 0).toLocaleString()}</span>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {(summary?.advanceTotal ?? 0) > 0 && (
+            <div className="px-4 py-2 bg-purple-50 flex justify-between text-sm border-t border-purple-100">
+              <span className="text-purple-700 font-semibold">ค้างจ่ายคืนพนักงาน</span>
+              <span className="font-bold text-purple-700">฿{(summary?.advanceTotal ?? 0).toLocaleString()}</span>
+            </div>
+          )}
+        </div>
 
         <div className="text-center">
           <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับ Dashboard</Link>
