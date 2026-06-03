@@ -238,8 +238,8 @@ export default function HrCheckinPage() {
                 <video ref={videoRef} autoPlay playsInline muted
                   className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-56 h-56 rounded-full border-2 border-[#fb8500]/70"
-                    style={{ boxShadow: "0 0 0 9999px rgba(24,42,71,0.55)" }} />
+                  <div className="rounded-full border-2 border-[#fb8500]/70"
+                    style={{ width: "min(72vw, 72vh)", height: "min(72vw, 72vh)", boxShadow: "0 0 0 9999px rgba(24,42,71,0.55)" }} />
                 </div>
                 <p className="absolute bottom-20 left-0 right-0 text-center text-[#f8f1e5]/70 text-sm">
                   จ้องกล้องตรงๆ ภายในวงกลม
@@ -345,8 +345,8 @@ export default function HrCheckinPage() {
                 <video ref={videoRef} autoPlay playsInline muted
                   className="absolute inset-0 w-full h-full object-cover scale-x-[-1]" />
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-56 h-56 rounded-full border-2 border-[#fb8500]/70"
-                    style={{ boxShadow: "0 0 0 9999px rgba(24,42,71,0.55)" }} />
+                  <div className="rounded-full border-2 border-[#fb8500]/70"
+                    style={{ width: "min(72vw, 72vh)", height: "min(72vw, 72vh)", boxShadow: "0 0 0 9999px rgba(24,42,71,0.55)" }} />
                 </div>
                 <div className="absolute bottom-20 left-0 right-0 text-center">
                   <p className="font-semibold">{regTarget.name}</p>
