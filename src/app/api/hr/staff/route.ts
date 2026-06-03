@@ -27,6 +27,8 @@ export async function GET() {
       avatarUrl: s.user.avatarUrl,
       isCheckedIn: s.attendances.length > 0,
       faceData: s.faceData ?? null,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hasCredential: !!(s as any).credentialId,
     }))
   );
 }
