@@ -26,6 +26,7 @@ export async function GET() {
       name: `${s.user.firstName} ${s.user.lastName}`.trim(),
       avatarUrl: s.user.avatarUrl,
       isCheckedIn: s.attendances.length > 0,
+      faceData: s.faceData ?? null,
     }))
   );
 }
