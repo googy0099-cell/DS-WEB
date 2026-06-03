@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, notFound } from "next/navigation";
+import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "@/components/shared/Navbar";
-import CartDrawer from "@/components/orders/CartDrawer";
-import MenuItemPicker from "@/components/orders/MenuItemPicker";
-import { useOrderStore, makeCartKey } from "@/store/orderStore";
+import { QrCode } from "lucide-react";
 import type { MenuItemType } from "@/types";
 import { CategoryIcon } from "@/lib/categoryIcons";
 
@@ -39,17 +37,13 @@ export default function CategoryMenuPage() {
 
   const [items, setItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [shopOpen, setShopOpen] = useState(true);
   const [catInfo, setCatInfo] = useState<{ id: string; label: string; icon: string } | null>(null);
-  const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
-  const { addItem } = useOrderStore();
 
   useEffect(() => {
     Promise.all([
       fetch(`/api/menu?category=${categoryId}`).then((r) => r.json()),
       fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
-      fetch("/api/shop/status").then((r) => r.json()).catch(() => ({ isOpen: true })),
-    ]).then(([menuData, settings, shopStatus]) => {
+    ]).then(([menuData, settings]) => {
       const customCats: { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean }[] =
         settings?.menu_categories ? JSON.parse(settings.menu_categories) : [];
       const allCats = [
@@ -62,38 +56,14 @@ export default function CategoryMenuPage() {
       const found = allCats.find((c) => c.id === categoryId);
       setCatInfo(found ?? { id: categoryId, label: categoryId, icon: "🍽️" });
       setItems((menuData as MenuItemType[]).filter((i) => i.isAvailable));
-      setShopOpen(shopStatus?.isOpen ?? true);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [categoryId]);
 
-  function handleAdd(item: MenuItemType) {
-    const hasSizes = item.priceS != null || item.priceXL != null;
-    const hasGroups = item.addonGroups.length > 0 || item.optionGroups.length > 0;
-    if (hasSizes || hasGroups) {
-      setPickerItem(item);
-    } else {
-      addItem({
-        cartKey: makeCartKey(item.id, null, [], []),
-        menuItemId: item.id,
-        nameTh: item.nameTh,
-        priceTHB: item.priceTHB,
-        selectedSize: null,
-        selectedAddons: [],
-        selectedOptions: [],
-      });
-    }
-  }
-
   return (
     <>
       <Navbar />
-      {!shopOpen && (
-        <div className="fixed top-16 left-0 right-0 z-20 bg-red-500 text-white text-center py-3 px-4 font-semibold text-sm">
-          🔴 ร้านยังไม่เปิดรับออเดอร์ในขณะนี้
-        </div>
-      )}
-      <div className={`pt-16 min-h-screen bg-cream pb-28${!shopOpen ? " mt-10" : ""}`}>
+      <div className="pt-16 min-h-screen bg-cream pb-28">
         <div className="bg-navy px-4 py-8 text-center">
           <div className="flex justify-center mb-2">
             <CategoryIcon id={catInfo?.id ?? ""} fallback={catInfo?.icon ?? "🍽️"} size={52} className="text-cream/80" />
@@ -120,7 +90,7 @@ export default function CategoryMenuPage() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {items.map((item) => {
                 const hasSizes = item.priceS != null || item.priceXL != null;
-                const canOrder = isWithinSellHours(item.sellStartTime, item.sellEndTime);
+                const withinHours = isWithinSellHours(item.sellStartTime, item.sellEndTime);
                 return (
                   <div key={item.id} className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col">
                     {item.imageUrl ? (
@@ -135,26 +105,17 @@ export default function CategoryMenuPage() {
                     <div className="p-3 flex-1 flex flex-col">
                       <p className="font-bold text-navy text-sm leading-tight mb-0.5">{item.nameTh}</p>
                       <p className="text-gray-400 text-xs mb-2">{item.nameEn}</p>
-                      {!canOrder && (
+                      {!withinHours && (
                         <p className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded-lg mb-2">
                           ⏰ รับออเดอร์ {item.sellStartTime}–{item.sellEndTime} น.
                         </p>
                       )}
-                      <div className="flex items-center justify-between mt-auto">
-                        <div>
-                          {hasSizes ? (
-                            <p className="text-orange font-bold text-xs">S ฿{item.priceS} / XL ฿{item.priceXL}</p>
-                          ) : (
-                            <p className="text-orange font-bold">฿{item.priceTHB}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => canOrder && handleAdd(item)}
-                          disabled={!canOrder}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${canOrder ? "bg-orange text-white hover:bg-orange/90" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                        >
-                          + เพิ่ม
-                        </button>
+                      <div className="mt-auto">
+                        {hasSizes ? (
+                          <p className="text-orange font-bold text-xs">S ฿{item.priceS} / XL ฿{item.priceXL}</p>
+                        ) : (
+                          <p className="text-orange font-bold">฿{item.priceTHB}</p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -165,8 +126,14 @@ export default function CategoryMenuPage() {
         </div>
       </div>
 
-      <CartDrawer shopClosed={!shopOpen} />
-      {pickerItem && <MenuItemPicker item={pickerItem} onClose={() => setPickerItem(null)} />}
+      {/* Scan notice */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-navy text-cream px-4 py-4 text-center shadow-2xl">
+        <div className="flex items-center justify-center gap-2 mb-0.5">
+          <QrCode size={16} className="text-orange shrink-0" />
+          <p className="font-semibold text-sm">ต้องการสั่งอาหาร?</p>
+        </div>
+        <p className="text-cream/60 text-xs">โปรดสแกน QR Code ที่โต๊ะ หรือติดต่อพนักงาน</p>
+      </div>
     </>
   );
 }
