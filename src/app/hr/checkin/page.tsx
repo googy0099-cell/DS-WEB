@@ -42,9 +42,9 @@ export default function HrCheckinPage() {
       .catch(() => setScanStatus("โหลด AI ไม่สำเร็จ — ใช้ PIN แทน"));
   }, [fetchStaff]);
 
-  // Start camera on scan/registering step
+  // Start camera on scan/camera/registering step
   useEffect(() => {
-    if (step !== "scan" && step !== "registering") { stopCamera(); return; }
+    if (step !== "scan" && step !== "camera" && step !== "registering") { stopCamera(); return; }
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" }, audio: false })
       .then((stream) => {
@@ -102,7 +102,9 @@ export default function HrCheckinPage() {
 
   async function confirmMatch() {
     if (!selected) return;
-    setStep("camera");
+    setPin("");
+    setPinError("");
+    setStep("pin"); // ต้องยืนยัน PIN เสมอ แม้จำหน้าได้
   }
 
   async function captureAndSubmit() {
