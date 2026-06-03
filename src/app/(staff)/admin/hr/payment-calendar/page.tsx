@@ -18,6 +18,7 @@ type CalEvent = {
   description: string;
   type: EventType;
   recurrence: string | null;
+  notifyDaysBefore: number | null;
   isRecurring: boolean;
   isPaid: boolean;
   note: string | null;
@@ -95,6 +96,7 @@ export default function PaymentCalendarPage() {
   const [specialTitle, setSpecialTitle] = useState("");
   const [specialNote, setSpecialNote] = useState("");
   const [specialRecurrence, setSpecialRecurrence] = useState(false);
+  const [notifyDaysBefore, setNotifyDaysBefore] = useState<string>("");
   const [staffCalcs, setStaffCalcs] = useState<StaffCalc[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -134,6 +136,7 @@ export default function PaymentCalendarPage() {
     setSpecialTitle("");
     setSpecialNote("");
     setSpecialRecurrence(false);
+    setNotifyDaysBefore("");
     setStaffCalcs(staffOptions.map(s => ({
       staffId: s.id, name: s.name, payType: "", payRate: 0,
       fromDate: "", daysWorked: 0, workMinutes: 0, gross: 0,
@@ -201,6 +204,7 @@ export default function PaymentCalendarPage() {
         staffId: null, date: modal.date, amount: 0,
         description: specialTitle.trim(), type: specialType,
         recurrence: specialRecurrence ? "MONTHLY" : null,
+        notifyDaysBefore: notifyDaysBefore !== "" ? Number(notifyDaysBefore) : null,
         note: specialNote.trim() || undefined,
       }),
     });
@@ -447,8 +451,22 @@ export default function PaymentCalendarPage() {
 
                   <label className="block text-sm text-gray-600 mb-1">ชื่อ/รายละเอียด</label>
                   <input value={specialTitle} onChange={e => setSpecialTitle(e.target.value)}
-                    placeholder={specialType === "HOLIDAY" ? "เช่น วันสงกรานต์, วันหยุดพิเศษ" : "เช่น ประชุมทีม, ตรวจสต็อก"}
+                    placeholder={specialType === "HOLIDAY" ? "เช่น วันสงกรานต์, วันหยุดพิเศษ" : "เช่น ล้างแอร์, ล้างท่อ, เช็คระบบไฟ"}
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm mb-3" />
+
+                  {/* Notify before */}
+                  <label className="block text-sm text-gray-600 mb-1">🔔 แจ้งเตือน Telegram ล่วงหน้า</label>
+                  <div className="flex gap-2 mb-3">
+                    {["", "0", "1", "3", "7", "14"].map(v => (
+                      <button key={v} onClick={() => setNotifyDaysBefore(v)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+                          notifyDaysBefore === v ? "bg-orange text-white border-orange" : "border-sand text-gray-500"
+                        }`}>
+                        {v === "" ? "ไม่แจ้ง" : v === "0" ? "วันนั้น" : v === "1" ? "1 วัน" : `${v} วัน`}
+                      </button>
+                    ))}
+                  </div>
+
                   <label className="block text-sm text-gray-600 mb-1">หมายเหตุ (ไม่บังคับ)</label>
                   <input value={specialNote} onChange={e => setSpecialNote(e.target.value)}
                     className="w-full border border-sand rounded-xl px-3 py-2 text-sm" />
@@ -498,6 +516,11 @@ export default function PaymentCalendarPage() {
             <p className="text-sm text-gray-500 mb-1">📅 {detail.date}</p>
             {detail.staffName && <p className="text-sm text-gray-500 mb-1">👤 {detail.staffName}</p>}
             {detail.amount > 0 && <p className="text-2xl font-bold text-navy mb-1">฿{thb(detail.amount)}</p>}
+            {detail.notifyDaysBefore !== null && detail.notifyDaysBefore !== undefined && (
+              <p className="text-xs text-orange mb-1">
+                🔔 แจ้งเตือนล่วงหน้า {detail.notifyDaysBefore === 0 ? "วันนั้น" : `${detail.notifyDaysBefore} วัน`}
+              </p>
+            )}
             {detail.note && !detail.note.startsWith("recurring:") && (
               <p className="text-xs text-gray-400 mb-3">{detail.note}</p>
             )}

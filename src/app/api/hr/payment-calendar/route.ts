@@ -65,6 +65,7 @@ export async function GET(req: NextRequest) {
         description: e.description,
         type: e.type,
         recurrence: e.recurrence ?? null,
+        notifyDaysBefore: e.notifyDaysBefore ?? null,
         isRecurring: isRecurring ?? false,
         isPaid: isRecurring ? paidRecurringIds.has(e.id) : e.isPaid,
         note: e.note,
@@ -99,6 +100,7 @@ export async function POST(req: NextRequest) {
       description: string;
       type?: string;
       recurrence?: string | null;
+      notifyDaysBefore?: number | null;
       note?: string;
     };
 
@@ -114,6 +116,7 @@ export async function POST(req: NextRequest) {
         description: body.description,
         type: body.type ?? "SALARY",
         recurrence: body.recurrence ?? null,
+        notifyDaysBefore: body.notifyDaysBefore ?? null,
         note: body.note ?? null,
       },
     });
