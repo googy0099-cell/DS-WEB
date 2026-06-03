@@ -163,38 +163,41 @@ export async function uploadToGoogleSheets(
   sa.private_key = sa.private_key.replace(/\\n/g, "\n");
   const token = await getGoogleToken(sa);
 
-  // 1. Create spreadsheet with named sheets
-  const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+  // 1. Create file directly in target folder via Drive API
+  const createFileRes = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({
-      properties: { title },
-      sheets: sheets.map((s, i) => ({ properties: { sheetId: i, title: s.sheetName } })),
+      name: title,
+      mimeType: "application/vnd.google-apps.spreadsheet",
+      parents: [folderId],
     }),
   });
-  const spreadsheet = await createRes.json() as { spreadsheetId?: string; error?: { message: string } };
-  if (!spreadsheet.spreadsheetId) throw new Error(spreadsheet.error?.message ?? "Failed to create spreadsheet");
+  const file = await createFileRes.json() as { id?: string; error?: { message: string } };
+  if (!file.id) throw new Error(file.error?.message ?? "Failed to create file in Drive");
+  const spreadsheetId = file.id;
 
-  // 2. Write data to each sheet
+  // 2. Rename first sheet and add remaining sheets
+  const sheetRequests = [
+    { updateSheetProperties: { properties: { sheetId: 0, title: sheets[0].sheetName }, fields: "title" } },
+    ...sheets.slice(1).map((s, i) => ({ addSheet: { properties: { sheetId: i + 1, title: s.sheetName } } })),
+  ];
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ requests: sheetRequests }),
+  });
+
+  // 3. Write data to each sheet
   const data = sheets.map((s) => ({
     range: `${s.sheetName}!A1`,
     values: [s.header, ...s.rows],
   }));
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheet.spreadsheetId}/values:batchUpdate`, {
+  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),
   });
 
-  // 3. Move to target Drive folder
-  const moveRes = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${spreadsheet.spreadsheetId}?addParents=${folderId}&fields=id`,
-    { method: "PATCH", headers: { Authorization: `Bearer ${token}` } }
-  );
-  if (!moveRes.ok) {
-    const err = await moveRes.json() as { error?: { message: string } };
-    throw new Error(err.error?.message ?? "Failed to move file to Drive folder");
-  }
-
-  return `https://docs.google.com/spreadsheets/d/${spreadsheet.spreadsheetId}/edit`;
+  return `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit`;
 }
