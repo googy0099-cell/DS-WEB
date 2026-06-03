@@ -10,14 +10,18 @@ export async function POST(req: NextRequest) {
   if (!photoBase64) return NextResponse.json({ error: "ไม่มีรูป" }, { status: 400 });
 
   // Detect face in the check-in photo
-  let faceIdNew: string | null;
+  let faceIdNew: string;
   try {
     faceIdNew = await detectFace(photoBase64);
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
-  if (!faceIdNew) {
-    return NextResponse.json({ error: "ตรวจจับใบหน้าไม่พบ — ลองใหม่ใกล้ๆ กล้องกว่านี้" }, { status: 422 });
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg === "NO_FACE") {
+      return NextResponse.json(
+        { error: "ตรวจจับใบหน้าไม่พบ — ลองใหม่ใกล้ๆ กล้องกว่านี้" },
+        { status: 422 }
+      );
+    }
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 
   // Load all staff that have a reference photo
@@ -35,7 +39,6 @@ export async function POST(req: NextRequest) {
 
   for (const s of allStaff) {
     try {
-      // faceData may be JSON array (3 photos) or single base64 string (legacy)
       let refPhotos: string[];
       try {
         refPhotos = JSON.parse(s.faceData!);
@@ -46,10 +49,13 @@ export async function POST(req: NextRequest) {
 
       let maxConf = 0;
       for (const refPhoto of refPhotos) {
-        const faceIdRef = await detectFace(refPhoto);
-        if (!faceIdRef) continue;
-        const conf = await verifyFaces(faceIdNew, faceIdRef);
-        if (conf > maxConf) maxConf = conf;
+        try {
+          const faceIdRef = await detectFace(refPhoto);
+          const conf = await verifyFaces(faceIdNew, faceIdRef);
+          if (conf > maxConf) maxConf = conf;
+        } catch {
+          continue;
+        }
       }
 
       if (maxConf > (best?.confidence ?? 0)) {
@@ -65,7 +71,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (!best || best.confidence < CONFIDENCE_THRESHOLD) {
-    return NextResponse.json({ error: "ระบุตัวตนไม่ได้ — ลองใหม่หรือใช้ PIN" }, { status: 422 });
+    return NextResponse.json(
+      { error: `ระบุตัวตนไม่ได้ (best=${best ? best.confidence.toFixed(2) : "0"})` },
+      { status: 422 }
+    );
   }
 
   // Record attendance

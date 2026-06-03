@@ -7,7 +7,7 @@ async function postJson(path: string, body: unknown) {
     headers: { "Ocp-Apim-Subscription-Key": KEY, "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  return res.json();
+  return { status: res.status, body: await res.json() };
 }
 
 async function postImage(path: string, imageBase64: string) {
@@ -17,22 +17,41 @@ async function postImage(path: string, imageBase64: string) {
     headers: { "Ocp-Apim-Subscription-Key": KEY, "Content-Type": "application/octet-stream" },
     body: binary,
   });
-  return res.json();
+  return { status: res.status, body: await res.json() };
 }
 
 // ── detect: returns faceId (expires in 24h) ────────────────────────────────
+// Azure requires returnFaceId=true explicitly + detection_03 + recognition_04
+// for /verify to work. faceId access requires Limited Access approval for
+// new customers (since June 2024).
 
-export async function detectFace(imageBase64: string): Promise<string | null> {
-  const data = await postImage("/detect", imageBase64);
-  if (data.error) throw new Error(data.error.message);
-  if (!Array.isArray(data) || data.length === 0) return null;
-  return data[0].faceId as string;
+export async function detectFace(imageBase64: string): Promise<string> {
+  const path = "/detect?returnFaceId=true&detectionModel=detection_03&recognitionModel=recognition_04&returnFaceLandmarks=false";
+  const { status, body } = await postImage(path, imageBase64);
+
+  if (body?.error) {
+    throw new Error(`Azure ${status}: ${body.error.code ?? ""} — ${body.error.message ?? JSON.stringify(body.error)}`);
+  }
+  if (!Array.isArray(body)) {
+    throw new Error(`Azure ${status}: unexpected response — ${JSON.stringify(body).slice(0, 200)}`);
+  }
+  if (body.length === 0) {
+    throw new Error("NO_FACE");
+  }
+  if (!body[0].faceId) {
+    throw new Error(
+      `Azure ตรวจจับหน้าได้แต่ไม่ส่ง faceId กลับ — ต้องสมัคร Limited Access ที่ aka.ms/facerecognition (ปกติใช้เวลา 1-2 สัปดาห์). Response: ${JSON.stringify(body[0]).slice(0, 200)}`
+    );
+  }
+  return body[0].faceId as string;
 }
 
 // ── verify: compare two faceIds → confidence 0-1 ──────────────────────────
 
 export async function verifyFaces(faceId1: string, faceId2: string): Promise<number> {
-  const data = await postJson("/verify", { faceId1, faceId2 });
-  if (data.error) throw new Error(data.error.message);
-  return (data.confidence ?? 0) as number;
+  const { status, body } = await postJson("/verify", { faceId1, faceId2 });
+  if (body?.error) {
+    throw new Error(`Azure verify ${status}: ${body.error.code ?? ""} — ${body.error.message ?? JSON.stringify(body.error)}`);
+  }
+  return (body.confidence ?? 0) as number;
 }
