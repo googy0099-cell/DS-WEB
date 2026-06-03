@@ -22,6 +22,8 @@ export default function HrDashboardPage() {
   const router = useRouter();
   const role = (session?.user as { role?: string })?.role;
   const [data, setData] = useState<DashboardData | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
 
   useEffect(() => {
     if (status === "unauthenticated") { router.replace("/api/auth/signin"); return; }
@@ -37,6 +39,16 @@ export default function HrDashboardPage() {
     return () => clearInterval(id);
   }, [role]);
 
+  async function syncSheets() {
+    setSyncing(true);
+    setSyncMsg("");
+    const res = await fetch("/api/hr/sync-sheets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const d = await res.json();
+    setSyncing(false);
+    setSyncMsg(res.ok ? `✓ ซิงค์แล้ว ${d.synced} รายการ` : `✗ ${d.error}`);
+    setTimeout(() => setSyncMsg(""), 4000);
+  }
+
   if (status === "loading" || !data) {
     return <div className="min-h-screen flex items-center justify-center text-[#f8f1e5]/40 text-sm">กำลังโหลด...</div>;
   }
@@ -48,7 +60,15 @@ export default function HrDashboardPage() {
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-6">
-      <h1 className="text-lg font-bold mb-1">ภาพรวม HR</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-lg font-bold">ภาพรวม HR</h1>
+        <button onClick={syncSheets} disabled={syncing}
+          className="flex items-center gap-1.5 text-xs bg-white/5 border border-white/10 px-3 py-2 rounded-xl disabled:opacity-50">
+          <span>{syncing ? "⏳" : "📊"}</span>
+          {syncing ? "กำลังซิงค์..." : "Sync Sheets"}
+        </button>
+      </div>
+      {syncMsg && <p className={`text-xs mb-2 ${syncMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{syncMsg}</p>}
       <p className="text-[#f8f1e5]/50 text-xs mb-5">
         {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
       </p>
