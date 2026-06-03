@@ -8,6 +8,7 @@ const NAV = [
   { href: "/hr/checkin", label: "เช็คอิน", icon: "👋" },
   { href: "/hr/checklist", label: "เช็คลิสต์", icon: "✅" },
   { href: "/hr/tasks", label: "งาน", icon: "📋" },
+  { href: "/hr/kpi", label: "KPI", icon: "🎯" },
   { href: "/hr/dashboard", label: "ภาพรวม", icon: "📊", ownerOnly: true },
 ];
 
