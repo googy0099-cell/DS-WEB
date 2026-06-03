@@ -124,9 +124,14 @@ export default function CashierPage() {
 
   const loadSummary = useCallback(async () => {
     setLoadingSummary(true);
-    const data = await fetch("/api/cashier/summary").then((r) => r.json());
-    setSummary(data);
-    setLoadingSummary(false);
+    try {
+      const data = await fetch("/api/cashier/summary").then((r) => r.json());
+      setSummary(data);
+    } catch {
+      // fail silently — summary stays null, UI shows empty values
+    } finally {
+      setLoadingSummary(false);
+    }
   }, []);
 
   async function handleOpenClick() {

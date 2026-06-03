@@ -31,12 +31,10 @@ export async function GET() {
       include: { order: { select: { id: true, orderName: true, totalTHB: true } } },
       orderBy: { confirmedAt: "asc" },
     }),
-    // All SERVED orders today (food/drinks)
     db.order.findMany({
       where: { status: "SERVED", createdAt: { gte: start, lt: end } },
       select: { id: true, totalTHB: true, orderName: true, createdAt: true },
     }),
-    // PAID player sessions today (gametime revenue)
     db.playerSession.findMany({
       where: { status: "PAID", updatedAt: { gte: start, lt: end } },
       select: { id: true, packageType: true, packagePrice: true, nickname: true },
@@ -48,7 +46,7 @@ export async function GET() {
     db.cashExpense.findMany({
       where: { createdAt: { gte: start, lt: end } },
       orderBy: { createdAt: "asc" },
-    }),
+    }).catch(() => []),  // graceful fallback if table not migrated yet
   ]);
 
   const cashPayments = payments.filter((p) => p.method === "CASH");
