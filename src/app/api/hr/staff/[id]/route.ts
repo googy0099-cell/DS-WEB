@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 
-// Update staff fields (faceData any CASHIER+; baseSalary OWNER only)
+const PAY_TYPES = ["MONTHLY", "DAILY", "HOURLY"];
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,32 +15,28 @@ export async function PATCH(
   }
 
   const { id } = await params;
-  const body = (await req.json()) as { faceData?: string; baseSalary?: number };
+  const body = (await req.json()) as { faceData?: string; baseSalary?: number; payType?: string };
 
-  const data: { faceData?: string; baseSalary?: number } = {};
+  const data: { faceData?: string; baseSalary?: number; payType?: string } = {};
   if (typeof body.faceData === "string") data.faceData = body.faceData;
-  if (typeof body.baseSalary === "number") {
+  if (typeof body.baseSalary === "number" || typeof body.payType === "string") {
     if (role !== "OWNER") {
       return NextResponse.json({ error: "OWNER only" }, { status: 403 });
     }
-    if (body.baseSalary < 0) {
-      return NextResponse.json({ error: "เงินเดือนต้องไม่ติดลบ" }, { status: 400 });
+    if (typeof body.baseSalary === "number") {
+      if (body.baseSalary < 0) return NextResponse.json({ error: "อัตราต้องไม่ติดลบ" }, { status: 400 });
+      data.baseSalary = body.baseSalary;
     }
-    data.baseSalary = body.baseSalary;
+    if (typeof body.payType === "string") {
+      if (!PAY_TYPES.includes(body.payType)) return NextResponse.json({ error: "payType ไม่ถูกต้อง" }, { status: 400 });
+      data.payType = body.payType;
+    }
   }
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "ไม่มีข้อมูลอัปเดต" }, { status: 400 });
   }
 
-  const staff = await db.hrStaff.update({
-    where: { id: Number(id) },
-    data,
-  });
-
-  return NextResponse.json({
-    id: staff.id,
-    baseSalary: staff.baseSalary,
-    hasFace: !!staff.faceData,
-  });
+  const staff = await db.hrStaff.update({ where: { id: Number(id) }, data });
+  return NextResponse.json({ id: staff.id, baseSalary: staff.baseSalary, payType: staff.payType, hasFace: !!staff.faceData });
 }

@@ -567,6 +567,7 @@ model HrStaff {
   pendingChallenge      String?      @map("pending_challenge")
   azurePersonId         String?      @map("azure_person_id")
   baseSalary            Int          @default(0) @map("base_salary")
+  payType               String       @default("MONTHLY") @map("pay_type")
   createdAt             DateTime     @default(now()) @map("created_at")
   user                  User         @relation("HrStaff", fields: [userId], references: [id])
   attendances           HrAttendance[]
