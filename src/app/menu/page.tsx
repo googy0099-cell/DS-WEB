@@ -62,6 +62,7 @@ export default function MenuPage() {
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES.map((c) => ({ ...c, isActive: true, staffOnly: false })));
   const [allItems, setAllItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shopOpen, setShopOpen] = useState(true);
   const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
   const [showMemberPrompt, setShowMemberPrompt] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
@@ -83,9 +84,11 @@ export default function MenuPage() {
     Promise.all([
       fetch("/api/menu").then((r) => r.json()),
       fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
-    ]).then(([menuData, settings]) => {
+      fetch("/api/shop/status").then((r) => r.json()).catch(() => ({ isOpen: true })),
+    ]).then(([menuData, settings, shopStatus]) => {
       setCategories(parseSavedCategories(settings?.menu_categories));
       setAllItems((menuData as MenuItemType[]).filter((i) => i.isAvailable));
+      setShopOpen(shopStatus?.isOpen ?? true);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -181,6 +184,13 @@ export default function MenuPage() {
           <h1 className="text-2xl font-bold text-cream mb-1">เมนูทั้งหมด</h1>
           <p className="text-cream/60 text-sm">กดหมวดหมู่เพื่อเลื่อนไปดูได้เลย</p>
         </div>
+
+        {/* Shop closed banner */}
+        {!shopOpen && (
+          <div className="bg-red-500 text-white text-center py-3 px-4 font-semibold text-sm">
+            🔴 ร้านยังไม่เปิดรับออเดอร์ในขณะนี้
+          </div>
+        )}
 
         {/* Sticky category nav */}
         <div ref={navRef} className="sticky top-16 z-30 bg-cream/95 backdrop-blur border-b border-sand shadow-sm">
@@ -305,7 +315,7 @@ export default function MenuPage() {
         />
       )}
 
-      <CartDrawer />
+      <CartDrawer shopClosed={!shopOpen} />
     </>
   );
 }

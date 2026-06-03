@@ -39,6 +39,7 @@ export default function CategoryMenuPage() {
 
   const [items, setItems] = useState<MenuItemType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [shopOpen, setShopOpen] = useState(true);
   const [catInfo, setCatInfo] = useState<{ id: string; label: string; icon: string } | null>(null);
   const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
   const { addItem } = useOrderStore();
@@ -47,7 +48,8 @@ export default function CategoryMenuPage() {
     Promise.all([
       fetch(`/api/menu?category=${categoryId}`).then((r) => r.json()),
       fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
-    ]).then(([menuData, settings]) => {
+      fetch("/api/shop/status").then((r) => r.json()).catch(() => ({ isOpen: true })),
+    ]).then(([menuData, settings, shopStatus]) => {
       const customCats: { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean }[] =
         settings?.menu_categories ? JSON.parse(settings.menu_categories) : [];
       const allCats = [
@@ -60,6 +62,7 @@ export default function CategoryMenuPage() {
       const found = allCats.find((c) => c.id === categoryId);
       setCatInfo(found ?? { id: categoryId, label: categoryId, icon: "🍽️" });
       setItems((menuData as MenuItemType[]).filter((i) => i.isAvailable));
+      setShopOpen(shopStatus?.isOpen ?? true);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [categoryId]);
@@ -85,7 +88,12 @@ export default function CategoryMenuPage() {
   return (
     <>
       <Navbar />
-      <div className="pt-16 min-h-screen bg-cream pb-28">
+      {!shopOpen && (
+        <div className="fixed top-16 left-0 right-0 z-20 bg-red-500 text-white text-center py-3 px-4 font-semibold text-sm">
+          🔴 ร้านยังไม่เปิดรับออเดอร์ในขณะนี้
+        </div>
+      )}
+      <div className={`pt-16 min-h-screen bg-cream pb-28${!shopOpen ? " mt-10" : ""}`}>
         <div className="bg-navy px-4 py-8 text-center">
           <div className="flex justify-center mb-2">
             <CategoryIcon id={catInfo?.id ?? ""} fallback={catInfo?.icon ?? "🍽️"} size={52} className="text-cream/80" />
@@ -157,7 +165,7 @@ export default function CategoryMenuPage() {
         </div>
       </div>
 
-      <CartDrawer />
+      <CartDrawer shopClosed={!shopOpen} />
       {pickerItem && <MenuItemPicker item={pickerItem} onClose={() => setPickerItem(null)} />}
     </>
   );

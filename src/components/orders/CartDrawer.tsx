@@ -13,7 +13,7 @@ type StaffMember = { id: number; firstName: string; username: string; memberCode
 
 const STAFF_ROLES = ["CASHIER", "STAFF", "OWNER"];
 
-export default function CartDrawer({ tableId }: { tableId?: number }) {
+export default function CartDrawer({ tableId, shopClosed }: { tableId?: number; shopClosed?: boolean }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -170,6 +170,12 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
         </div>
 
         <div className="p-4 flex-1 overflow-y-auto space-y-3">
+          {shopClosed && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-center">
+              <p className="text-red-600 font-semibold text-sm">🔴 ร้านยังไม่เปิดรับออเดอร์ในขณะนี้</p>
+              <p className="text-red-400 text-xs mt-0.5">กรุณารอจนกว่าพนักงานจะเปิดรับออเดอร์</p>
+            </div>
+          )}
           <div className="bg-sand/40 rounded-xl p-3 space-y-2">
             <div>
               <p className="text-xs font-medium text-navy mb-1">ชื่อสำหรับรับอาหาร</p>
@@ -286,10 +292,10 @@ export default function CartDrawer({ tableId }: { tableId?: number }) {
             </div>
             <button
               onClick={submitOrder}
-              disabled={loading || (bills.length > 0 && !selectedBillId)}
+              disabled={loading || (bills.length > 0 && !selectedBillId) || shopClosed}
               className="w-full bg-navy text-cream font-bold py-3 rounded-xl disabled:opacity-50"
             >
-              {loading ? "กำลังส่งออเดอร์..." : "ยืนยันการสั่งอาหาร"}
+              {loading ? "กำลังส่งออเดอร์..." : shopClosed ? "ร้านยังไม่เปิดรับออเดอร์" : "ยืนยันการสั่งอาหาร"}
             </button>
             <p className="text-center text-xs text-gray-400 mt-2">จะเริ่มทำเมื่อชำระเงินแล้วเท่านั้น</p>
           </div>

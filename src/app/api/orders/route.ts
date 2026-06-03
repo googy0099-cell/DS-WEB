@@ -68,6 +68,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
   }
 
+  // Block orders when shop is closed (cashier orders bypass this)
+  if (!isCashier) {
+    const shopSession = await db.shopSession.findUnique({ where: { id: 1 } });
+    if (!shopSession?.isOpen) {
+      return NextResponse.json({ error: "ร้านยังไม่เปิดรับออเดอร์ในขณะนี้" }, { status: 403 });
+    }
+  }
+
   const finalName = orderName.trim();
 
   // ถ้ามีออเดอร์ที่ยังไม่ชำระของคนนี้วันนี้ → เพิ่มรายการเข้าออเดอร์เดิม
