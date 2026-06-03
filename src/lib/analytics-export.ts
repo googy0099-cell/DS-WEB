@@ -160,6 +160,7 @@ export async function uploadToGoogleSheets(
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error("GOOGLE_SERVICE_ACCOUNT_JSON not configured");
   const sa = JSON.parse(raw) as { client_email: string; private_key: string };
+  sa.private_key = sa.private_key.replace(/\\n/g, "\n");
   const token = await getGoogleToken(sa);
 
   // 1. Create spreadsheet with named sheets

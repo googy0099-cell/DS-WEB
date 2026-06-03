@@ -85,10 +85,7 @@ export default function AnalyticsHubPage() {
   const [driveError, setDriveError] = useState("");
 
   function downloadCsv(sheet: string) {
-    const url = `/api/analytics/export?from=${from}&to=${to}&sheet=${sheet}`;
-    const a = document.createElement("a");
-    a.href = url;
-    a.click();
+    window.location.href = `/api/analytics/export?from=${from}&to=${to}&sheet=${sheet}`;
   }
 
   async function uploadToDrive() {
@@ -99,7 +96,8 @@ export default function AnalyticsHubPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ from, to }),
       });
-      const data = await res.json() as { url?: string; error?: string };
+      let data: { url?: string; error?: string } = {};
+      try { data = await res.json(); } catch { data = { error: `HTTP ${res.status}` }; }
       if (!res.ok || !data.url) { setDriveError(data.error ?? "อัปโหลดไม่สำเร็จ"); return; }
       setDriveUrl(data.url);
     } catch (e) {

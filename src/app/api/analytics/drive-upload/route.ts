@@ -18,16 +18,22 @@ export async function POST(req: NextRequest) {
   const { from, to } = (await req.json()) as { from: string; to: string };
   if (!from || !to) return NextResponse.json({ error: "from/to required" }, { status: 400 });
 
-  const [sales, menu, gametime, parties, receipts] = await Promise.all([
-    fetchSalesRows(from, to),
-    fetchMenuRows(from, to),
-    fetchGametimeRows(from, to),
-    fetchPartiesRows(from, to),
-    fetchReceiptsRows(from, to),
-  ]);
+  try {
+    const [sales, menu, gametime, parties, receipts] = await Promise.all([
+      fetchSalesRows(from, to),
+      fetchMenuRows(from, to),
+      fetchGametimeRows(from, to),
+      fetchPartiesRows(from, to),
+      fetchReceiptsRows(from, to),
+    ]);
 
-  const title = `Dice Shop — รายงาน ${from} ถึง ${to}`;
-  const url = await uploadToGoogleSheets(title, [sales, menu, gametime, parties, receipts], folderId);
+    const title = `Dice Shop — รายงาน ${from} ถึง ${to}`;
+    const url = await uploadToGoogleSheets(title, [sales, menu, gametime, parties, receipts], folderId);
 
-  return NextResponse.json({ url });
+    return NextResponse.json({ url });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[drive-upload]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
