@@ -25,7 +25,7 @@ export async function GET() {
   const date = getBangkokDateStr();
   const { start, end } = getBangkokDayBounds();
 
-  const [payments, servedOrders, paidSessions, lastClose] = await Promise.all([
+  const [payments, servedOrders, paidSessions, lastClose, pettyExpenses] = await Promise.all([
     db.payment.findMany({
       where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } },
       include: { order: { select: { id: true, orderName: true, totalTHB: true } } },
@@ -45,6 +45,10 @@ export async function GET() {
       where: { date },
       orderBy: { createdAt: "desc" },
     }),
+    db.cashExpense.findMany({
+      where: { createdAt: { gte: start, lt: end } },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const cashPayments = payments.filter((p) => p.method === "CASH");
@@ -54,6 +58,9 @@ export async function GET() {
 
   const ordersTotal = servedOrders.reduce((s, o) => s + o.totalTHB, 0);
   const gametimeTotal = paidSessions.reduce((s, s2) => s + s2.packagePrice, 0);
+
+  const pettyTotal = pettyExpenses.filter((e) => e.type === "PETTY_CASH").reduce((s, e) => s + e.amount, 0);
+  const advanceTotal = pettyExpenses.filter((e) => e.type === "STAFF_ADVANCE").reduce((s, e) => s + e.amount, 0);
 
   return NextResponse.json({
     date,
@@ -67,5 +74,8 @@ export async function GET() {
     gametimeTotal,
     gametimeCount: paidSessions.length,
     lastClose,
+    pettyExpenses,
+    pettyTotal,
+    advanceTotal,
   });
 }

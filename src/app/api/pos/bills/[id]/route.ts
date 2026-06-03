@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { remainingSeconds } from "@/lib/pos-time";
+import { notifyBillClosed } from "@/lib/telegram-notify";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -81,6 +82,36 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (others === 0) {
       await db.table.update({ where: { id: bill.tableId }, data: { isOccupied: false } });
     }
+
+    // Telegram notification (fire-and-forget)
+    db.bill.findUnique({
+      where: { id: billId },
+      include: {
+        table: { select: { number: true } },
+        sessions: { where: { status: "PAID" }, select: { packageType: true, packagePrice: true, status: true } },
+        orders: { where: { status: "SERVED" }, include: { payment: { select: { method: true } } } },
+      },
+    }).then((b) => {
+      if (!b) return;
+      const activeSessions = b.sessions.filter((s) => s.status === "PAID");
+      const pkgMap: Record<string, number> = {};
+      for (const s of activeSessions) pkgMap[s.packageType] = (pkgMap[s.packageType] ?? 0) + 1;
+      const packages = Object.entries(pkgMap).map(([k, n]) => `${k}×${n}`).join(", ") || "—";
+      const gameRevenue = activeSessions.reduce((sum, s) => sum + s.packagePrice, 0);
+      const foodRevenue = b.orders.reduce((sum, o) => sum + o.totalTHB, 0);
+      const methods = [...new Set(b.orders.flatMap((o) => o.payment ? [o.payment.method] : []))];
+      const paymentMethod = methods[0] ?? "—";
+      notifyBillClosed({
+        billName: b.name,
+        tableNumber: b.table.number,
+        playerCount: activeSessions.length,
+        packages,
+        gameRevenue,
+        foodRevenue,
+        total: gameRevenue + foodRevenue,
+        paymentMethod,
+      });
+    }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });

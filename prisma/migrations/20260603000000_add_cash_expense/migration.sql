@@ -1,0 +1,10 @@
+CREATE TABLE "CashExpense" (
+  "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "type" TEXT NOT NULL,
+  "amount" INTEGER NOT NULL,
+  "description" TEXT NOT NULL,
+  "photoUrl" TEXT,
+  "note" TEXT,
+  "reimbursed" BOOLEAN NOT NULL DEFAULT false,
+  "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

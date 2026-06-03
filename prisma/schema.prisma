@@ -531,6 +531,17 @@ model Receipt {
   createdAt     DateTime @default(now())
 }
 
+model CashExpense {
+  id          Int      @id @default(autoincrement())
+  type        String   // "PETTY_CASH" | "STAFF_ADVANCE"
+  amount      Int
+  description String
+  photoUrl    String?
+  note        String?
+  reimbursed  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+}
+
 model ShopSession {
   id         Int       @id @default(1)
   isOpen     Boolean   @default(false) @map("is_open")

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { notifyShopClose } from "@/lib/telegram-notify";
 
 function getBangkokDateStr(): string {
   const now = new Date();
@@ -35,13 +36,22 @@ export async function POST(req: NextRequest) {
   const date = getBangkokDateStr();
   const { start, end } = getBangkokDayBounds();
 
-  const payments = await db.payment.findMany({
-    where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } },
-  });
+  const [payments, expenses] = await Promise.all([
+    db.payment.findMany({ where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } } }),
+    db.cashExpense.findMany({ where: { type: "PETTY_CASH", createdAt: { gte: start, lt: end } } }),
+  ]);
 
-  const expectedCash = payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amountTHB, 0);
+  const cashSales = payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amountTHB, 0);
   const totalTransfer = payments.filter((p) => p.method !== "CASH").reduce((s, p) => s + p.amountTHB, 0);
+  const pettyTotal = expenses.reduce((s, e) => s + e.amount, 0);
+  const expectedCash = cashSales - pettyTotal;
   const difference = countedCash - (openingFloat + expectedCash);
+  const grandTotal = cashSales + totalTransfer;
+
+  const expenseNote = expenses.length > 0
+    ? `รายจ่ายเก๊ะ: ${expenses.map((e) => `${e.description} ฿${e.amount}`).join(", ")} (รวม ฿${pettyTotal})`
+    : null;
+  const fullNote = [note, expenseNote].filter(Boolean).join(" | ") || null;
 
   const record = await db.cashDrawerSession.create({
     data: {
@@ -51,10 +61,12 @@ export async function POST(req: NextRequest) {
       totalTransfer,
       countedCash,
       difference,
-      note: note ?? null,
+      note: fullNote,
       ...(closedById ? { closedById } : {}),
     },
   });
 
-  return NextResponse.json(record);
+  notifyShopClose({ cashTotal: cashSales, transferTotal: totalTransfer, grandTotal, difference, pettyExpenses: pettyTotal }).catch(() => {});
+
+  return NextResponse.json({ ...record, pettyTotal, grandTotal });
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import NumpadInput from "@/components/admin/NumpadInput";
 
 type LowMenu = { id: number; nameTh: string; missing: string[] };
 type ReorderItem = { id: number; sku: string; name: string; unit: string; currentQty: number; reorderQty: number };
+type CashExpense = { id: number; type: string; amount: number; description: string; photoUrl: string | null; note: string | null; reimbursed: boolean; createdAt: string };
 
 const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5, 2, 1];
 
@@ -30,6 +31,9 @@ interface Summary {
   ordersCount: number;
   gametimeTotal: number;
   gametimeCount: number;
+  pettyExpenses: CashExpense[];
+  pettyTotal: number;
+  advanceTotal: number;
   lastClose: {
     id: number;
     date: string;
@@ -75,6 +79,16 @@ export default function CashierPage() {
 
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(false);
+
+  // Expense modal
+  const [showExpenseModal, setShowExpenseModal] = useState(false);
+  const [expType, setExpType] = useState<"PETTY_CASH" | "STAFF_ADVANCE">("PETTY_CASH");
+  const [expAmount, setExpAmount] = useState("");
+  const [expDesc, setExpDesc] = useState("");
+  const [expNote, setExpNote] = useState("");
+  const [expPhoto, setExpPhoto] = useState<string | null>(null);
+  const [expUploading, setExpUploading] = useState(false);
+  const [expSaving, setExpSaving] = useState(false);
 
   const [closeStep, setCloseStep] = useState<CloseStep>(1);
   const [counts, setCounts] = useState<Record<number, string>>(
@@ -134,6 +148,32 @@ export default function CashierPage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "open" }),
     });
+    fetch("/api/cashier/open", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ openingFloat: float }),
+    });
+  }
+
+  async function uploadExpensePhoto(file: File) {
+    setExpUploading(true);
+    const form = new FormData(); form.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    const data = await res.json() as { url?: string };
+    setExpPhoto(data.url ?? null);
+    setExpUploading(false);
+  }
+
+  async function saveExpense() {
+    if (!expAmount || !expDesc) return;
+    setExpSaving(true);
+    await fetch("/api/cash-expenses", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: expType, amount: parseInt(expAmount), description: expDesc, note: expNote || undefined, photoUrl: expPhoto || undefined }),
+    });
+    setExpSaving(false);
+    setShowExpenseModal(false);
+    setExpAmount(""); setExpDesc(""); setExpNote(""); setExpPhoto(null);
+    loadSummary();
   }
 
   function startClose() {
@@ -144,7 +184,8 @@ export default function CashierPage() {
 
   const countedCash = DENOMINATIONS.reduce((s, d) => s + d * (parseInt(counts[d]) || 0), 0);
   const floatNum = parseInt(openingFloat) || 0;
-  const expectedCash = floatNum + (summary?.cashTotal ?? 0);
+  const pettyTotal = summary?.pettyTotal ?? 0;
+  const expectedCash = floatNum + (summary?.cashTotal ?? 0) - pettyTotal;
   const difference = countedCash - expectedCash;
 
   async function confirmClose() {
@@ -261,7 +302,7 @@ export default function CashierPage() {
   // ── OPEN: Running shift ────────────────────────────────────────────────────
   if (shiftState === "OPEN") {
     return (
-      <div className="max-w-2xl mx-auto space-y-5">
+      <React.Fragment><div className="max-w-2xl mx-auto space-y-5">
         {/* Header */}
         <div className="bg-green-500 rounded-2xl p-5 text-white flex items-center justify-between">
           <div>
@@ -283,10 +324,115 @@ export default function CashierPage() {
         {/* Live summary cards */}
         <SummaryCards onRefresh={loadSummary} loading={loadingSummary} summary={summary} />
 
+        {/* Expense button */}
+        <button
+          onClick={() => setShowExpenseModal(true)}
+          className="w-full flex items-center justify-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 font-semibold py-3 rounded-2xl text-sm hover:bg-amber-100 transition-colors"
+        >
+          🛍️ บันทึกรายจ่ายจากเก๊ะ / พนักงานออกเงินเอง
+        </button>
+
+        {/* Today's expenses */}
+        {(summary?.pettyExpenses?.length ?? 0) > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <p className="text-sm font-bold text-navy px-4 py-3 border-b border-sand">🛍️ รายจ่ายวันนี้</p>
+            <div className="divide-y divide-sand/50 max-h-48 overflow-y-auto">
+              {summary!.pettyExpenses.map((e) => (
+                <div key={e.id} className="flex items-start gap-3 px-4 py-2.5">
+                  <span className="text-lg shrink-0">{e.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-navy truncate">{e.description}</p>
+                    <p className="text-xs text-gray-400">{e.type === "PETTY_CASH" ? "ซื้อของเข้าร้าน" : "พนักงานออกเองก่อน"}{e.type === "STAFF_ADVANCE" && e.reimbursed ? " · คืนแล้ว ✅" : ""}</p>
+                  </div>
+                  <p className="text-sm font-bold text-red-600 shrink-0">-฿{e.amount.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2.5 border-t border-sand bg-amber-50 flex justify-between text-sm">
+              <span className="text-amber-700 font-semibold">รวมรายจ่ายเก๊ะ</span>
+              <span className="font-bold text-red-600">-฿{(summary?.pettyTotal ?? 0).toLocaleString()}</span>
+            </div>
+            {(summary?.advanceTotal ?? 0) > 0 && (
+              <div className="px-4 py-2 bg-purple-50 flex justify-between text-sm">
+                <span className="text-purple-700 font-semibold">ค้างจ่ายคืนพนักงาน</span>
+                <span className="font-bold text-purple-700">฿{(summary?.advanceTotal ?? 0).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="text-center">
           <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับ Dashboard</Link>
         </div>
       </div>
+
+      {/* Expense modal */}
+      {showExpenseModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-lg">🛍️ บันทึกรายจ่าย</h3>
+              <button onClick={() => setShowExpenseModal(false)} className="text-gray-400 text-xl">✕</button>
+            </div>
+
+            {/* Type selector */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setExpType("PETTY_CASH")}
+                className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-colors ${expType === "PETTY_CASH" ? "bg-amber-500 border-amber-500 text-white" : "border-sand text-gray-500"}`}
+              >
+                🗃️ ซื้อของเข้าร้าน
+              </button>
+              <button
+                onClick={() => setExpType("STAFF_ADVANCE")}
+                className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-colors ${expType === "STAFF_ADVANCE" ? "bg-purple-500 border-purple-500 text-white" : "border-sand text-gray-500"}`}
+              >
+                👤 ออกเงินเองก่อน
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 -mt-2">
+              {expType === "PETTY_CASH" ? "เงินจากเก๊ะ — จะหักออกจากยอดเงินคงเหลือ" : "พนักงานออกเงินส่วนตัวก่อน — บันทึกไว้เพื่อคืนเงิน"}
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">รายละเอียด *</label>
+                <input value={expDesc} onChange={(e) => setExpDesc(e.target.value)} placeholder="เช่น ซื้อน้ำแข็ง, ซื้อกระดาษทิชชู่..." className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">จำนวนเงิน (฿) *</label>
+                <NumpadInput value={Number(expAmount) || ""} onChange={(v) => setExpAmount(String(v))} placeholder="0" label="จำนวนเงิน" className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">หมายเหตุ (ถ้ามี)</label>
+                <input value={expNote} onChange={(e) => setExpNote(e.target.value)} placeholder="รายละเอียดเพิ่มเติม..." className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">รูปหลักฐาน (ถ้ามี)</label>
+                {expPhoto ? (
+                  <div className="relative">
+                    <img src={expPhoto} alt="receipt" className="w-full h-32 object-cover rounded-xl" />
+                    <button onClick={() => setExpPhoto(null)} className="absolute top-1 right-1 bg-black/50 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center">✕</button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 border-2 border-dashed border-sand rounded-xl px-3 py-3 cursor-pointer hover:border-orange transition-colors">
+                    <span className="text-gray-400 text-sm">{expUploading ? "กำลังอัปโหลด..." : "📷 แนบรูปบิล / ของที่ซื้อ"}</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) uploadExpensePhoto(e.target.files[0]); }} />
+                  </label>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setShowExpenseModal(false)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
+              <button onClick={saveExpense} disabled={expSaving || !expAmount || !expDesc} className="flex-1 bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
+                {expSaving ? "กำลังบันทึก..." : "✅ บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </React.Fragment>
     );
   }
 
@@ -457,6 +603,12 @@ export default function CashierPage() {
               <span className="text-gray-500">เงินสดรับวันนี้ (ระบบ)</span>
               <span className="font-semibold text-navy">฿{(summary?.cashTotal ?? 0).toLocaleString()}</span>
             </div>
+            {pettyTotal > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">หัก: รายจ่ายจากเก๊ะ</span>
+                <span className="font-semibold text-red-600">-฿{pettyTotal.toLocaleString()}</span>
+              </div>
+            )}
             <div className="flex justify-between border-t border-sand pt-2">
               <span className="font-bold text-navy">ยอดที่ควรมีในลิ้นชัก</span>
               <span className="font-bold text-navy">฿{expectedCash.toLocaleString()}</span>
