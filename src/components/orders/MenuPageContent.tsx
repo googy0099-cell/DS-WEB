@@ -58,6 +58,9 @@ function parseSavedCategories(saved: string | undefined) {
   }
 }
 
+const TABLE_SESSION_KEY = "dice_table_session";
+const TABLE_SESSION_TTL = 3 * 60 * 60 * 1000; // 3 hours
+
 interface Props {
   tableId?: number;
   tableNumber?: number;
@@ -74,8 +77,32 @@ export default function MenuPageContent({ tableId, tableNumber, tableSlug }: Pro
   const [pickerItem, setPickerItem] = useState<MenuItemType | null>(null);
   const [showMemberPrompt, setShowMemberPrompt] = useState(false);
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [rememberedTable, setRememberedTable] = useState<{ slug: string; tableNumber: number } | null>(null);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const { addItem, cart } = useOrderStore();
+
+  // Save table session to localStorage when ordering from a table
+  useEffect(() => {
+    if (!canOrder || !tableSlug || !tableNumber) return;
+    localStorage.setItem(TABLE_SESSION_KEY, JSON.stringify({ slug: tableSlug, tableNumber, savedAt: Date.now() }));
+  }, [canOrder, tableSlug, tableNumber]);
+
+  // Read remembered table in browse mode
+  useEffect(() => {
+    if (canOrder) return;
+    try {
+      const raw = localStorage.getItem(TABLE_SESSION_KEY);
+      if (!raw) return;
+      const { slug, tableNumber: num, savedAt } = JSON.parse(raw) as { slug: string; tableNumber: number; savedAt: number };
+      if (Date.now() - savedAt > TABLE_SESSION_TTL) {
+        localStorage.removeItem(TABLE_SESSION_KEY);
+        return;
+      }
+      setRememberedTable({ slug, tableNumber: num });
+    } catch {
+      localStorage.removeItem(TABLE_SESSION_KEY);
+    }
+  }, [canOrder]);
 
   useEffect(() => {
     if (!canOrder) return;
@@ -341,15 +368,40 @@ export default function MenuPageContent({ tableId, tableNumber, tableSlug }: Pro
         </>
       )}
 
-      {/* Browse-only: scan notice */}
+      {/* Browse-only: remembered table banner or scan notice */}
       {!canOrder && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 bg-navy text-cream px-4 py-4 text-center shadow-2xl">
-          <div className="flex items-center justify-center gap-2 mb-0.5">
-            <QrCode size={16} className="text-orange shrink-0" />
-            <p className="font-semibold text-sm">ต้องการสั่งอาหาร?</p>
+        rememberedTable ? (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-navy text-cream shadow-2xl">
+            <div className="flex items-center justify-between px-4 py-3 gap-3">
+              <div>
+                <p className="font-semibold text-sm">🎲 คุณนั่งอยู่โต๊ะ {rememberedTable.tableNumber} ใช่ไหม?</p>
+                <p className="text-cream/50 text-xs mt-0.5">ระบบจำโต๊ะล่าสุดของคุณไว้</p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => { localStorage.removeItem(TABLE_SESSION_KEY); setRememberedTable(null); }}
+                  className="text-cream/40 text-xs px-2 py-1.5 rounded-lg hover:text-cream/70"
+                >
+                  ไม่ใช่
+                </button>
+                <Link
+                  href={`/table/${rememberedTable.slug}`}
+                  className="bg-orange text-white text-xs font-bold px-3 py-1.5 rounded-xl"
+                >
+                  สั่งอาหาร →
+                </Link>
+              </div>
+            </div>
           </div>
-          <p className="text-cream/60 text-xs">โปรดสแกน QR Code ที่โต๊ะ หรือติดต่อพนักงาน</p>
-        </div>
+        ) : (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-navy text-cream px-4 py-4 text-center shadow-2xl">
+            <div className="flex items-center justify-center gap-2 mb-0.5">
+              <QrCode size={16} className="text-orange shrink-0" />
+              <p className="font-semibold text-sm">ต้องการสั่งอาหาร?</p>
+            </div>
+            <p className="text-cream/60 text-xs">โปรดสแกน QR Code ที่โต๊ะ หรือติดต่อพนักงาน</p>
+          </div>
+        )
       )}
     </>
   );
