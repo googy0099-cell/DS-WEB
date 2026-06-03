@@ -41,6 +41,7 @@ model User {
   werewolfGamesGM        WerewolfGame[]          @relation("WerewolfGamesGM")
   werewolfGameResults    WerewolfGameResult[]    @relation("WerewolfGameResults")
   werewolfSessionPlayers WerewolfSessionPlayer[] @relation("WerewolfSessionPlayers")
+  hrStaff             HrStaff?             @relation("HrStaff")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 }
@@ -551,4 +552,78 @@ model ShopSession {
   openedById Int?      @map("opened_by")
   openedBy   User?     @relation("ShopSessions", fields: [openedById], references: [id])
   @@map("shop_session")
+}
+
+// ── HR Module ──────────────────────────────────────────────────────────────
+
+model HrStaff {
+  id          Int          @id @default(autoincrement())
+  userId      Int          @unique @map("user_id")
+  pin         String?
+  faceData    String?      @map("face_data")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  user        User         @relation("HrStaff", fields: [userId], references: [id])
+  attendances HrAttendance[]
+  checklists  HrChecklist[]
+  tasks       HrTask[]     @relation("HrTaskAssignee")
+  kpis        HrKpi[]
+  @@map("hr_staff")
+}
+
+model HrAttendance {
+  id        Int       @id @default(autoincrement())
+  staffId   Int       @map("staff_id")
+  checkIn   DateTime  @map("check_in")
+  checkOut  DateTime? @map("check_out")
+  photoUrl  String?   @map("photo_url")
+  createdAt DateTime  @default(now()) @map("created_at")
+  staff     HrStaff   @relation(fields: [staffId], references: [id])
+  @@map("hr_attendance")
+}
+
+model HrChecklist {
+  id        Int               @id @default(autoincrement())
+  type      String            // "OPEN" | "CLOSE"
+  date      DateTime
+  staffId   Int               @map("staff_id")
+  createdAt DateTime          @default(now()) @map("created_at")
+  staff     HrStaff           @relation(fields: [staffId], references: [id])
+  items     HrChecklistItem[]
+  @@map("hr_checklist")
+}
+
+model HrChecklistItem {
+  id          Int         @id @default(autoincrement())
+  checklistId Int         @map("checklist_id")
+  label       String
+  done        Boolean     @default(false)
+  photoUrl    String?     @map("photo_url")
+  doneAt      DateTime?   @map("done_at")
+  checklist   HrChecklist @relation(fields: [checklistId], references: [id])
+  @@map("hr_checklist_item")
+}
+
+model HrTask {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  status      String    @default("TODO") // "TODO" | "IN_PROGRESS" | "DONE"
+  assignedTo  Int?      @map("assigned_to")
+  deadline    DateTime?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  assignee    HrStaff?  @relation("HrTaskAssignee", fields: [assignedTo], references: [id])
+  @@map("hr_task")
+}
+
+model HrKpi {
+  id        Int     @id @default(autoincrement())
+  staffId   Int     @map("staff_id")
+  title     String
+  target    Float
+  actual    Float   @default(0)
+  unit      String
+  month     Int
+  year      Int
+  staff     HrStaff @relation(fields: [staffId], references: [id])
+  @@map("hr_kpi")
 }
