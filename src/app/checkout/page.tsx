@@ -18,7 +18,11 @@ export default async function CheckoutPage({ searchParams }: Props) {
 
   const order = await db.order.findUnique({
     where: { id: orderId },
-    include: { items: { include: { menuItem: true } }, payment: true },
+    include: {
+      items: { include: { menuItem: true } },
+      payment: true,
+      table: { select: { slug: true } },
+    },
   });
 
   if (!order) notFound();
@@ -66,7 +70,10 @@ export default async function CheckoutPage({ searchParams }: Props) {
           <PaymentSection orderId={order.id} totalTHB={order.totalTHB} orderName={order.orderName} billId={order.billId} />
 
           <div className="flex gap-3 mt-5">
-            <Link href="/menu" className="flex-1 text-center border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">
+            <Link
+              href={order.table?.slug ? `/table/${order.table.slug}` : "/menu"}
+              className="flex-1 text-center border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm"
+            >
               สั่งเพิ่ม
             </Link>
             <Link href="/" className="flex-1 text-center text-gray-400 font-medium py-2.5 rounded-xl text-sm hover:text-navy">

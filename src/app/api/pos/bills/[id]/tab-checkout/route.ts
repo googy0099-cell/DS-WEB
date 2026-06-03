@@ -40,7 +40,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       status: { in: ["PENDING", "CONFIRMED", "SERVED"] },
       payment: { method: "TAB", status: "PENDING" },
     },
-    include: {
+    select: {
+      id: true, status: true, totalTHB: true, kitchenServedAt: true, userId: true,
       payment: { select: { id: true, amountTHB: true } },
       bill: { select: { name: true, table: { select: { number: true } } } },
       items: {
@@ -79,12 +80,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ),
   ]);
 
+  // Fall back to userId from any order in the bill (logged-in customer who ordered via QR)
+  const effectiveMemberId = memberUserId ?? orders.find((o) => o.userId != null)?.userId ?? null;
+
   let pointsAwarded = 0;
-  if (memberUserId) {
+  if (effectiveMemberId) {
     const pts = Math.floor(tabTotal / 10);
     const dice = Math.floor(tabTotal / 49);
     await db.user.update({
-      where: { id: Number(memberUserId) },
+      where: { id: Number(effectiveMemberId) },
       data: {
         points: { increment: pts },
         totalSpentTHB: { increment: tabTotal },
