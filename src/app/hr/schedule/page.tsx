@@ -31,15 +31,23 @@ export default function HrSchedulePage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/hr/schedule");
-    if (res.status === 401) {
-      setError("ต้องเป็นเจ้าของร้านเท่านั้น");
+    try {
+      const res = await fetch("/api/hr/schedule");
+      if (res.status === 401) {
+        setError("ต้องเป็นเจ้าของร้านเท่านั้น");
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? `เกิดข้อผิดพลาด (${res.status})`);
+        return;
+      }
+      setStaff(Array.isArray(data) ? data : []);
+    } catch {
+      setError("โหลดข้อมูลไม่สำเร็จ");
+    } finally {
       setLoading(false);
-      return;
     }
-    const data = await res.json();
-    setStaff(data);
-    setLoading(false);
   }, []);
 
   useEffect(() => {

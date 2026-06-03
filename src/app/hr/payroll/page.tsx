@@ -61,16 +61,24 @@ export default function HrPayrollPage() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const res = await fetch(`/api/hr/payroll?year=${year}&month=${month}`);
-    if (res.status === 401) {
-      setError("ต้องเป็นเจ้าของร้านเท่านั้น");
+    try {
+      const res = await fetch(`/api/hr/payroll?year=${year}&month=${month}`);
+      if (res.status === 401) {
+        setError("ต้องเป็นเจ้าของร้านเท่านั้น");
+        return;
+      }
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json.error ?? `เกิดข้อผิดพลาด (${res.status})`);
+        return;
+      }
+      setData(json);
+      setError("");
+    } catch {
+      setError("โหลดข้อมูลไม่สำเร็จ");
+    } finally {
       setLoading(false);
-      return;
     }
-    const json = await res.json();
-    setData(json);
-    setError("");
-    setLoading(false);
   }, [year, month]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
