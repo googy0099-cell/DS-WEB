@@ -126,7 +126,7 @@ export default function MobileNav({
                     onClick={() => toggleGroup(group.label)}
                     className="w-full flex items-center justify-between px-4 py-2 text-cream/60 hover:text-cream/80 transition-colors"
                   >
-                    <span className="text-xs font-semibold uppercase tracking-widest">
+                    <span className="text-sm font-bold">
                       {group.label}
                     </span>
                     <span className={`text-sm transition-transform duration-200 ${groupOpen ? "rotate-90" : ""}`}>›</span>
@@ -143,7 +143,7 @@ export default function MobileNav({
                           key={item.href}
                           href={item.href}
                           onClick={() => setOpen(false)}
-                          className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-colors ${
+                          className={`flex items-center gap-3 pl-6 pr-4 py-2.5 rounded-xl transition-colors ${
                             active
                               ? "bg-orange/20 text-orange"
                               : "text-cream/70 hover:bg-cream/10 hover:text-cream"

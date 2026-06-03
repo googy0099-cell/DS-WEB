@@ -155,7 +155,7 @@ export default function SidebarNav({
                   onClick={() => toggleGroup(group.label)}
                   className="w-full flex items-center justify-between px-3 py-1.5 text-cream/60 hover:text-cream/80 transition-colors"
                 >
-                  <span className="text-xs font-semibold uppercase tracking-widest">
+                  <span className="text-sm font-bold">
                     {group.label}
                   </span>
                   <span className={`text-xs transition-transform duration-200 ${groupOpen ? "rotate-90" : ""}`}>›</span>
@@ -173,7 +173,7 @@ export default function SidebarNav({
                         href={item.href}
                         title={collapsed ? item.label : undefined}
                         className={`flex items-center gap-3 rounded-xl text-sm font-medium transition-colors ${
-                          collapsed ? "px-0 py-2.5 justify-center" : "px-3 py-2"
+                          collapsed ? "px-0 py-2.5 justify-center" : "pl-5 pr-3 py-2"
                         } ${
                           active
                             ? "bg-orange/20 text-orange"
