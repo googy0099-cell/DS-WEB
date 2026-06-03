@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { loadModels, getDescriptor, getAverageDescriptor, matchDescriptor } from "@/lib/hr-face";
+import { loadModels, getDescriptor, getAverageDescriptor, matchDescriptor, getEAR } from "@/lib/hr-face";
 
 type StaffMember = {
   id: number;
@@ -12,7 +12,7 @@ type StaffMember = {
   faceData: string | null;
 };
 
-type Step = "loading" | "scan" | "matched" | "pin" | "camera" | "registering" | "success";
+type Step = "loading" | "scan" | "liveness" | "pin" | "camera" | "registering" | "success";
 
 export default function HrCheckinPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
@@ -43,9 +43,9 @@ export default function HrCheckinPage() {
       .catch(() => setScanStatus("โหลด AI ไม่สำเร็จ — ใช้ PIN แทน"));
   }, [fetchStaff]);
 
-  // Start camera on scan/camera/registering step
+  // Start camera on scan/liveness/camera/registering step
   useEffect(() => {
-    if (step !== "scan" && step !== "camera" && step !== "registering") { stopCamera(); return; }
+    if (step !== "scan" && step !== "liveness" && step !== "camera" && step !== "registering") { stopCamera(); return; }
     navigator.mediaDevices
       .getUserMedia({ video: { facingMode: "user" }, audio: false })
       .then((stream) => {
@@ -106,31 +106,8 @@ export default function HrCheckinPage() {
             const found = staff.find((s) => s.id === match.id)!;
             isScanning.current = false;
             setScanProgress(0);
-            // Capture photo then submit — no PIN needed
-            const canvas = document.createElement("canvas");
-            canvas.width = videoRef.current!.videoWidth;
-            canvas.height = videoRef.current!.videoHeight;
-            canvas.getContext("2d")?.drawImage(videoRef.current!, 0, 0);
-            const photoBase64 = canvas.toDataURL("image/jpeg", 0.7);
-            stopCamera();
             setSelected(found);
-            setLoading(true);
-            const res = await fetch("/api/hr/attendance", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ staffId: found.id, photoBase64, faceCheckin: true }),
-            });
-            const data = await res.json();
-            setLoading(false);
-            if (res.ok) {
-              setResult(data);
-              setStep("success");
-              fetchStaff();
-              setTimeout(() => { setStep("scan"); setSelected(null); setResult(null); setScanStatus("กำลังสแกนใบหน้า..."); }, 3000);
-            } else {
-              setScanStatus(data.error ?? "เกิดข้อผิดพลาด");
-              setTimeout(() => { isScanning.current = true; setScanStatus("กำลังสแกนใบหน้า..."); hitCount = 0; consecutiveId = null; loop(); }, 2000);
-            }
+            setStep("liveness"); // → blink challenge
             return;
           }
         } else {
@@ -195,6 +172,72 @@ export default function HrCheckinPage() {
       setLoading(false);
     }
   }
+
+  // Liveness: blink detection
+  const [livenessMsg, setLivenessMsg] = useState("กระพริบตา 1 ครั้ง");
+  const livenessRef = useRef(false);
+
+  useEffect(() => {
+    if (step !== "liveness" || !selected) return;
+    livenessRef.current = true;
+    setLivenessMsg("กระพริบตา 1 ครั้ง");
+
+    const EAR_CLOSED = 0.21;
+    const EAR_OPEN   = 0.25;
+    const TIMEOUT_MS = 7000;
+    let eyeWasClosed = false;
+    let cancelled = false;
+    const deadline = Date.now() + TIMEOUT_MS;
+
+    async function loop() {
+      if (cancelled || !livenessRef.current || !videoRef.current) return;
+      if (Date.now() > deadline) {
+        setLivenessMsg("หมดเวลา — ลองใหม่");
+        await new Promise((r) => setTimeout(r, 1500));
+        if (!cancelled) { setStep("scan"); setSelected(null); }
+        return;
+      }
+      const ear = await getEAR(videoRef.current).catch(() => null);
+      if (ear !== null) {
+        if (!eyeWasClosed && ear < EAR_CLOSED) {
+          eyeWasClosed = true;
+          setLivenessMsg("👁️ กำลังตรวจสอบ...");
+        } else if (eyeWasClosed && ear > EAR_OPEN) {
+          // Blink confirmed!
+          livenessRef.current = false;
+          cancelled = true;
+          const canvas = document.createElement("canvas");
+          canvas.width = videoRef.current!.videoWidth;
+          canvas.height = videoRef.current!.videoHeight;
+          canvas.getContext("2d")?.drawImage(videoRef.current!, 0, 0);
+          const photoBase64 = canvas.toDataURL("image/jpeg", 0.7);
+          stopCamera();
+          setLoading(true);
+          const res = await fetch("/api/hr/attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ staffId: selected!.id, photoBase64, faceCheckin: true }),
+          });
+          const data = await res.json();
+          setLoading(false);
+          if (res.ok) {
+            setResult(data);
+            setStep("success");
+            fetchStaff();
+            setTimeout(() => { setStep("scan"); setSelected(null); setResult(null); setScanStatus("กำลังสแกนใบหน้า..."); }, 3000);
+          } else {
+            setStep("scan");
+            setScanStatus(data.error ?? "เกิดข้อผิดพลาด");
+          }
+          return;
+        }
+      }
+      setTimeout(loop, 80);
+    }
+    loop();
+    return () => { cancelled = true; livenessRef.current = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, selected]);
 
   // Face registration
   async function startRegister(s: StaffMember) {
@@ -323,6 +366,33 @@ export default function HrCheckinPage() {
     );
   }
 
+
+  // ── Liveness ──────────────────────────────────────────────────────────────
+  if (step === "liveness" && selected) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-5 px-6">
+        <div className="relative w-full max-w-xs aspect-square rounded-3xl overflow-hidden bg-black">
+          <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
+          <div className="absolute inset-0 flex items-end justify-center pb-5 pointer-events-none">
+            <div className="bg-black/60 rounded-2xl px-4 py-2 flex items-center gap-2">
+              {loading
+                ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <span className="text-lg">👁️</span>
+              }
+              <span className="text-white text-sm font-medium">{livenessMsg}</span>
+            </div>
+          </div>
+        </div>
+        <div className="text-center">
+          <p className="font-semibold">{selected.name}</p>
+          <p className="text-[#f8f1e5]/40 text-xs mt-0.5">ตรวจสอบว่าเป็นคนจริง</p>
+        </div>
+        <button onClick={() => { setStep("scan"); setSelected(null); }} className="text-[#f8f1e5]/30 text-xs">
+          ยกเลิก
+        </button>
+      </div>
+    );
+  }
 
   // ── Registering ───────────────────────────────────────────────────────────
   if (step === "registering") {

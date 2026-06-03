@@ -13,6 +13,33 @@ export async function loadModels() {
   loaded = true;
 }
 
+// ── Liveness: Eye Aspect Ratio (EAR) ──────────────────────────────────────
+
+type Point = { x: number; y: number };
+
+function euclidean(a: Point, b: Point) {
+  return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+}
+
+function eyeAR(pts: Point[]): number {
+  // pts = 6 landmark points of one eye
+  const A = euclidean(pts[1], pts[5]);
+  const B = euclidean(pts[2], pts[4]);
+  const C = euclidean(pts[0], pts[3]);
+  return (A + B) / (2.0 * C);
+}
+
+export async function getEAR(video: HTMLVideoElement): Promise<number | null> {
+  const det = await faceapi
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .withFaceLandmarks(true);
+  if (!det) return null;
+  const p = det.landmarks.positions;
+  const left  = p.slice(36, 42);
+  const right = p.slice(42, 48);
+  return (eyeAR(left) + eyeAR(right)) / 2;
+}
+
 export async function getDescriptor(video: HTMLVideoElement): Promise<Float32Array | null> {
   const detection = await faceapi
     .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
