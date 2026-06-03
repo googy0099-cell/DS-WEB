@@ -46,6 +46,8 @@ export default function HrCheckinPage() {
   const [regStep, setRegStep] = useState<RegisterStep>("pick");
   const [regTarget, setRegTarget] = useState<StaffMember | null>(null);
   const [regMsg, setRegMsg] = useState("");
+  const [regPhotos, setRegPhotos] = useState<string[]>([]);
+  const [regPhotoStep, setRegPhotoStep] = useState(0); // 0,1,2
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -99,24 +101,29 @@ export default function HrCheckinPage() {
     setCheckinStep("identifying");
     setCheckinError("");
 
-    const res = await fetch("/api/hr/face/identify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photoBase64: photo }),
-    });
-    const data = await res.json();
+    try {
+      const res = await fetch("/api/hr/face/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photoBase64: photo }),
+      });
+      const data = await res.json();
 
-    if (!res.ok) {
-      setCheckinError(data.error ?? "ระบุตัวตนไม่ได้");
-      setCheckinStep("idle");
+      if (!res.ok) {
+        setCheckinError(data.error ?? "ระบุตัวตนไม่ได้");
+        setCheckinStep("idle");
+        fetchStaff();
+        return;
+      }
+
+      setResult(data);
+      setCheckinStep("success");
       fetchStaff();
-      return;
+      setTimeout(() => { setCheckinStep("idle"); setResult(null); setCheckinError(""); }, 3500);
+    } catch {
+      setCheckinError("เกิดข้อผิดพลาด — ลองใหม่");
+      setCheckinStep("idle");
     }
-
-    setResult(data);
-    setCheckinStep("success");
-    fetchStaff();
-    setTimeout(() => { setCheckinStep("idle"); setResult(null); setCheckinError(""); }, 3500);
   }
 
   // ── PIN fallback ─────────────────────────────────────────────────────────
@@ -149,31 +156,61 @@ export default function HrCheckinPage() {
     }
   }
 
-  // ── face register ────────────────────────────────────────────────────────
+  // ── face register (3 photos) ─────────────────────────────────────────────
 
-  async function doRegister() {
+  const REG_INSTRUCTIONS = ["มองตรงๆ", "หันซ้ายนิด", "หันขวานิด"];
+
+  async function captureRegPhoto() {
     const photo = capturePhoto();
     if (!photo || !regTarget) return;
-    stopCamera();
-    setRegStep("saving");
-    setRegMsg("กำลังบันทึกกับ Azure...");
 
-    const res = await fetch("/api/hr/face/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ staffId: regTarget.id, photoBase64: photo }),
-    });
-    const data = await res.json();
+    const next = [...regPhotos, photo];
+    setRegPhotos(next);
 
-    if (!res.ok) {
-      setRegMsg(data.error ?? "บันทึกไม่สำเร็จ");
-      setRegStep("pick");
+    if (next.length < 3) {
+      // move to next pose — camera stays open
+      setRegPhotoStep(next.length);
       return;
     }
 
-    await fetchStaff();
-    setRegMsg(`ลงทะเบียนหน้าของ ${regTarget.name} สำเร็จ`);
-    setRegStep("done");
+    // All 3 photos captured → submit
+    stopCamera();
+    setRegStep("saving");
+    setRegMsg("กำลังส่ง Azure ตรวจสอบ...");
+
+    try {
+      const res = await fetch("/api/hr/face/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffId: regTarget.id, photos: next }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setRegMsg(data.error ?? "บันทึกไม่สำเร็จ");
+        setRegStep("pick");
+        setRegPhotos([]);
+        setRegPhotoStep(0);
+        return;
+      }
+
+      await fetchStaff();
+      setRegMsg(`ลงทะเบียนหน้าของ ${regTarget.name} สำเร็จ`);
+      setRegStep("done");
+    } catch (e) {
+      setRegMsg(`เกิดข้อผิดพลาด: ${String(e)}`);
+      setRegStep("pick");
+      setRegPhotos([]);
+      setRegPhotoStep(0);
+    }
+  }
+
+  function resetRegister() {
+    setRegStep("pick");
+    setRegTarget(null);
+    setRegMsg("");
+    setRegPhotos([]);
+    setRegPhotoStep(0);
   }
 
   // ── render ───────────────────────────────────────────────────────────────
@@ -348,16 +385,27 @@ export default function HrCheckinPage() {
                   <div className="rounded-full border-2 border-[#fb8500]/70"
                     style={{ width: "min(72vw, 72vh)", height: "min(72vw, 72vh)", boxShadow: "0 0 0 9999px rgba(24,42,71,0.55)" }} />
                 </div>
+                {/* Progress dots */}
+                <div className="absolute top-4 left-0 right-0 flex justify-center gap-2 pointer-events-none">
+                  {[0,1,2].map(i => (
+                    <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < regPhotos.length ? "bg-emerald-400" : i === regPhotoStep ? "bg-[#fb8500]" : "bg-white/20"}`} />
+                  ))}
+                </div>
                 <div className="absolute bottom-20 left-0 right-0 text-center">
                   <p className="font-semibold">{regTarget.name}</p>
-                  <p className="text-[#f8f1e5]/60 text-xs mt-1">แสงดี · ตรงกล้อง · ห่าง 30-50 ซม.</p>
+                  <p className="text-[#fb8500] font-bold text-sm mt-1">
+                    รูป {regPhotoStep + 1}/3 — {REG_INSTRUCTIONS[regPhotoStep]}
+                  </p>
+                  <p className="text-[#f8f1e5]/50 text-xs mt-1">แสงดี · ห่าง 30-50 ซม.</p>
                 </div>
               </div>
               <div className="px-4 py-4 flex gap-3">
-                <button onClick={() => { stopCamera(); setRegStep("pick"); setRegTarget(null); }}
+                <button onClick={() => { stopCamera(); resetRegister(); }}
                   className="flex-1 py-3 bg-white/5 rounded-2xl text-sm text-[#f8f1e5]/60">ยกเลิก</button>
-                <button onClick={doRegister}
-                  className="flex-1 py-3 bg-[#fb8500] rounded-2xl text-sm font-bold">ถ่ายรูปลงทะเบียน</button>
+                <button onClick={captureRegPhoto}
+                  className="flex-1 py-3 bg-[#fb8500] rounded-2xl text-sm font-bold">
+                  ถ่าย ({regPhotoStep + 1}/3)
+                </button>
               </div>
             </div>
           )}
@@ -373,7 +421,7 @@ export default function HrCheckinPage() {
             <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
               <div className="text-5xl text-emerald-400">✓</div>
               <p className="font-bold text-lg">{regMsg}</p>
-              <button onClick={() => { setRegStep("pick"); setRegTarget(null); setRegMsg(""); }}
+              <button onClick={resetRegister}
                 className="bg-[#fb8500] text-white font-bold px-6 py-3 rounded-2xl">
                 ลงทะเบียนคนต่อไป
               </button>

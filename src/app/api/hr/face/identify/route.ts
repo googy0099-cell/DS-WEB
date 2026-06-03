@@ -30,19 +30,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ยังไม่มีพนักงานลงทะเบียนใบหน้า" }, { status: 422 });
   }
 
-  // Compare against each staff's reference photo
+  // Compare against each staff's reference photos (1 or 3)
   let best: { id: number; name: string; confidence: number } | null = null;
 
   for (const s of allStaff) {
     try {
-      const faceIdRef = await detectFace(s.faceData!);
-      if (!faceIdRef) continue;
-      const confidence = await verifyFaces(faceIdNew, faceIdRef);
-      if (confidence > (best?.confidence ?? 0)) {
+      // faceData may be JSON array (3 photos) or single base64 string (legacy)
+      let refPhotos: string[];
+      try {
+        refPhotos = JSON.parse(s.faceData!);
+        if (!Array.isArray(refPhotos)) refPhotos = [s.faceData!];
+      } catch {
+        refPhotos = [s.faceData!];
+      }
+
+      let maxConf = 0;
+      for (const refPhoto of refPhotos) {
+        const faceIdRef = await detectFace(refPhoto);
+        if (!faceIdRef) continue;
+        const conf = await verifyFaces(faceIdNew, faceIdRef);
+        if (conf > maxConf) maxConf = conf;
+      }
+
+      if (maxConf > (best?.confidence ?? 0)) {
         best = {
           id: s.id,
           name: `${s.user.firstName} ${s.user.lastName}`.trim(),
-          confidence,
+          confidence: maxConf,
         };
       }
     } catch {
