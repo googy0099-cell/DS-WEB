@@ -8,26 +8,31 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const staff = await db.hrStaff.findMany({
-    include: {
-      user: { select: { firstName: true, lastName: true } },
-      schedules: { orderBy: { dayOfWeek: "asc" } },
-    },
-    orderBy: { createdAt: "asc" },
-  });
+  try {
+    const staff = await db.hrStaff.findMany({
+      include: {
+        user: { select: { firstName: true, lastName: true } },
+        schedules: { orderBy: { dayOfWeek: "asc" } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
 
-  return NextResponse.json(
-    staff.map((s) => ({
-      id: s.id,
-      name: `${s.user.firstName} ${s.user.lastName}`.trim(),
-      schedules: s.schedules.map((sc) => ({
-        dayOfWeek: sc.dayOfWeek,
-        startTime: sc.startTime,
-        endTime: sc.endTime,
-        graceMinutes: sc.graceMinutes,
-      })),
-    }))
-  );
+    return NextResponse.json(
+      staff.map((s) => ({
+        id: s.id,
+        name: `${s.user.firstName} ${s.user.lastName}`.trim(),
+        schedules: s.schedules.map((sc) => ({
+          dayOfWeek: sc.dayOfWeek,
+          startTime: sc.startTime,
+          endTime: sc.endTime,
+          graceMinutes: sc.graceMinutes,
+        })),
+      }))
+    );
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
