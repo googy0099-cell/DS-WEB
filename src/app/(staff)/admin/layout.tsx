@@ -6,6 +6,7 @@ import WakeLock from "@/components/admin/WakeLock";
 import MobileNav from "@/components/admin/MobileNav";
 import SidebarNav from "@/components/admin/SidebarNav";
 import GlobalOrderAlert from "@/components/admin/GlobalOrderAlert";
+import AppointmentBanner from "@/components/admin/AppointmentBanner";
 
 export const metadata: Metadata = {
   manifest: "/manifest-admin.json",
@@ -118,6 +119,7 @@ export default async function AdminLayout({
       <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 w-full overflow-x-hidden min-w-0">
         <RegisterSW />
         <WakeLock />
+        {role === "OWNER" && <AppointmentBanner />}
         {children}
       </main>
 

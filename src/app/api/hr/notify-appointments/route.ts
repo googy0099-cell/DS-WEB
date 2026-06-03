@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { sendTelegramNotify } from "@/lib/telegram-notify";
+import { sendPushToAll } from "@/lib/push-notify";
 
 const BKK = 7 * 3600_000;
 const MONTHS_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -66,7 +67,13 @@ export async function POST(req: NextRequest) {
         `📋 ${ev.description}` +
         staffLine + amountLine + recurrLine;
 
-      await sendTelegramNotify(msg);
+      const pushTitle = `📌 ${ev.description}`;
+      const pushBody = `${daysLabel} · ${bkkDateStr(targetDate)}${staffName ? ` · ${staffName}` : ""}`;
+
+      await Promise.all([
+        sendTelegramNotify(msg),
+        sendPushToAll(pushTitle, pushBody),
+      ]);
       notified.push(ev.id);
     }
 
