@@ -565,6 +565,7 @@ model HrStaff {
   credentialPublicKey   String?      @map("credential_public_key")
   credentialCounter     Int          @default(0) @map("credential_counter")
   pendingChallenge      String?      @map("pending_challenge")
+  azurePersonId         String?      @map("azure_person_id")
   createdAt             DateTime     @default(now()) @map("created_at")
   user                  User         @relation("HrStaff", fields: [userId], references: [id])
   attendances           HrAttendance[]
