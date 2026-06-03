@@ -25,14 +25,20 @@ export async function GET(req: NextRequest) {
   const fetcher = SHEET_FETCHERS[sheet];
   if (!fetcher) return NextResponse.json({ error: "Invalid sheet" }, { status: 400 });
 
-  const { header, rows, sheetName } = await fetcher(from, to);
-  const csv = "﻿" + buildCsv([header, ...rows]);
-  const filename = `${sheetName}_${from}_to_${to}.csv`;
+  try {
+    const { header, rows, sheetName } = await fetcher(from, to);
+    const csv = "﻿" + buildCsv([header, ...rows]);
+    const filename = `${sheetName}_${from}_to_${to}.csv`;
 
-  return new NextResponse(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="${filename}"`,
-    },
-  });
+    return new NextResponse(csv, {
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      },
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[export]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

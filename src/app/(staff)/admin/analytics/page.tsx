@@ -83,9 +83,27 @@ export default function AnalyticsHubPage() {
   const [uploading, setUploading] = useState(false);
   const [driveUrl, setDriveUrl] = useState<string | null>(null);
   const [driveError, setDriveError] = useState("");
+  const [csvError, setCsvError] = useState("");
 
-  function downloadCsv(sheet: string) {
-    window.location.href = `/api/analytics/export?from=${from}&to=${to}&sheet=${sheet}`;
+  async function downloadCsv(sheet: string) {
+    setCsvError("");
+    const res = await fetch(`/api/analytics/export?from=${from}&to=${to}&sheet=${sheet}`);
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const d = await res.json() as { error?: string }; msg = d.error ?? msg; } catch {}
+      setCsvError(msg);
+      return;
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition") ?? "";
+    const nameMatch = disposition.match(/filename\*?=(?:UTF-8'')?([^;]+)/i);
+    const filename = nameMatch ? decodeURIComponent(nameMatch[1].replace(/"/g, "")) : `${sheet}_${from}_${to}.csv`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   async function uploadToDrive() {
@@ -166,6 +184,7 @@ export default function AnalyticsHubPage() {
             </button>
           ))}
         </div>
+        {csvError && <p className="text-xs text-red-500 mb-3">{csvError}</p>}
 
         {/* Google Drive upload */}
         <div className="border-t border-sand/50 pt-4">
