@@ -16,73 +16,73 @@ type NavGroup = { label: string; items: NavItem[] };
 
 const GROUP_DASHBOARD: NavGroup = {
   label: "",
-  items: [{ href: "/admin", label: "Dashboard", icon: "📊" }],
+  items: [{ href: "/admin", label: "Dashboard", icon: "dashboard" }],
 };
 
 const GROUP_SALES: NavGroup = {
   label: "การขาย",
   items: [
-    { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "⏱️" },
-    { href: "/admin/cashier", label: "รอบการขาย", icon: "💲" },
+    { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "pos" },
+    { href: "/admin/cashier", label: "รอบการขาย", icon: "cashier" },
   ],
 };
 
 const GROUP_MENU: NavGroup = {
   label: "เมนู & ครัว",
   items: [
-    { href: "/admin/menu", label: "จัดการเมนู", icon: "🍜" },
-    { href: "/admin/addon-groups", label: "Set Add-on", icon: "➕" },
-    { href: "/admin/option-groups", label: "ตัวเลือก", icon: "🎛️" },
-    { href: "/admin/kitchen", label: "คิวครัว", icon: "🍳" },
-    { href: "/admin/bar", label: "คิวบาร์", icon: "🥤" },
-    { href: "/admin/stock", label: "สต็อก", icon: "📦" },
-    { href: "/admin/sop", label: "สูตรอาหาร", icon: "📋" },
+    { href: "/admin/menu", label: "จัดการเมนู", icon: "menu" },
+    { href: "/admin/addon-groups", label: "Set Add-on", icon: "addon-groups" },
+    { href: "/admin/option-groups", label: "ตัวเลือก", icon: "option-groups" },
+    { href: "/admin/kitchen", label: "คิวครัว", icon: "kitchen" },
+    { href: "/admin/bar", label: "คิวบาร์", icon: "bar" },
+    { href: "/admin/stock", label: "สต็อก", icon: "stock" },
+    { href: "/admin/sop", label: "สูตรอาหาร", icon: "sop" },
   ],
 };
 
 const GROUP_GAMES: NavGroup = {
   label: "เกม",
   items: [
-    { href: "/admin/games", label: "บอร์ดเกม", icon: "🎲" },
-    { href: "/admin/mini-games", label: "มินิเกม", icon: "🎮" },
-    { href: "/admin/werewolf", label: "Werewolf GM", icon: "🐺" },
+    { href: "/admin/games", label: "บอร์ดเกม", icon: "games" },
+    { href: "/admin/mini-games", label: "มินิเกม", icon: "mini-games" },
+    { href: "/admin/werewolf", label: "Werewolf GM", icon: "werewolf" },
   ],
 };
 
 const GROUP_CUSTOMERS_STAFF: NavGroup = {
   label: "ลูกค้า",
   items: [
-    { href: "/admin/activities", label: "กิจกรรม", icon: "🎉" },
-    { href: "/admin/gallery", label: "Gallery", icon: "🖼️" },
+    { href: "/admin/activities", label: "กิจกรรม", icon: "activities" },
+    { href: "/admin/gallery", label: "Gallery", icon: "gallery" },
   ],
 };
 
 const GROUP_CUSTOMERS_OWNER: NavGroup = {
   label: "ลูกค้า",
   items: [
-    { href: "/admin/members", label: "สมาชิก", icon: "👥" },
-    { href: "/admin/activities", label: "กิจกรรม", icon: "🎉" },
-    { href: "/admin/gallery", label: "Gallery", icon: "🖼️" },
-    { href: "/admin/rewards", label: "จัดการรางวัล", icon: "🎁" },
+    { href: "/admin/members", label: "สมาชิก", icon: "members" },
+    { href: "/admin/activities", label: "กิจกรรม", icon: "activities" },
+    { href: "/admin/gallery", label: "Gallery", icon: "gallery" },
+    { href: "/admin/rewards", label: "จัดการรางวัล", icon: "rewards" },
   ],
 };
 
 const GROUP_SYSTEM: NavGroup = {
   label: "จัดการ",
   items: [
-    { href: "/admin/users", label: "ผู้ใช้งานระบบ", icon: "🔑" },
-    { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "📈" },
-    { href: "/admin/audit", label: "Log การทำงาน", icon: "📋" },
-    { href: "/admin/tables", label: "โต๊ะ & QR Code", icon: "🪑" },
-    { href: "/admin/settings", label: "การตั้งค่า", icon: "⚙️" },
+    { href: "/admin/users", label: "ผู้ใช้งานระบบ", icon: "users" },
+    { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "analytics" },
+    { href: "/admin/audit", label: "Log การทำงาน", icon: "audit" },
+    { href: "/admin/tables", label: "โต๊ะ & QR Code", icon: "tables" },
+    { href: "/admin/settings", label: "การตั้งค่า", icon: "settings" },
   ],
 };
 
 const GROUP_HR: NavGroup = {
   label: "HR",
   items: [
-    { href: "/hr/schedule", label: "ตารางพนักงาน", icon: "📅" },
-    { href: "/hr/payroll", label: "เงินเดือน", icon: "💵" },
+    { href: "/admin/hr/schedule", label: "ตารางพนักงาน", icon: "hr-schedule" },
+    { href: "/admin/hr/payroll", label: "เงินเดือน", icon: "hr-payroll" },
   ],
 };
 

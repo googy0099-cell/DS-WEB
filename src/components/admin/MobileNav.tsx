@@ -3,9 +3,44 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard, Timer, Banknote, UtensilsCrossed, PackagePlus,
+  SlidersHorizontal, ChefHat, GlassWater, Package, BookOpen,
+  Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
+  KeyRound, BarChart3, ScrollText, QrCode, Settings2,
+  CalendarDays, Wallet,
+  type LucideIcon,
+} from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: string };
 type NavGroup = { label: string; items: NavItem[] };
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  pos: Timer,
+  cashier: Banknote,
+  menu: UtensilsCrossed,
+  "addon-groups": PackagePlus,
+  "option-groups": SlidersHorizontal,
+  kitchen: ChefHat,
+  bar: GlassWater,
+  stock: Package,
+  sop: BookOpen,
+  games: Dices,
+  "mini-games": Gamepad2,
+  werewolf: Moon,
+  members: Users,
+  activities: Sparkles,
+  gallery: Images,
+  rewards: Gift,
+  users: KeyRound,
+  analytics: BarChart3,
+  audit: ScrollText,
+  tables: QrCode,
+  settings: Settings2,
+  "hr-schedule": CalendarDays,
+  "hr-payroll": Wallet,
+};
 
 export default function MobileNav({
   groups,
@@ -35,7 +70,6 @@ export default function MobileNav({
 
   return (
     <>
-      {/* Hamburger button */}
       <button
         onClick={() => setOpen(true)}
         className="md:hidden fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full bg-navy shadow-xl flex flex-col items-center justify-center gap-1.5 border border-cream/20"
@@ -46,23 +80,19 @@ export default function MobileNav({
         <span className="block w-5 h-0.5 bg-cream rounded-full" />
       </button>
 
-      {/* Backdrop */}
       {open && (
         <div className="md:hidden fixed inset-0 z-50 bg-black/50" onClick={() => setOpen(false)} />
       )}
 
-      {/* Slide-up drawer */}
       <div
         className={`md:hidden fixed bottom-0 left-0 right-0 z-50 bg-navy rounded-t-3xl shadow-2xl transition-transform duration-300 ${
           open ? "translate-y-0" : "translate-y-full"
         }`}
       >
-        {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
           <div className="w-10 h-1 bg-cream/30 rounded-full" />
         </div>
 
-        {/* User info */}
         <div className="px-5 py-3 border-b border-cream/10 flex items-center justify-between">
           <div>
             <p className="text-cream text-sm font-semibold">{username}</p>
@@ -71,7 +101,6 @@ export default function MobileNav({
           <button onClick={() => setOpen(false)} className="text-cream/50 text-2xl leading-none">×</button>
         </div>
 
-        {/* Nav */}
         <nav className="px-3 pt-2 pb-8 flex flex-col gap-0.5 max-h-[70vh] overflow-y-auto">
           {role === "OWNER" && (
             <>
@@ -80,7 +109,7 @@ export default function MobileNav({
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-cream/70 hover:bg-cream/10 hover:text-cream transition-colors"
               >
-                <span className="text-xl">🏠</span>
+                <LayoutDashboard className="w-5 h-5" />
                 <span className="text-sm font-medium">กลับหน้าหลัก</span>
               </Link>
               <div className="my-1 border-t border-cream/10" />
@@ -92,24 +121,23 @@ export default function MobileNav({
 
             return (
               <div key={group.label || gi}>
-                {/* Group header */}
                 {group.label && (
                   <button
                     onClick={() => toggleGroup(group.label)}
-                    className="w-full flex items-center justify-between px-4 py-2 text-cream/40 hover:text-cream/60 transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-2 text-cream/60 hover:text-cream/80 transition-colors"
                   >
-                    <span className="text-[10px] font-semibold uppercase tracking-widest">
+                    <span className="text-xs font-semibold uppercase tracking-widest">
                       {group.label}
                     </span>
                     <span className={`text-sm transition-transform duration-200 ${groupOpen ? "rotate-90" : ""}`}>›</span>
                   </button>
                 )}
 
-                {/* Items */}
                 {groupOpen && (
                   <div className="space-y-0.5 mb-1">
                     {group.items.map((item) => {
                       const active = isActive(item.href);
+                      const IconComp = ICON_MAP[item.icon] ?? LayoutDashboard;
                       return (
                         <Link
                           key={item.href}
@@ -121,7 +149,7 @@ export default function MobileNav({
                               : "text-cream/70 hover:bg-cream/10 hover:text-cream"
                           }`}
                         >
-                          <span className="text-xl">{item.icon}</span>
+                          <IconComp className="w-5 h-5 shrink-0" />
                           <span className="text-sm font-medium">{item.label}</span>
                         </Link>
                       );

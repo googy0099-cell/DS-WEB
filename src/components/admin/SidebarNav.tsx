@@ -4,9 +4,44 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
+import {
+  LayoutDashboard, Timer, Banknote, UtensilsCrossed, PackagePlus,
+  SlidersHorizontal, ChefHat, GlassWater, Package, BookOpen,
+  Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
+  KeyRound, BarChart3, ScrollText, QrCode, Settings2,
+  CalendarDays, Wallet,
+  type LucideIcon,
+} from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: string };
 type NavGroup = { label: string; items: NavItem[] };
+
+const ICON_MAP: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  pos: Timer,
+  cashier: Banknote,
+  menu: UtensilsCrossed,
+  "addon-groups": PackagePlus,
+  "option-groups": SlidersHorizontal,
+  kitchen: ChefHat,
+  bar: GlassWater,
+  stock: Package,
+  sop: BookOpen,
+  games: Dices,
+  "mini-games": Gamepad2,
+  werewolf: Moon,
+  members: Users,
+  activities: Sparkles,
+  gallery: Images,
+  rewards: Gift,
+  users: KeyRound,
+  analytics: BarChart3,
+  audit: ScrollText,
+  tables: QrCode,
+  settings: Settings2,
+  "hr-schedule": CalendarDays,
+  "hr-payroll": Wallet,
+};
 
 const SIDEBAR_KEY = "admin-sidebar-collapsed";
 const GROUPS_KEY = "admin-sidebar-groups";
@@ -28,7 +63,6 @@ export default function SidebarNav({
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_KEY);
     if (stored === "1") setCollapsed(true);
-
     const storedGroups = localStorage.getItem(GROUPS_KEY);
     if (storedGroups) {
       try { setCollapsedGroups(new Set(JSON.parse(storedGroups))); } catch {}
@@ -36,7 +70,6 @@ export default function SidebarNav({
     setMounted(true);
   }, []);
 
-  // Auto-expand the group that contains the active page
   useEffect(() => {
     if (!mounted) return;
     groups.forEach((g) => {
@@ -117,24 +150,23 @@ export default function SidebarNav({
 
           return (
             <div key={group.label || gi} className="mb-1">
-              {/* Group header (skip for unlabelled groups e.g. Dashboard) */}
               {group.label && !collapsed && (
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 text-cream/40 hover:text-cream/70 transition-colors"
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-cream/60 hover:text-cream/80 transition-colors"
                 >
-                  <span className="text-[10px] font-semibold uppercase tracking-widest">
+                  <span className="text-xs font-semibold uppercase tracking-widest">
                     {group.label}
                   </span>
                   <span className={`text-xs transition-transform duration-200 ${groupOpen ? "rotate-90" : ""}`}>›</span>
                 </button>
               )}
 
-              {/* Items */}
               {(collapsed || groupOpen) && (
                 <div className="space-y-0.5">
                   {group.items.map((item) => {
                     const active = isActive(item.href);
+                    const IconComp = ICON_MAP[item.icon] ?? LayoutDashboard;
                     return (
                       <Link
                         key={item.href}
@@ -148,7 +180,7 @@ export default function SidebarNav({
                             : "text-cream/70 hover:text-cream hover:bg-cream/10"
                         }`}
                       >
-                        <span className="text-lg leading-none shrink-0">{item.icon}</span>
+                        <IconComp className="w-[18px] h-[18px] shrink-0" />
                         {!collapsed && <span className="truncate">{item.label}</span>}
                       </Link>
                     );
@@ -156,7 +188,6 @@ export default function SidebarNav({
                 </div>
               )}
 
-              {/* Divider between groups */}
               {!collapsed && gi < groups.length - 1 && (
                 <div className="my-1 border-t border-cream/5" />
               )}
@@ -168,7 +199,7 @@ export default function SidebarNav({
       {/* Footer */}
       <div className={`p-3 border-t border-cream/10 ${collapsed ? "text-center" : ""}`}>
         {collapsed ? (
-          <span className="text-cream/40 text-lg">👤</span>
+          <Users className="w-4 h-4 text-cream/40 mx-auto" />
         ) : (
           <>
             <p className="text-cream/60 text-xs truncate">{username}</p>
