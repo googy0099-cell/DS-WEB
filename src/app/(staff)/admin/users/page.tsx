@@ -14,6 +14,7 @@ type AdminUser = {
   lastName: string;
   role: string;
   createdAt: string;
+  hrStaff: { id: number; hasPin: boolean } | null;
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -31,6 +32,12 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState({ firstName: "", lastName: "", email: "", username: "" });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
+
+  // HR PIN modal
+  const [pinUser, setPinUser] = useState<AdminUser | null>(null);
+  const [pin, setPin] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinError, setPinError] = useState("");
 
   if (session && session.user.role !== "OWNER") {
     redirect("/admin");
@@ -86,6 +93,22 @@ export default function AdminUsersPage() {
     setEditUser(null);
   }
 
+  async function savePin() {
+    if (!pinUser || pin.length !== 4) return;
+    setPinSaving(true);
+    setPinError("");
+    const res = await fetch("/api/hr/staff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: pinUser.id, pin }),
+    });
+    setPinSaving(false);
+    if (!res.ok) { setPinError("บันทึกไม่สำเร็จ"); return; }
+    await mutate();
+    setPinUser(null);
+    setPin("");
+  }
+
   async function deleteUser(id: number) {
     if (!confirm("ลบผู้ใช้งานนี้?")) return;
     await fetch("/api/users", {
@@ -111,6 +134,7 @@ export default function AdminUsersPage() {
             <tr>
               <th className="text-left p-3 text-navy font-semibold">ผู้ใช้</th>
               <th className="text-left p-3 text-navy font-semibold">Role</th>
+              <th className="text-left p-3 text-navy font-semibold">HR</th>
               <th className="p-3"></th>
             </tr>
           </thead>
@@ -131,6 +155,20 @@ export default function AdminUsersPage() {
                     <option value="STAFF">STAFF</option>
                     <option value="OWNER">OWNER</option>
                   </select>
+                </td>
+                <td className="p-3">
+                  <button
+                    onClick={() => { setPinUser(u); setPin(""); setPinError(""); }}
+                    className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                      u.hrStaff?.hasPin
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                        : u.hrStaff
+                        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                        : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                    }`}
+                  >
+                    {u.hrStaff?.hasPin ? "HR ✓" : u.hrStaff ? "ไม่มี PIN" : "ตั้ง HR"}
+                  </button>
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-3 justify-end">
@@ -178,6 +216,38 @@ export default function AdminUsersPage() {
               <button onClick={() => setEditUser(null)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
               <button onClick={saveEdit} disabled={editSaving} className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
                 {editSaving ? "กำลังบันทึก..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HR PIN modal */}
+      {pinUser && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setPinUser(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-xs shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-navy text-lg">ตั้ง PIN ระบบ HR</h2>
+              <button onClick={() => setPinUser(null)}><X size={18} className="text-gray-400" /></button>
+            </div>
+            <p className="text-gray-400 text-xs mb-4">{pinUser.firstName} {pinUser.lastName}</p>
+            <div>
+              <label className="text-xs font-medium text-navy block mb-1">PIN 4 หลัก</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength={4}
+                value={pin}
+                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="กรอก PIN 4 หลัก"
+                className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none text-center tracking-widest text-lg"
+              />
+            </div>
+            {pinError && <p className="mt-2 text-sm text-red-500">{pinError}</p>}
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setPinUser(null)} className="flex-1 border border-sand text-navy font-semibold py-2.5 rounded-xl text-sm">ยกเลิก</button>
+              <button onClick={savePin} disabled={pinSaving || pin.length !== 4} className="flex-1 bg-orange text-white font-semibold py-2.5 rounded-xl text-sm disabled:opacity-50">
+                {pinSaving ? "กำลังบันทึก..." : "บันทึก"}
               </button>
             </div>
           </div>

@@ -15,10 +15,18 @@ export async function GET() {
   if (!(await requireOwner())) return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   const users = await db.user.findMany({
     where: { role: { in: ["CASHIER", "STAFF", "OWNER"] } },
-    select: { id: true, email: true, username: true, firstName: true, lastName: true, role: true, createdAt: true },
+    select: {
+      id: true, email: true, username: true, firstName: true, lastName: true, role: true, createdAt: true,
+      hrStaff: { select: { id: true, pin: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(users);
+  return NextResponse.json(
+    users.map((u) => ({
+      ...u,
+      hrStaff: u.hrStaff ? { id: u.hrStaff.id, hasPin: !!u.hrStaff.pin } : null,
+    }))
+  );
 }
 
 export async function POST(req: NextRequest) {
