@@ -8,12 +8,8 @@ import { CheckCircle, QrCode, Banknote, Loader2 } from "lucide-react";
 
 type Step = "select" | "promptpay" | "counter" | "done";
 
-export default function CheckoutPage({
-  params,
-}: {
-  params: Promise<{ tableId: string }>;
-}) {
-  const { tableId } = use(params);
+export default function CheckoutPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
   const searchParams = useSearchParams();
   const orderId = searchParams.get("orderId");
 
@@ -21,10 +17,15 @@ export default function CheckoutPage({
   const [qrDataUrl, setQrDataUrl] = useState<string>("");
   const [amountTHB, setAmountTHB] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [tableNumber, setTableNumber] = useState<number | null>(null);
 
   useEffect(() => {
     if (!orderId) setStep("done");
-  }, [orderId]);
+    fetch(`/api/tables/by-slug?slug=${encodeURIComponent(slug)}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((t) => { if (t) setTableNumber(t.number); })
+      .catch(() => {});
+  }, [orderId, slug]);
 
   async function selectPromptPay() {
     setLoading(true);
@@ -49,14 +50,15 @@ export default function CheckoutPage({
     setStep("counter");
   }
 
+  const displayTable = tableNumber ?? slug;
+
   if (step === "select") {
     return (
       <main className="min-h-screen bg-cream flex flex-col p-6">
         <div className="mb-6">
-          <p className="text-sm text-gray-400">โต๊ะ {tableId}</p>
+          <p className="text-sm text-gray-400">โต๊ะ {displayTable}</p>
           <h1 className="text-2xl font-bold text-navy">เลือกวิธีชำระเงิน</h1>
         </div>
-
         <div className="space-y-3">
           <button
             onClick={selectPromptPay}
@@ -72,7 +74,6 @@ export default function CheckoutPage({
             </div>
             {loading && <Loader2 size={18} className="ml-auto text-orange animate-spin" />}
           </button>
-
           <button
             onClick={selectCounter}
             className="w-full bg-white rounded-2xl p-5 text-left shadow-sm border-2 border-transparent hover:border-navy active:scale-[0.98] transition-all flex items-center gap-4"
@@ -86,8 +87,7 @@ export default function CheckoutPage({
             </div>
           </button>
         </div>
-
-        <Link href={`/table/${tableId}`} className="mt-6 text-center text-sm text-gray-400 underline">
+        <Link href={`/table/${slug}`} className="mt-6 text-center text-sm text-gray-400 underline">
           ← กลับไปสั่งอาหารเพิ่ม
         </Link>
       </main>
@@ -100,7 +100,6 @@ export default function CheckoutPage({
         <div className="w-full max-w-sm">
           <h1 className="text-xl font-bold text-navy mb-1">สแกนจ่ายพร้อมเพย์</h1>
           <p className="text-sm text-gray-400 mb-6">แสดง QR Code นี้ให้พนักงานดูหลังโอนเงิน</p>
-
           <div className="bg-white rounded-2xl p-6 shadow-sm text-center mb-4">
             {qrDataUrl && (
               <Image src={qrDataUrl} alt="PromptPay QR" width={260} height={260} className="mx-auto" />
@@ -108,17 +107,12 @@ export default function CheckoutPage({
             <p className="text-3xl font-bold text-navy mt-4">฿{amountTHB.toLocaleString("th-TH")}</p>
             <p className="text-xs text-gray-400 mt-1">Dice Shop ร้านลูกเต๋า</p>
           </div>
-
           <div className="bg-sand rounded-xl p-4 text-sm text-gray-600 space-y-1">
             <p>1. สแกน QR Code ด้วยแอปธนาคาร</p>
             <p>2. ยืนยันยอด <span className="font-bold text-navy">฿{amountTHB}</span></p>
             <p>3. รอพนักงานกดยืนยันรับเงิน</p>
           </div>
-
-          <button
-            onClick={() => setStep("done")}
-            className="w-full mt-4 bg-navy text-cream font-bold py-3 rounded-xl"
-          >
+          <button onClick={() => setStep("done")} className="w-full mt-4 bg-navy text-cream font-bold py-3 rounded-xl">
             โอนเงินแล้ว แจ้งพนักงาน
           </button>
         </div>
@@ -132,10 +126,10 @@ export default function CheckoutPage({
         <div className="w-full max-w-sm text-center">
           <div className="text-6xl mb-4">🏪</div>
           <h1 className="text-2xl font-bold text-navy mb-2">กรุณาชำระที่เคาน์เตอร์</h1>
-          <p className="text-gray-500 mb-6">บอกพนักงานว่ามาจาก <span className="font-bold text-navy">โต๊ะ {tableId}</span></p>
+          <p className="text-gray-500 mb-6">บอกพนักงานว่ามาจาก <span className="font-bold text-navy">โต๊ะ {displayTable}</span></p>
           <div className="bg-navy text-cream rounded-2xl p-5 mb-6">
             <p className="text-sm opacity-70">โต๊ะที่</p>
-            <p className="text-5xl font-bold">{tableId}</p>
+            <p className="text-5xl font-bold">{displayTable}</p>
           </div>
           <p className="text-xs text-gray-400">รับชำระ เงินสด · บัตรเครดิต · บัตรเดบิต</p>
         </div>
@@ -143,7 +137,6 @@ export default function CheckoutPage({
     );
   }
 
-  // done
   return (
     <main className="min-h-screen bg-cream flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-sm text-center">

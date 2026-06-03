@@ -9,6 +9,7 @@ import Image from "next/image";
 import { CategoryIcon } from "@/lib/categoryIcons";
 
 type MenuCategory = { id: string; label: string; icon: string; isActive: boolean; staffOnly?: boolean };
+type TableInfo = { id: number; number: number; slug: string } | null;
 
 const DEFAULT_CATEGORIES: MenuCategory[] = [
   { id: "milktea", label: "Milk & Tea", icon: "🧋", isActive: true },
@@ -46,9 +47,10 @@ function isWithinSellHours(start: string | null | undefined, end: string | null 
   return now >= start && now <= end;
 }
 
-export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
-  const { tableId: tableIdParam } = use(params);
-  const tableId = parseInt(tableIdParam);
+export default function TablePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
+  const [tableInfo, setTableInfo] = useState<TableInfo>(null);
+  const [notFound, setNotFound] = useState(false);
   const [menu, setMenu] = useState<MenuItemType[]>([]);
   const [categories, setCategories] = useState<MenuCategory[]>(DEFAULT_CATEGORIES);
   const [activeCategory, setActiveCategory] = useState<string>("");
@@ -56,20 +58,37 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
   useEffect(() => {
     Promise.all([
+      fetch(`/api/tables/by-slug?slug=${encodeURIComponent(slug)}`).then((r) => {
+        if (!r.ok) return null;
+        return r.json();
+      }),
       fetch("/api/menu").then((r) => r.json()),
       fetch("/api/site-settings").then((r) => r.json()).catch(() => ({})),
-    ]).then(([menuData, settings]) => {
+    ]).then(([table, menuData, settings]) => {
+      if (!table) { setNotFound(true); setLoading(false); return; }
+      setTableInfo(table);
       setMenu(menuData);
       const cats = parseCategories(settings?.menu_categories);
       setCategories(cats);
       if (cats.length > 0) setActiveCategory(cats[0].id);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, [tableId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   const availableMenu = menu.filter((m) => m.isAvailable && m.category !== "gametime" && isWithinSellHours(m.sellStartTime, m.sellEndTime));
   const visibleCategories = categories.filter((c) => c.isActive && availableMenu.some((m) => m.category === c.id));
   const filtered = availableMenu.filter((m) => m.category === activeCategory);
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen bg-cream flex flex-col items-center justify-center p-8 text-center">
+        <div className="text-6xl mb-4">🎲</div>
+        <h1 className="text-xl font-bold text-navy mb-2">ไม่พบโต๊ะนี้</h1>
+        <p className="text-gray-400 text-sm">QR Code อาจไม่ถูกต้อง กรุณาสแกนใหม่หรือแจ้งพนักงาน</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-cream pb-32">
@@ -79,7 +98,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           <Image src="/DS-new-logo.png" alt="Dice Shop" width={50} height={28} className="object-contain brightness-0 invert" />
           <div>
             <p className="text-cream/70 text-xs">โต๊ะที่</p>
-            <p className="text-cream text-xl font-bold">{tableId}</p>
+            <p className="text-cream text-xl font-bold">{tableInfo?.number ?? "..."}</p>
           </div>
         </div>
         <h1 className="text-cream font-bold text-lg mt-3">เมนูอาหาร</h1>
@@ -93,9 +112,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                activeCategory === cat.id
-                  ? "bg-navy text-cream"
-                  : "bg-sand text-navy"
+                activeCategory === cat.id ? "bg-navy text-cream" : "bg-sand text-navy"
               }`}
             >
               <CategoryIcon id={cat.id} fallback={cat.icon} size={14} className="inline-block" /> {cat.label}
@@ -115,7 +132,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         )}
       </div>
 
-      <CartDrawer tableId={tableId} />
+      <CartDrawer tableId={tableInfo?.id} tableNumber={tableInfo?.number} tableSlug={slug} />
     </div>
   );
 }

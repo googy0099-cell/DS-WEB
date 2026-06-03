@@ -48,6 +48,7 @@ model User {
 model Table {
   id             Int             @id @default(autoincrement())
   number         Int             @unique
+  slug           String?         @unique
   isOccupied     Boolean         @default(false)
   orders         Order[]
   playerSessions PlayerSession[]

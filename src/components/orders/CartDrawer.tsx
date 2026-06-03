@@ -13,7 +13,7 @@ type StaffMember = { id: number; firstName: string; username: string; memberCode
 
 const STAFF_ROLES = ["CASHIER", "STAFF", "OWNER"];
 
-export default function CartDrawer({ tableId, shopClosed }: { tableId?: number; shopClosed?: boolean }) {
+export default function CartDrawer({ tableId, tableNumber, tableSlug, shopClosed }: { tableId?: number; tableNumber?: number; tableSlug?: string; shopClosed?: boolean }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -46,13 +46,14 @@ export default function CartDrawer({ tableId, shopClosed }: { tableId?: number; 
 
   useEffect(() => {
     if (open) {
-      const url = tableId ? `/api/pos/bills/public?tableId=${tableId}` : "/api/pos/bills/public";
-      fetch(url)
-        .then((r) => r.json())
-        .then((data: PublicBill[]) => {
-          setBills(data);
-        })
-        .catch(() => setBills([]));
+      if (tableId) {
+        fetch(`/api/pos/bills/public?tableId=${tableId}`)
+          .then((r) => r.json())
+          .then((data: PublicBill[]) => setBills(data))
+          .catch(() => setBills([]));
+      } else {
+        setBills([]);
+      }
     }
   }, [open, tableId]);
 

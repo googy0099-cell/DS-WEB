@@ -3,9 +3,10 @@ import db from "@/lib/db";
 
 export async function GET(req: NextRequest) {
   const tableId = req.nextUrl.searchParams.get("tableId");
+  if (!tableId) return NextResponse.json([]);
 
   const bills = await db.bill.findMany({
-    where: { status: "ACTIVE", ...(tableId ? { tableId: Number(tableId) } : {}) },
+    where: { status: "ACTIVE", tableId: Number(tableId) },
     select: { id: true, name: true, table: { select: { number: true } } },
     orderBy: { createdAt: "asc" },
   });
