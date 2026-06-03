@@ -672,7 +672,8 @@ model HrPaymentEvent {
   date        DateTime
   amount      Int
   description String
-  type        String    @default("SALARY")  // SALARY|BONUS|ADVANCE|COMMISSION|OTHER
+  type        String    @default("SALARY")  // SALARY|BONUS|ADVANCE|COMMISSION|HOLIDAY|APPOINTMENT|OTHER
+  recurrence  String?   // null = once, "MONTHLY" = every month same day
   isPaid      Boolean   @default(false) @map("is_paid")
   paidAt      DateTime? @map("paid_at")
   note        String?

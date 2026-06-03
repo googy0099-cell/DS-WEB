@@ -17,6 +17,8 @@ type CalEvent = {
   amount: number;
   description: string;
   type: EventType;
+  recurrence: string | null;
+  isRecurring: boolean;
   isPaid: boolean;
   note: string | null;
 };
@@ -84,18 +86,21 @@ export default function PaymentCalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Modal state
+  // Add modal
   const [modal, setModal] = useState<null | { date: string }>(null);
   const [tab, setTab] = useState<"payment" | "special">("payment");
   const [payType, setPayType] = useState<EventType>("SALARY");
+  const [recurrence, setRecurrence] = useState(false);
   const [specialType, setSpecialType] = useState<EventType>("HOLIDAY");
   const [specialTitle, setSpecialTitle] = useState("");
   const [specialNote, setSpecialNote] = useState("");
+  const [specialRecurrence, setSpecialRecurrence] = useState(false);
   const [staffCalcs, setStaffCalcs] = useState<StaffCalc[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Detail modal
   const [detail, setDetail] = useState<CalEvent | null>(null);
+  const [confirmDeleteRecurring, setConfirmDeleteRecurring] = useState(false);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true); setError("");
@@ -124,9 +129,11 @@ export default function PaymentCalendarPage() {
     setModal({ date: dateStr });
     setTab("payment");
     setPayType("SALARY");
+    setRecurrence(false);
     setSpecialType("HOLIDAY");
     setSpecialTitle("");
     setSpecialNote("");
+    setSpecialRecurrence(false);
     setStaffCalcs(staffOptions.map(s => ({
       staffId: s.id, name: s.name, payType: "", payRate: 0,
       fromDate: "", daysWorked: 0, workMinutes: 0, gross: 0,
@@ -159,9 +166,7 @@ export default function PaymentCalendarPage() {
     const next = staffCalcs.map((s, i) => i === idx ? { ...s, checked: !s.checked } : s);
     setStaffCalcs(next);
     if (!next[idx].checked) return;
-    if (!next[idx].fromDate && modal?.date) {
-      calcStaff(idx, modal.date);
-    }
+    if (!next[idx].fromDate && modal?.date) calcStaff(idx, modal.date);
   }
 
   async function savePayment() {
@@ -176,7 +181,9 @@ export default function PaymentCalendarPage() {
           staffId: s.staffId, date: modal.date,
           amount: Number(s.customAmount) || s.gross,
           description: `${EVENT_LABEL[payType]} ${MONTH_TH[month - 1]}`,
-          type: payType, note: s.fromDate ? `${s.fromDate} – ${modal.date}` : undefined,
+          type: payType,
+          recurrence: recurrence ? "MONTHLY" : null,
+          note: s.fromDate ? `${s.fromDate} – ${modal.date}` : undefined,
         }),
       })
     ));
@@ -193,6 +200,7 @@ export default function PaymentCalendarPage() {
       body: JSON.stringify({
         staffId: null, date: modal.date, amount: 0,
         description: specialTitle.trim(), type: specialType,
+        recurrence: specialRecurrence ? "MONTHLY" : null,
         note: specialNote.trim() || undefined,
       }),
     });
@@ -204,19 +212,23 @@ export default function PaymentCalendarPage() {
   async function togglePaid(ev: CalEvent) {
     await fetch("/api/hr/payment-calendar", {
       method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: ev.id, isPaid: !ev.isPaid }),
+      body: JSON.stringify(
+        ev.isRecurring
+          ? { id: ev.id, isPaid: !ev.isPaid, recurringDate: ev.date }
+          : { id: ev.id, isPaid: !ev.isPaid }
+      ),
     });
-    setDetail(null);
+    setDetail(prev => prev ? { ...prev, isPaid: !prev.isPaid } : null);
     fetchEvents();
   }
 
-  async function deleteEvent(id: number) {
-    if (!confirm("ลบรายการนี้?")) return;
+  async function deleteEvent(id: number, isRecurring: boolean, deleteAll: boolean) {
     await fetch("/api/hr/payment-calendar", {
       method: "DELETE", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, deleteAll }),
     });
     setDetail(null);
+    setConfirmDeleteRecurring(false);
     fetchEvents();
   }
 
@@ -231,7 +243,7 @@ export default function PaymentCalendarPage() {
 
   const grid = buildGrid(year, month);
   const totalPending = events.filter(e => !e.isPaid && e.amount > 0).reduce((s, e) => s + e.amount, 0);
-  const totalPaid = events.filter(e => e.isPaid).reduce((s, e) => s + e.amount, 0);
+  const totalPaid = events.filter(e => e.isPaid && e.amount > 0).reduce((s, e) => s + e.amount, 0);
 
   return (
     <div>
@@ -261,18 +273,17 @@ export default function PaymentCalendarPage() {
             {EVENT_LABEL[t]}
           </span>
         ))}
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-gray-300 text-gray-500">🔄 ทุกเดือน</span>
       </div>
 
       {/* Calendar grid */}
       <div className="bg-white border border-sand/40 rounded-2xl overflow-hidden">
-        {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-sand/40">
           {DOW.map(d => (
             <div key={d} className="py-2 text-center text-xs font-bold text-gray-400">{d}</div>
           ))}
         </div>
 
-        {/* Cells */}
         <div className="grid grid-cols-7">
           {loading
             ? Array.from({ length: 35 }, (_, i) => (
@@ -292,11 +303,11 @@ export default function PaymentCalendarPage() {
                     onClick={() => day && openModal(dateStr)}
                     className={`min-h-[80px] border-b border-r border-sand/30 p-1 transition-colors ${
                       day ? "cursor-pointer hover:bg-orange/5" : "bg-gray-50/50"
-                    } ${isWeekend && day ? "bg-blue-50/30" : ""}`}
+                    } ${isWeekend && day ? "bg-blue-50/20" : ""}`}
                   >
                     {day && (
                       <>
-                        <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-1 ${
+                        <div className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold mb-0.5 ${
                           isToday ? "bg-orange text-white" : "text-navy"
                         }`}>
                           {day}
@@ -304,10 +315,11 @@ export default function PaymentCalendarPage() {
                         <div className="space-y-0.5">
                           {dayEvents.slice(0, 3).map(ev => (
                             <div
-                              key={ev.id}
-                              onClick={e => { e.stopPropagation(); setDetail(ev); }}
-                              className={`text-[9px] font-semibold px-1 py-0.5 rounded truncate leading-tight ${EVENT_STYLE[ev.type]} ${ev.isPaid ? "opacity-50" : ""}`}
+                              key={`${ev.id}-${ev.date}`}
+                              onClick={e => { e.stopPropagation(); setDetail(ev); setConfirmDeleteRecurring(false); }}
+                              className={`text-[9px] font-semibold px-1 py-0.5 rounded truncate leading-tight ${EVENT_STYLE[ev.type]} ${ev.isPaid ? "opacity-40" : ""}`}
                             >
+                              {ev.isRecurring && <span className="mr-0.5">🔄</span>}
                               {ev.staffName ? ev.staffName.split(" ")[0] : ev.description.slice(0, 8)}
                               {ev.amount > 0 && ` ฿${ev.amount >= 1000 ? `${(ev.amount / 1000).toFixed(0)}k` : ev.amount}`}
                             </div>
@@ -334,7 +346,6 @@ export default function PaymentCalendarPage() {
                 <h3 className="font-bold text-navy">เพิ่มรายการ · {modal.date}</h3>
                 <button onClick={() => setModal(null)} className="text-gray-400 text-xl leading-none">✕</button>
               </div>
-              {/* Tab */}
               <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
                 <button onClick={() => setTab("payment")}
                   className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${tab === "payment" ? "bg-white text-navy shadow-sm" : "text-gray-500"}`}>
@@ -350,8 +361,7 @@ export default function PaymentCalendarPage() {
             <div className="p-4 overflow-y-auto flex-1">
               {tab === "payment" ? (
                 <>
-                  {/* Pay type selector */}
-                  <div className="flex gap-1.5 flex-wrap mb-4">
+                  <div className="flex gap-1.5 flex-wrap mb-3">
                     {PAY_TYPES.map(t => (
                       <button key={t} onClick={() => setPayType(t)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors ${
@@ -362,7 +372,17 @@ export default function PaymentCalendarPage() {
                     ))}
                   </div>
 
-                  {/* Staff list */}
+                  {/* Recurrence toggle */}
+                  <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                    <div
+                      onClick={() => setRecurrence(r => !r)}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${recurrence ? "bg-orange" : "bg-gray-200"}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${recurrence ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </div>
+                    <span className="text-sm text-gray-600">🔄 ทำซ้ำทุกเดือน <span className="text-xs text-gray-400">(ตั้งค่าครั้งเดียว)</span></span>
+                  </label>
+
                   <p className="text-xs text-gray-500 mb-2">เลือกพนักงานที่ต้องจ่าย</p>
                   <div className="space-y-2">
                     {staffCalcs.map((s, idx) => (
@@ -382,9 +402,9 @@ export default function PaymentCalendarPage() {
                           <>
                             {s.fromDate && (
                               <p className="text-[10px] text-gray-400 mb-1.5">
-                                {s.fromDate} – {modal.date} · {s.daysWorked} วัน ·
-                                {s.payType === "HOURLY" ? ` ${Math.round(s.workMinutes / 60 * 10) / 10} ชม. ·` : ""}
-                                {" "}฿{thb(s.payRate)}{PAY_TYPE_UNIT[s.payType] ?? ""}
+                                {s.fromDate} – {modal.date} · {s.daysWorked} วัน
+                                {s.payType === "HOURLY" && ` · ${Math.round(s.workMinutes / 60 * 10) / 10} ชม.`}
+                                {" "}· ฿{thb(s.payRate)}{PAY_TYPE_UNIT[s.payType] ?? ""}
                               </p>
                             )}
                             <div className="flex items-center gap-2">
@@ -403,7 +423,7 @@ export default function PaymentCalendarPage() {
                 </>
               ) : (
                 <>
-                  <div className="flex gap-2 mb-4">
+                  <div className="flex gap-2 mb-3">
                     {SPECIAL_TYPES.map(t => (
                       <button key={t} onClick={() => setSpecialType(t)}
                         className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${
@@ -413,6 +433,18 @@ export default function PaymentCalendarPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* Recurrence toggle */}
+                  <label className="flex items-center gap-2 mb-4 cursor-pointer">
+                    <div
+                      onClick={() => setSpecialRecurrence(r => !r)}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${specialRecurrence ? "bg-orange" : "bg-gray-200"}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${specialRecurrence ? "translate-x-5" : "translate-x-0.5"}`} />
+                    </div>
+                    <span className="text-sm text-gray-600">🔄 ทำซ้ำทุกเดือน</span>
+                  </label>
+
                   <label className="block text-sm text-gray-600 mb-1">ชื่อ/รายละเอียด</label>
                   <input value={specialTitle} onChange={e => setSpecialTitle(e.target.value)}
                     placeholder={specialType === "HOLIDAY" ? "เช่น วันสงกรานต์, วันหยุดพิเศษ" : "เช่น ประชุมทีม, ตรวจสต็อก"}
@@ -427,18 +459,16 @@ export default function PaymentCalendarPage() {
             <div className="p-4 border-t border-sand/30 flex gap-2">
               <button onClick={() => setModal(null)} className="flex-1 py-2.5 bg-gray-100 rounded-xl text-sm font-bold">ยกเลิก</button>
               {tab === "payment" ? (
-                <button
-                  onClick={savePayment}
+                <button onClick={savePayment}
                   disabled={saving || staffCalcs.filter(s => s.checked).length === 0}
                   className="flex-1 py-2.5 bg-orange text-white rounded-xl text-sm font-bold disabled:opacity-60">
-                  {saving ? "กำลังบันทึก..." : `บันทึก ${staffCalcs.filter(s => s.checked).length} คน`}
+                  {saving ? "กำลังบันทึก..." : `บันทึก${recurrence ? " 🔄" : ""} ${staffCalcs.filter(s => s.checked).length} คน`}
                 </button>
               ) : (
-                <button
-                  onClick={saveSpecial}
+                <button onClick={saveSpecial}
                   disabled={saving || !specialTitle.trim()}
                   className="flex-1 py-2.5 bg-navy text-white rounded-xl text-sm font-bold disabled:opacity-60">
-                  {saving ? "กำลังบันทึก..." : "บันทึก"}
+                  {saving ? "กำลังบันทึก..." : `บันทึก${specialRecurrence ? " 🔄" : ""}`}
                 </button>
               )}
             </div>
@@ -452,39 +482,64 @@ export default function PaymentCalendarPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-5">
             <div className="flex items-start justify-between mb-3">
               <div>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${EVENT_STYLE[detail.type]}`}>
-                  {EVENT_LABEL[detail.type]}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${EVENT_STYLE[detail.type]}`}>
+                    {EVENT_LABEL[detail.type]}
+                  </span>
+                  {detail.isRecurring && (
+                    <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-bold">🔄 ทุกเดือน</span>
+                  )}
+                </div>
                 <h3 className="font-bold text-navy mt-1">{detail.description}</h3>
               </div>
-              <button onClick={() => setDetail(null)} className="text-gray-400 text-xl leading-none ml-3">✕</button>
+              <button onClick={() => { setDetail(null); setConfirmDeleteRecurring(false); }} className="text-gray-400 text-xl leading-none ml-3">✕</button>
             </div>
 
             <p className="text-sm text-gray-500 mb-1">📅 {detail.date}</p>
             {detail.staffName && <p className="text-sm text-gray-500 mb-1">👤 {detail.staffName}</p>}
-            {detail.amount > 0 && (
-              <p className="text-2xl font-bold text-navy mb-1">฿{thb(detail.amount)}</p>
+            {detail.amount > 0 && <p className="text-2xl font-bold text-navy mb-1">฿{thb(detail.amount)}</p>}
+            {detail.note && !detail.note.startsWith("recurring:") && (
+              <p className="text-xs text-gray-400 mb-3">{detail.note}</p>
             )}
-            {detail.note && <p className="text-xs text-gray-400 mb-3">{detail.note}</p>}
 
             {detail.isPaid && (
               <div className="bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-2 rounded-xl mb-3">
-                ✓ จ่ายแล้ว
+                ✓ จ่ายแล้วในเดือนนี้
               </div>
             )}
 
-            <div className="flex gap-2">
-              <button onClick={() => deleteEvent(detail.id)}
-                className="flex-1 py-2 border border-red-200 text-red-400 rounded-xl text-sm font-bold">
-                ลบ
-              </button>
-              {detail.amount > 0 && (
-                <button onClick={() => togglePaid(detail)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-bold ${detail.isPaid ? "bg-gray-100 text-gray-600" : "bg-emerald-500 text-white"}`}>
-                  {detail.isPaid ? "ยกเลิกจ่าย" : "จ่ายแล้ว ✓"}
+            {/* Delete with recurring confirmation */}
+            {!confirmDeleteRecurring ? (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => detail.isRecurring ? setConfirmDeleteRecurring(true) : (confirm("ลบรายการนี้?") && deleteEvent(detail.id, false, false))}
+                  className="flex-1 py-2 border border-red-200 text-red-400 rounded-xl text-sm font-bold">
+                  ลบ
                 </button>
-              )}
-            </div>
+                {detail.amount > 0 && (
+                  <button onClick={() => togglePaid(detail)}
+                    className={`flex-1 py-2 rounded-xl text-sm font-bold ${detail.isPaid ? "bg-gray-100 text-gray-600" : "bg-emerald-500 text-white"}`}>
+                    {detail.isPaid ? "ยกเลิกจ่าย" : "จ่ายแล้ว ✓"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p className="text-sm text-gray-600 mb-3 font-medium">ลบรายการนี้อย่างไร?</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => deleteEvent(detail.id, true, true)}
+                    className="w-full py-2 bg-red-500 text-white rounded-xl text-sm font-bold">
+                    ลบทั้งหมดทุกเดือน
+                  </button>
+                  <button
+                    onClick={() => setConfirmDeleteRecurring(false)}
+                    className="w-full py-2 bg-gray-100 rounded-xl text-sm font-bold text-gray-600">
+                    ยกเลิก
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
