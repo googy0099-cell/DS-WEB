@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
+import PartyOrderButton from "@/components/admin/PartyOrderButton";
 
-type MemberRef = { id: number; username: string; memberCode: string; firstName: string };
+type MemberRef = { id: number; username: string; memberCode: string; firstName: string; dicePoints: number };
 type PlayerSession = {
   id: number; nickname: string; packageType: string; packagePrice: number;
   timeRemaining: number; status: string; updatedAt: string;
@@ -67,6 +68,40 @@ function useCountdown(initial: number) {
   return secs;
 }
 
+function playTimeUpBeep() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [0, 0.35, 0.7].forEach((t, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.setValueAtTime(880 - i * 120, now + t);
+      gain.gain.setValueAtTime(0.5, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.28);
+      osc.start(now + t); osc.stop(now + t + 0.28);
+    });
+  } catch {}
+}
+
+function playWarningBeep() {
+  try {
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    [0, 0.2].forEach((t) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(660, now + t);
+      gain.gain.setValueAtTime(0.35, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.15);
+      osc.start(now + t); osc.stop(now + t + 0.15);
+    });
+  } catch {}
+}
+
 function fmt(secs: number) {
   if (secs >= 86400) return "∞";
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
@@ -81,17 +116,30 @@ function timerColor(secs: number) {
 }
 
 // ---- Session Card ----
-function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdit }: {
+function SessionCard({ session, bill, prepRemaining, onCheckout, onEditTime, onEdit, isExpiredAcked, onExpiredDetected }: {
   session: PlayerSession; bill: Bill; prepRemaining: number;
-  onCheckout: (id: number) => void; onExtend: (session: PlayerSession, bill: Bill) => void;
+  onCheckout: (id: number) => void; onEditTime: (session: PlayerSession) => void;
   onEdit: (session: PlayerSession) => void;
+  isExpiredAcked: boolean;
+  onExpiredDetected: (info: { sessionId: number; nickname: string; billName: string; tableNumber: number }) => void;
 }) {
   const prep = useCountdown(prepRemaining);
   const remaining = useCountdown(session.timeRemaining);
   const inPrep = prep > 0;
   const color = timerColor(remaining);
-  const isAllDay = session.packageType === "C";
-  const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? 3600;
+  const isAllDay = session.timeRemaining >= 86400;
+
+  // Report expiration to parent — parent owns the alert loop and ack state
+  const reportedRef = useRef(false);
+  useEffect(() => { reportedRef.current = false; }, [session.id, session.timeRemaining]);
+  useEffect(() => {
+    if (isAllDay || inPrep) return;
+    if (remaining === 0 && !reportedRef.current) {
+      reportedRef.current = true;
+      onExpiredDetected({ sessionId: session.id, nickname: session.nickname, billName: bill.name, tableNumber: bill.table.number });
+    }
+  }, [remaining, isAllDay, inPrep, session.id, session.nickname, bill.name, bill.table.number, onExpiredDetected]);
+  const maxTime = PACKAGES[session.packageType]?.timeSeconds ?? (session.timeRemaining || 3600);
   const pct = remaining >= 86400 ? 100 : Math.min(100, (remaining / maxTime) * 100);
 
   return (
@@ -107,7 +155,7 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdi
             ✏️
           </button>
           <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${inPrep ? "text-sky-300" : isAllDay ? "text-purple-300" : color.text} border border-current`}>
-            {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : color.label}
+            {inPrep ? "เตรียมตัว" : isAllDay ? "เหมาวัน" : remaining === 0 && isExpiredAcked ? "หมดเวลา · รับทราบแล้ว" : color.label}
           </span>
         </div>
       </div>
@@ -133,14 +181,12 @@ function SessionCard({ session, bill, prepRemaining, onCheckout, onExtend, onEdi
         </div>
       )}
       <div className="flex gap-2 pt-1">
-        {!isAllDay && (
-          <button
-            onClick={() => onExtend(session, bill)}
-            className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
-          >
-            ⏱️ ต่อเวลา
-          </button>
-        )}
+        <button
+          onClick={() => onEditTime(session)}
+          className="flex-1 text-xs bg-white/10 hover:bg-white/20 text-white font-semibold py-2 rounded-xl transition-colors"
+        >
+          ⏱️ แก้ไขเวลา
+        </button>
         <button onClick={() => onCheckout(session.id)}
           className="flex-1 text-xs bg-orange hover:bg-orange/80 text-white font-bold py-2 rounded-xl transition-colors">ปิด</button>
       </div>
@@ -353,11 +399,77 @@ function ExtraItemsList({ items, onChange, players }: {
 export default function AdminTimePage() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [tables, setTables] = useState<TableRef[]>([]);
+
+  // Expired-session alert state — persists ack across page refreshes
+  type ExpiredInfo = { nickname: string; billName: string; tableNumber: number };
+  const [expiredAcked, setExpiredAcked] = useState<Set<number>>(() => {
+    try {
+      if (typeof window === "undefined") return new Set<number>();
+      const raw = localStorage.getItem("posExpiredAcked");
+      return raw ? new Set(JSON.parse(raw) as number[]) : new Set<number>();
+    } catch { return new Set<number>(); }
+  });
+  const [liveExpired, setLiveExpired] = useState<Map<number, ExpiredInfo>>(new Map());
+  const expiredLoopIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const reportExpired = useCallback((info: { sessionId: number } & ExpiredInfo) => {
+    if (expiredAcked.has(info.sessionId)) return; // already acked — no alert
+    setLiveExpired((prev) => {
+      if (prev.has(info.sessionId)) return prev;
+      const next = new Map(prev);
+      next.set(info.sessionId, { nickname: info.nickname, billName: info.billName, tableNumber: info.tableNumber });
+      return next;
+    });
+  }, [expiredAcked]);
+
+  function dismissExpired() {
+    setExpiredAcked((prev) => {
+      const next = new Set(prev);
+      liveExpired.forEach((_, id) => next.add(id));
+      try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    setLiveExpired(new Map());
+  }
+
+  const [loading, setLoading] = useState(true);
+
+  // Loop the time-up sound while there are unacked expired sessions
+  useEffect(() => {
+    if (liveExpired.size === 0) {
+      if (expiredLoopIntervalRef.current) { clearInterval(expiredLoopIntervalRef.current); expiredLoopIntervalRef.current = null; }
+      return;
+    }
+    playTimeUpBeep();
+    expiredLoopIntervalRef.current = setInterval(() => playTimeUpBeep(), 3000);
+    return () => {
+      if (expiredLoopIntervalRef.current) { clearInterval(expiredLoopIntervalRef.current); expiredLoopIntervalRef.current = null; }
+    };
+  }, [liveExpired.size]);
+
+  // Cleanup: drop ack/live entries for sessions that are gone or got time extended
+  // Guard: skip before bills have loaded — otherwise empty bills would wipe expiredAcked
+  useEffect(() => {
+    if (loading) return;
+    const activeMap = new Map<number, number>(); // sessionId -> timeRemaining
+    bills.forEach((b) => b.sessions.forEach((s) => activeMap.set(s.id, s.timeRemaining)));
+    setExpiredAcked((prev) => {
+      const next = new Set([...prev].filter((id) => activeMap.has(id) && activeMap.get(id) === 0));
+      if (next.size === prev.size) return prev;
+      try { localStorage.setItem("posExpiredAcked", JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    setLiveExpired((prev) => {
+      const next = new Map([...prev].filter(([id]) => activeMap.has(id) && activeMap.get(id) === 0));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [bills, loading]);
+
+
   const [drinks, setDrinks] = useState<DrinkItem[]>([]);
   const [allMenuItems, setAllMenuItems] = useState<DrinkItem[]>([]);
   const [gametimeItems, setGametimeItems] = useState<DrinkItem[]>([]);
   const [allGametimeItems, setAllGametimeItems] = useState<DrinkItem[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // new-bill flow: step 0=dashboard, 1=bill, 2=players, 3=method, 4=QR+slip
   const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
@@ -416,6 +528,9 @@ export default function AdminTimePage() {
   const [extendSlipUploading, setExtendSlipUploading] = useState(false);
   const extendSlipRef = useRef<HTMLInputElement>(null);
 
+  // bulk extend (ต่อยกตี้) flow — reuses extendPkg/extendQty/extendStep/extendQr/extendOrderId/slip state
+  const [extendAllBill, setExtendAllBill] = useState<Bill | null>(null);
+
   // edit session modal
   const [editingSession, setEditingSession] = useState<PlayerSession | null>(null);
   const [editNickname, setEditNickname] = useState("");
@@ -440,8 +555,11 @@ export default function AdminTimePage() {
     setEditMemberLoading(true);
     const res = await fetch(`/api/pos/member?code=${encodeURIComponent(code.trim().toUpperCase())}`);
     setEditMemberLoading(false);
-    if (res.ok) { setEditMemberInfo(await res.json()); }
-    else { setEditMemberInfo(null); setEditMemberError("ไม่พบสมาชิก"); }
+    if (res.ok) {
+      const member: MemberRef = await res.json();
+      setEditMemberInfo(member);
+      setEditNickname(member.firstName);
+    } else { setEditMemberInfo(null); setEditMemberError("ไม่พบสมาชิก"); }
   }
 
   async function saveEditSession() {
@@ -461,6 +579,49 @@ export default function AdminTimePage() {
     setEditSaving(false);
     setEditingSession(null);
   }
+
+  // edit time modal
+  const [editTimeTarget, setEditTimeTarget] = useState<{ type: "session"; session: PlayerSession } | { type: "bill"; bill: Bill } | null>(null);
+  const [editTimeHours, setEditTimeHours] = useState("0");
+  const [editTimeMinutes, setEditTimeMinutes] = useState("30");
+  const [editTimeSign, setEditTimeSign] = useState<"add" | "sub">("add");
+  const [editTimeSaving, setEditTimeSaving] = useState(false);
+
+  function openEditTimeSession(session: PlayerSession) {
+    setEditTimeHours("0");
+    setEditTimeMinutes("30");
+    setEditTimeSign("add");
+    setEditTimeTarget({ type: "session", session });
+  }
+
+  function openEditTimeBill(bill: Bill) {
+    setEditTimeHours("0");
+    setEditTimeMinutes("30");
+    setEditTimeSign("add");
+    setEditTimeTarget({ type: "bill", bill });
+  }
+
+  async function saveEditTime() {
+    if (!editTimeTarget) return;
+    const delta = (parseInt(editTimeHours) || 0) * 3600 + (parseInt(editTimeMinutes) || 0) * 60;
+    const addSeconds = editTimeSign === "add" ? delta : -delta;
+    setEditTimeSaving(true);
+    if (editTimeTarget.type === "session") {
+      await fetch(`/api/pos/sessions/${editTimeTarget.session.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addSeconds }),
+      });
+    } else {
+      await fetch(`/api/pos/bills/${editTimeTarget.bill.id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addTimeAll: addSeconds }),
+      });
+    }
+    setEditTimeSaving(false);
+    setEditTimeTarget(null);
+    load();
+  }
+
 
   // cash amount input modal
   const [cashInputOpen, setCashInputOpen] = useState(false);
@@ -487,26 +648,34 @@ export default function AdminTimePage() {
   const [pickerCtx, setPickerCtx] = useState<PickerCtx | null>(null);
   const [pickerItem, setPickerItem] = useState<DrinkItem | null>(null);
 
+  // Tables and menu rarely change — fetch once on mount
+  useEffect(() => {
+    async function initData() {
+      const [t, m] = await Promise.all([
+        fetch("/api/tables").then((r) => r.json()).catch(() => []),
+        fetch("/api/menu").then((r) => r.json()).catch(() => []),
+      ]);
+      setTables(Array.isArray(t) ? t : []);
+      const menu = Array.isArray(m) ? (m as DrinkItem[]) : [];
+      setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category) && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+      setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+      const allGt = menu.filter((item) => item.category === "gametime" && item.isAvailable);
+      setAllGametimeItems(allGt);
+      setGametimeItems(allGt.filter((item) => isWithinSellHours(item.sellStartTime, item.sellEndTime)));
+    }
+    initData();
+  }, []);
+
+  // Poll bills only — no orders join, much lighter
   const load = useCallback(async () => {
-    const [b, t, m] = await Promise.all([
-      fetch("/api/pos/bills").then((r) => r.json()).catch(() => []),
-      fetch("/api/tables").then((r) => r.json()).catch(() => []),
-      fetch("/api/menu").then((r) => r.json()).catch(() => []),
-    ]);
+    const b = await fetch("/api/pos/bills").then((r) => r.json()).catch(() => []);
     setBills(Array.isArray(b) ? b : []);
-    setTables(Array.isArray(t) ? t : []);
-    const menu = Array.isArray(m) ? (m as DrinkItem[]) : [];
-    setDrinks(menu.filter((item) => DRINK_CATS.includes(item.category) && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
-    setAllMenuItems(menu.filter((item) => item.category !== "gametime" && item.isAvailable && isWithinSellHours(item.sellStartTime, item.sellEndTime)));
-    const allGt = menu.filter((item) => item.category === "gametime" && item.isAvailable);
-    setAllGametimeItems(allGt);
-    setGametimeItems(allGt.filter((item) => isWithinSellHours(item.sellStartTime, item.sellEndTime)));
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(load, 3000);
     return () => clearInterval(interval);
   }, [load]);
 
@@ -627,10 +796,8 @@ export default function AdminTimePage() {
     });
     setSaving(false);
     if (!res.ok) { window.alert("เปิดตี้ไม่สำเร็จ"); return; }
-    const bill = await res.json();
-    setDraftBillId(bill.id);
-    setPlayers([{ ...BLANK_DRAFT }]);
-    setStep(2);
+    setStep(0);
+    load();
   }
 
   // Calculate player total client-side (mirrors server logic in /api/pos/bills/[id]/players)
@@ -646,7 +813,7 @@ export default function AdminTimePage() {
   async function createSessions(billId: number, draftPlayers: PlayerDraft[]): Promise<number[] | null> {
     const res = await fetch(`/api/pos/bills/${billId}/players`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ players: draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode, packageType: p.pkg, drinkName: p.drinkName, drinkPrice: p.drinkPrice, qty: p.qty })) }),
+      body: JSON.stringify({ players: draftPlayers.map((p) => ({ nameOrCode: p.nameOrCode })) }),
     });
     if (!res.ok) { window.alert("บันทึกผู้เล่นไม่สำเร็จ"); return null; }
     const data = await res.json();
@@ -656,8 +823,6 @@ export default function AdminTimePage() {
   // ยืนยันผู้เล่น → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
   function confirmPlayers() {
     if (!draftBillId) return;
-    const needsDrink = players.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
-    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
     setStep(3);
   }
 
@@ -718,12 +883,13 @@ export default function AdminTimePage() {
     setAddBillPlayerTotal(0); setAddBillSlipFile(null); setAddBillSlipPreview(null);
   }
 
-  // ยืนยันผู้เล่น (เพิ่มในบิล) → ไปหน้าชำระเงินก่อน ยังไม่สร้าง sessions
-  function submitAddPlayers() {
+  // ยืนยันผู้เล่น (เพิ่มในบิล) → สร้าง sessions ทันที
+  async function submitAddPlayers() {
     if (!addToBill) return;
-    const needsDrink = addPlayers.find((p) => (p.pkg === "A" || p.pkg === "C") && !p.drinkName);
-    if (needsDrink) { window.alert("กรุณาเลือกเครื่องดื่มให้ครบทุกคน (แพ็กเกจ A และ C ต้องเลือกเครื่องดื่ม)"); return; }
-    setAddBillStep(1);
+    setSaving(true);
+    await createSessions(addToBill.id, addPlayers);
+    setSaving(false);
+    closeAddBillFlow();
   }
 
   function addBillGrandTotal() {
@@ -876,6 +1042,97 @@ export default function AdminTimePage() {
     load();
   }
 
+  // ---- Bulk extend (ต่อยกตี้) ----
+  function openExtendAll(bill: Bill) {
+    setExtendAllBill(bill);
+    setExtendPkg("B"); setExtendQty(1); setExtendStep(0);
+    setExtendOrderId(null); setExtendQr(null);
+    setExtendSlipFile(null); setExtendSlipPreview(null);
+  }
+
+  function extendAllPlayerCount() {
+    return extendAllBill?.sessions.filter((s) => s.timeRemaining < 86400).length ?? 0;
+  }
+
+  function extendAllTotal() {
+    const n = extendAllPlayerCount();
+    if (extendPkg === "B") return PACKAGES.B.price * extendQty * n;
+    if (extendPkg === "D") return PACKAGES.D.price * n;
+    return 0;
+  }
+
+  function buildBulkExtendLineItems() {
+    const n = extendAllPlayerCount();
+    if (n === 0) return [];
+    const items: { menuItemId: number; nameTh: string; unitPriceTHB: number; qty: number }[] = [];
+    const gtItem = gametimeItems.find((g) => g.nameEn === `gametime-${extendPkg}`);
+    if (gtItem) {
+      const qty = extendPkg === "B" ? extendQty * n : n;
+      items.push({ menuItemId: gtItem.id, nameTh: gtItem.nameTh, unitPriceTHB: PACKAGES[extendPkg]?.price ?? 0, qty });
+    }
+    return items;
+  }
+
+  async function addExtendTimeAll() {
+    if (!extendAllBill) return;
+    const toExtend = extendPkg === "D"
+      ? extendAllBill.sessions.filter((s) => s.timeRemaining < 86400)
+      : extendAllBill.sessions;
+    await Promise.all(toExtend.map((s) =>
+      fetch(`/api/pos/sessions/${s.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          extendPkg === "D" ? { upgradeToAllDay: true } : { addSeconds: PACKAGES.B.timeSeconds * extendQty }
+        ),
+      })
+    ));
+  }
+
+  async function chooseExtendAllCash() {
+    if (!extendAllBill) return;
+    setSaving(true);
+    await fetch(`/api/pos/bills/${extendAllBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "CASH", items: buildBulkExtendLineItems(), totalTHB: extendAllTotal() }),
+    });
+    await addExtendTimeAll();
+    setSaving(false);
+    closeExtendAllFlow();
+  }
+
+  async function chooseExtendAllQR() {
+    if (!extendAllBill) return;
+    setSaving(true);
+    const res = await fetch(`/api/pos/bills/${extendAllBill.id}/order`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethod: "PROMPTPAY", items: buildBulkExtendLineItems(), totalTHB: extendAllTotal() }),
+    });
+    setSaving(false);
+    if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return; }
+    const data = await res.json();
+    setExtendOrderId(data.orderId);
+    setExtendQr({ qrDataUrl: data.qrDataUrl, accountName: data.accountName, bankName: data.bankName });
+    setExtendStep(2);
+  }
+
+  async function submitExtendAllSlip() {
+    if (!extendSlipFile || !extendOrderId) return;
+    setExtendSlipUploading(true);
+    const fd = new FormData();
+    fd.append("orderId", String(extendOrderId));
+    fd.append("slip", extendSlipFile);
+    await fetch("/api/payment/slip", { method: "POST", body: fd });
+    await addExtendTimeAll();
+    setExtendSlipUploading(false);
+    closeExtendAllFlow();
+  }
+
+  function closeExtendAllFlow() {
+    setExtendAllBill(null); setExtendStep(0);
+    load();
+  }
+
   async function submitEditBill() {
     if (!editBill || !editBillName.trim()) return;
     await fetch(`/api/pos/bills/${editBill.id}`, {
@@ -921,12 +1178,6 @@ export default function AdminTimePage() {
               </button>
             )}
           </div>
-          <PackagePicker value={p.pkg}
-            onChange={(k) => set((x) => ({ ...x, pkg: k, drinkName: "", drinkPrice: 0, drinkMenuItemId: null }))}
-            drinkName={p.drinkName} drinkPrice={p.drinkPrice}
-            onOpenDrinkPicker={() => openPickerList({ list: ctxList as "players" | "addPlayers", idx: i })}
-            qty={p.qty} onQtyChange={(q) => set((x) => ({ ...x, qty: q }))}
-            blockedPkgs={blockedPkgKeys} />
         </div>
       </SwipeableRow>
     );
@@ -979,7 +1230,7 @@ export default function AdminTimePage() {
             <button onClick={onDefer} disabled={saving}
               className="w-full flex items-center justify-center gap-2 bg-orange/10 border-2 border-orange/40 hover:border-orange py-3.5 rounded-2xl transition-all disabled:opacity-50">
               <span className="text-2xl">🧮</span>
-              <span className="font-bold text-orange text-sm">เปิดบิลเลย — ให้แคชเชียร์คิดเงิน</span>
+              <span className="font-bold text-orange text-sm">เปิดตี้เลย — ให้แคชเชียร์คิดเงิน</span>
             </button>
           </>
         )}
@@ -1044,11 +1295,29 @@ export default function AdminTimePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-navy">จัดการเวลา</h1>
-        <button onClick={openBillFlow} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">+ เปิดบิล</button>
+        <button onClick={openBillFlow} className="bg-orange hover:bg-orange/90 text-white font-bold px-5 py-2.5 rounded-2xl text-sm shadow-lg transition-colors">+ เปิดตี้</button>
       </div>
 
+      {/* Time-up alert banner */}
+      {liveExpired.size > 0 && (
+        <div className="bg-red-500 text-white rounded-2xl p-4 flex items-start gap-3 shadow-xl animate-pulse">
+          <span className="text-3xl shrink-0">⏰</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-bold text-base">หมดเวลา {liveExpired.size} คน!</p>
+            <div className="text-sm opacity-95 mt-1 space-y-0.5">
+              {[...liveExpired.values()].map((v, i) => (
+                <p key={i}>• {v.nickname} · ตี้ {v.billName} · โต๊ะ {v.tableNumber}</p>
+              ))}
+            </div>
+          </div>
+          <button onClick={dismissExpired} className="bg-white text-red-600 font-bold px-4 py-2 rounded-xl text-sm whitespace-nowrap hover:bg-red-50 transition-colors">
+            🔕 รับทราบ
+          </button>
+        </div>
+      )}
+
       {loading && <p className="text-gray-400 py-8 text-center">กำลังโหลด...</p>}
-      {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีบิลที่เปิดอยู่ — กด &quot;+ เปิดบิล&quot; เพื่อเริ่ม</p>}
+      {!loading && bills.length === 0 && <p className="text-gray-400 py-12 text-center">ยังไม่มีตี้ที่เปิดอยู่ — กด &quot;+ เปิดตี้&quot; เพื่อเริ่ม</p>}
 
       {/* Bills dashboard */}
       {bills.map((bill) => {
@@ -1065,13 +1334,16 @@ export default function AdminTimePage() {
                 </button>
                 <button onClick={() => setChangeTableBill(bill)} className="block text-white/60 text-xs hover:text-white underline-offset-2 hover:underline">📍 โต๊ะ {bill.table.number} · เปลี่ยน</button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button onClick={() => openAddToBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">+ เพิ่มผู้เล่น</button>
+                <PartyOrderButton billId={bill.id} billName={bill.name} onCreated={load} triggerClassName="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors" />
+                {bill.sessions.length > 0 && (
+                  <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
+                )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>
-            {/* Pending counter payment indicator */}
-            {bill.pendingCash.map((pc) => {
+            {(bill.pendingCash ?? []).map((pc) => {
               let playerSummary = "";
               try {
                 const d = JSON.parse(pc.staffNote ?? "");
@@ -1080,7 +1352,7 @@ export default function AdminTimePage() {
                 ).join(", ") ?? "";
               } catch { /* ignore */ }
               return (
-                <div key={pc.orderId} className="bg-yellow-400/20 border border-yellow-400/50 rounded-xl px-3 py-2.5 flex items-center justify-between gap-2">
+                <div key={pc.orderId} className="bg-yellow-400/20 border border-yellow-400/50 rounded-xl px-3 py-2.5 mb-3 flex items-center justify-between gap-2">
                   <div>
                     <p className="text-yellow-200 text-xs font-bold flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
@@ -1093,7 +1365,7 @@ export default function AdminTimePage() {
               );
             })}
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onExtend={openExtend} onEdit={openEditSession} />)}
+              {bill.sessions.map((s) => <SessionCard key={s.id} bill={bill} session={s} prepRemaining={bill.prepRemaining} onCheckout={checkout} onEditTime={openEditTimeSession} onEdit={openEditSession} isExpiredAcked={expiredAcked.has(s.id)} onExpiredDetected={reportExpired} />)}
             </div>
           </div>
         );
@@ -1101,7 +1373,7 @@ export default function AdminTimePage() {
 
       {/* Modal 1: Open Bill */}
       {step === 1 && (
-        <Modal onClose={() => setStep(0)} title="เปิดบิล">
+        <Modal onClose={() => setStep(0)} title="เปิดตี้">
           <Field label="ชื่อบิล">
             <input autoFocus value={billName} onChange={(e) => setBillName(e.target.value)} placeholder="เช่น โต๊ะพี่ปลา, กลุ่มวันศุกร์"
               className="w-full border border-sand rounded-xl px-3 py-2.5 text-sm focus:border-orange focus:outline-none" />
@@ -1114,7 +1386,7 @@ export default function AdminTimePage() {
           </Field>
           <button onClick={confirmOpenBill} disabled={saving || !billName.trim() || !billTableId}
             className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
-            {saving ? "..." : "ยืนยันการเปิดบิล →"}
+            {saving ? "..." : "เปิดตี้"}
           </button>
         </Modal>
       )}
@@ -1153,23 +1425,15 @@ export default function AdminTimePage() {
 
       {/* Add players to existing bill */}
       {addToBill && (
-        <Modal onClose={closeAddBillFlow} title={addBillStep === 0 ? `เพิ่มผู้เล่น — ${addToBill.name}` : addBillStep === 1 ? "ชำระเงิน" : "สแกน QR"} wide>
-          {addBillStep === 0 && (
-            <>
-              <div className="space-y-3 max-h-[45vh] overflow-y-auto pr-1">
-                {addPlayers.map((p, i) => renderPlayerRow(p, i, true))}
-                <button onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
-                  className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">+ อีกคน</button>
-                {renderExtraSection(addExtraItems, setAddExtraItems, "addExtraItems", addPlayers)}
-              </div>
-              <button onClick={submitAddPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
-                {saving ? "..." : "ยืนยันผู้เล่น →"}
-              </button>
-            </>
-          )}
-          {addBillStep === 1 && renderMethodStep(addBillGrandTotal(), chooseAddBillCash, chooseAddBillQR, () => setAddBillStep(0), chooseAddBillDefer)}
-          {addBillStep === 2 && addBillQr && renderQRStep(addBillQr, addBillGrandTotal(), addBillSlipFile, addBillSlipPreview, addBillSlipUploading, addBillSlipInputRef,
-            (f) => { setAddBillSlipFile(f); setAddBillSlipPreview(URL.createObjectURL(f)); }, submitAddBillSlip, () => setAddBillStep(1))}
+        <Modal onClose={closeAddBillFlow} title={`เพิ่มผู้เล่น — ${addToBill.name}`} wide>
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
+            {addPlayers.map((p, i) => renderPlayerRow(p, i, true))}
+            <button onClick={() => setAddPlayers((prev) => [...prev, { ...BLANK_DRAFT }])}
+              className="w-full border border-dashed border-sand text-gray-500 py-2 rounded-xl text-sm hover:border-orange hover:text-orange">+ อีกคน</button>
+          </div>
+          <button onClick={submitAddPlayers} disabled={saving} className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50 mt-2">
+            {saving ? "..." : "เพิ่มผู้เล่น"}
+          </button>
         </Modal>
       )}
 
@@ -1192,7 +1456,7 @@ export default function AdminTimePage() {
         <Modal onClose={closeExtendFlow} title={`ต่อเวลา — ${extendSession.nickname}`}>
           <p className="text-sm text-gray-500 -mt-2">เลือกโปรที่ต้องการต่อเวลา</p>
           <div className="space-y-2">
-            {(["A", "B", "D"] as PkgKey[]).map((key) => {
+            {(["B", "D"] as PkgKey[]).map((key) => {
               const blocked = blockedPkgKeys.has(key);
               return (
                 <button key={key} disabled={blocked}
@@ -1249,6 +1513,69 @@ export default function AdminTimePage() {
           {renderQRStep(extendQr, extendTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
             (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
             submitExtendSlip, () => setExtendStep(1))}
+        </Modal>
+      )}
+
+      {/* Bulk extend (ต่อยกตี้) modals */}
+      {extendAllBill && extendStep === 0 && (() => {
+        const playerCount = extendAllBill.sessions.length;
+        const nonAllDayCount = extendAllBill.sessions.filter((s) => s.timeRemaining < 86400).length;
+        return (
+          <Modal onClose={closeExtendAllFlow} title={`ต่อยกตี้ — ${extendAllBill.name}`}>
+            <p className="text-sm text-gray-500 -mt-2">ต่อเวลาพร้อมกัน {playerCount} คน</p>
+            <div className="space-y-2">
+              {(["B", "D"] as PkgKey[]).map((key) => {
+                const blocked = blockedPkgKeys.has(key);
+                const count = key === "D" ? nonAllDayCount : playerCount;
+                const unitPrice = PACKAGES[key].price;
+                const previewTotal = key === "B" ? unitPrice * extendQty * count : unitPrice * count;
+                return (
+                  <button key={key} disabled={blocked || count === 0}
+                    onClick={() => { if (!blocked) { setExtendPkg(key); setExtendQty(1); } }}
+                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all ${(blocked || count === 0) ? "border-sand opacity-40 cursor-not-allowed" : extendPkg === key ? "border-orange bg-orange/5" : "border-sand"}`}>
+                    <p className="font-bold text-navy text-sm">{PACKAGES[key].label} {(blocked || count === 0) ? "— ไม่มีผู้เล่นที่ต้องการ" : ""}</p>
+                    <p className="text-xs text-gray-500">{PACKAGES[key].desc}</p>
+                    {!blocked && count > 0 && <p className="text-xs text-orange font-semibold mt-0.5">{count} คน × ฿{unitPrice}{key === "B" ? ` × ${extendQty} ชั่วโมง` : ""} = ฿{previewTotal}</p>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {extendPkg === "B" && (
+              <div className="flex items-center gap-3 justify-center">
+                <button onClick={() => setExtendQty((q) => Math.max(1, q - 1))}
+                  className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">−</button>
+                <span className="font-bold text-navy text-lg w-8 text-center">{extendQty}</span>
+                <button onClick={() => setExtendQty((q) => q + 1)}
+                  className="w-9 h-9 rounded-full bg-sand text-navy font-bold text-lg flex items-center justify-center">+</button>
+                <span className="text-sm text-gray-500">= {extendQty * 2} ชม./คน</span>
+              </div>
+            )}
+
+            <div className="bg-sand/40 rounded-xl p-3 text-center">
+              <p className="text-xs text-gray-500">ยอดรวมทั้งหมด</p>
+              <p className="font-bold text-navy text-xl">฿{extendAllTotal()}</p>
+            </div>
+
+            <button onClick={() => setExtendStep(1)} disabled={extendAllTotal() === 0}
+              className="w-full bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
+              ถัดไป — เลือกวิธีชำระ →
+            </button>
+          </Modal>
+        );
+      })()}
+
+      {extendAllBill && extendStep === 1 && (
+        <Modal onClose={closeExtendAllFlow} title="ชำระเงิน">
+          {renderMethodStep(extendAllTotal(), chooseExtendAllCash, chooseExtendAllQR, () => setExtendStep(0))}
+        </Modal>
+      )}
+
+      {extendAllBill && extendStep === 2 && extendQr && (
+        <Modal onClose={closeExtendAllFlow} title="สแกน QR ชำระเงิน">
+          {renderQRStep(extendQr, extendAllTotal(), extendSlipFile, extendSlipPreview, extendSlipUploading, extendSlipRef,
+            (f) => { setExtendSlipFile(f); setExtendSlipPreview(URL.createObjectURL(f)); },
+            submitExtendAllSlip, () => setExtendStep(1))}
         </Modal>
       )}
 
@@ -1364,7 +1691,7 @@ export default function AdminTimePage() {
                   <div>
                     <p className="text-xs text-green-700 font-semibold">✅ พบสมาชิก</p>
                     <p className="text-sm font-bold text-navy">{editMemberInfo.firstName} (@{editMemberInfo.username})</p>
-                    <p className="text-xs text-gray-400">{editMemberInfo.memberCode}</p>
+                    <p className="text-xs text-gray-400">{editMemberInfo.memberCode} · 🎲 {editMemberInfo.dicePoints} แต้ม</p>
                   </div>
                   <button onClick={() => { setEditMemberInfo(null); setEditMemberCode(""); }}
                     className="text-gray-300 hover:text-red-400 text-lg">×</button>
@@ -1390,6 +1717,62 @@ export default function AdminTimePage() {
               <button onClick={saveEditSession} disabled={editSaving || !editNickname.trim()}
                 className="flex-1 bg-orange text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                 {editSaving ? "..." : "บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit time modal */}
+      {editTimeTarget && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+            <h3 className="font-bold text-navy text-lg text-center">
+              {editTimeTarget.type === "session"
+                ? `⏱️ ปรับเวลา — ${editTimeTarget.session.nickname}`
+                : `⏱️ ปรับเวลายกตี้ — ${editTimeTarget.bill.name}`}
+            </h3>
+            {editTimeTarget.type === "session" && (
+              <p className="text-center text-sm text-gray-400">
+                เวลาที่เหลือ: <span className="font-bold text-navy">{fmt(editTimeTarget.session.timeRemaining)}</span>
+              </p>
+            )}
+            {/* +/- toggle */}
+            <div className="flex rounded-xl overflow-hidden border border-sand">
+              <button
+                onClick={() => setEditTimeSign("add")}
+                className={`flex-1 py-2.5 text-sm font-bold transition-colors ${editTimeSign === "add" ? "bg-green-500 text-white" : "text-gray-400 bg-white"}`}
+              >+ เพิ่ม</button>
+              <button
+                onClick={() => setEditTimeSign("sub")}
+                className={`flex-1 py-2.5 text-sm font-bold transition-colors ${editTimeSign === "sub" ? "bg-red-400 text-white" : "text-gray-400 bg-white"}`}
+              >− ลด</button>
+            </div>
+            <div className="flex items-center gap-3 justify-center">
+              <div className="text-center">
+                <label className="text-xs text-gray-400 block mb-1">ชั่วโมง</label>
+                <input
+                  type="number" min="0" max="24" value={editTimeHours}
+                  onChange={(e) => setEditTimeHours(e.target.value)}
+                  className="w-20 text-center text-2xl font-bold text-navy border-2 border-sand rounded-xl py-2 focus:border-orange focus:outline-none"
+                />
+              </div>
+              <span className="text-2xl font-bold text-gray-300 mt-4">:</span>
+              <div className="text-center">
+                <label className="text-xs text-gray-400 block mb-1">นาที</label>
+                <input
+                  type="number" min="0" max="59" value={editTimeMinutes}
+                  onChange={(e) => setEditTimeMinutes(e.target.value)}
+                  className="w-20 text-center text-2xl font-bold text-navy border-2 border-sand rounded-xl py-2 focus:border-orange focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setEditTimeTarget(null)}
+                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+              <button onClick={saveEditTime} disabled={editTimeSaving}
+                className={`flex-1 py-3 rounded-2xl text-sm font-bold disabled:opacity-40 text-white ${editTimeSign === "add" ? "bg-green-500" : "bg-red-400"}`}>
+                {editTimeSaving ? "..." : editTimeSign === "add" ? "เพิ่มเวลา" : "ลดเวลา"}
               </button>
             </div>
           </div>
@@ -1454,6 +1837,8 @@ export default function AdminTimePage() {
           </div>
         </div>
       )}
+
+      {/* Tab Checkout Modal */}
     </div>
   );
 }
