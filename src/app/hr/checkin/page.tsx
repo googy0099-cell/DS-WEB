@@ -24,7 +24,7 @@ type RegisterStep = "pick" | "camera" | "saving" | "done";
 
 type ChallengeType = "blink" | "mouth" | "left" | "right";
 const CHALLENGE_LABEL: Record<ChallengeType, string> = {
-  blink: "กระพริบตา 2 ครั้ง",
+  blink: "กระพริบตาแรงๆ 1 ครั้ง",
   mouth: "อ้าปากกว้างค้างไว้",
   left: "หันหน้าไปทางซ้าย",
   right: "หันหน้าไปทางขวา",
@@ -32,8 +32,8 @@ const CHALLENGE_LABEL: Record<ChallengeType, string> = {
 const CHALLENGES: ChallengeType[] = ["blink", "mouth", "left", "right"];
 
 const CHALLENGES_PER_SCAN = 3;
-const PER_CHALLENGE_TIMEOUT_MS = 8000;
-const DETECT_INTERVAL_MS = 150;
+const PER_CHALLENGE_TIMEOUT_MS = 10000;
+const DETECT_INTERVAL_MS = 100;
 
 // Pick N unique random challenges in random order
 function pickChallengeSequence(n: number): ChallengeType[] {
@@ -173,8 +173,11 @@ export default function HrCheckinPage() {
     switch (ch) {
       case "blink": {
         blinkStateRef.current = updateBlinkState(blinkStateRef.current, m.ear);
-        setChallengeProgress(`กระพริบแล้ว ${blinkStateRef.current.blinkCount}/2 ครั้ง`);
-        return blinkStateRef.current.blinkCount >= 2;
+        const state = blinkStateRef.current.eyesOpen ? "ตาเปิด" : "ตาปิด";
+        setChallengeProgress(
+          `${state} (EAR ${m.ear.toFixed(2)}) — กระพริบ ${blinkStateRef.current.blinkCount}/1`
+        );
+        return blinkStateRef.current.blinkCount >= 1;
       }
       case "mouth": {
         const open = m.mouthOpen > 0.35;

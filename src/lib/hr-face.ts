@@ -72,9 +72,11 @@ export type BlinkState = {
   blinkCount: number;
 };
 
+// Tuned for tinyFaceLandmark68 model: open eyes typically ~0.28-0.35,
+// closed eyes ~0.10-0.18. Thresholds loosened so glasses/small eyes still work.
 export function updateBlinkState(state: BlinkState, ear: number): BlinkState {
-  const EAR_CLOSE = 0.20;
-  const EAR_OPEN = 0.28;
+  const EAR_CLOSE = 0.23;
+  const EAR_OPEN = 0.27;
   if (state.eyesOpen && ear < EAR_CLOSE) {
     return { eyesOpen: false, blinkCount: state.blinkCount };
   }
