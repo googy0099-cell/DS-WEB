@@ -12,8 +12,10 @@ type StaffMember = {
 };
 
 type Tab = "checkin" | "register";
-type CheckinStep = "idle" | "camera" | "identifying" | "success" | "pin";
+type CheckinStep = "idle" | "camera" | "identifying" | "success";
 type RegisterStep = "pick" | "camera" | "saving" | "done";
+
+const REG_INSTRUCTIONS = ["มองตรงๆ", "หันซ้ายนิด", "หันขวานิด"];
 
 function Avatar({ s, size = 14 }: { s: StaffMember; size?: number }) {
   const sz = `w-${size} h-${size}`;
@@ -36,18 +38,12 @@ export default function HrCheckinPage() {
   const [checkinError, setCheckinError] = useState("");
   const [result, setResult] = useState<{ action: "checkin" | "checkout"; time: string; staffName: string } | null>(null);
 
-  // PIN fallback state
-  const [pinSelected, setPinSelected] = useState<StaffMember | null>(null);
-  const [pin, setPin] = useState("");
-  const [pinError, setPinError] = useState("");
-  const [pinSubmitting, setPinSubmitting] = useState(false);
-
   // register state
   const [regStep, setRegStep] = useState<RegisterStep>("pick");
   const [regTarget, setRegTarget] = useState<StaffMember | null>(null);
   const [regMsg, setRegMsg] = useState("");
   const [regPhotos, setRegPhotos] = useState<string[]>([]);
-  const [regPhotoStep, setRegPhotoStep] = useState(0); // 0,1,2
+  const [regPhotoStep, setRegPhotoStep] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -57,7 +53,7 @@ export default function HrCheckinPage() {
 
   useEffect(() => { fetchStaff(); }, [fetchStaff]);
 
-  // ── camera ──────────────────────────────────────────────────────────────
+  // ── camera ───────────────────────────────────────────────────────────────
 
   const needsCamera =
     (tab === "checkin" && checkinStep === "camera") ||
@@ -73,7 +69,7 @@ export default function HrCheckinPage() {
       })
       .catch(() => {
         if (tab === "checkin") { setCheckinStep("idle"); setCheckinError("เปิดกล้องไม่ได้"); }
-        if (tab === "register") { setRegStep("pick"); setRegMsg("เปิดกล้องไม่ได้"); }
+        if (tab === "register") { resetRegister(); setRegMsg("เปิดกล้องไม่ได้"); }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsCamera]);
@@ -92,7 +88,7 @@ export default function HrCheckinPage() {
     return canvas.toDataURL("image/jpeg", 0.85);
   }
 
-  // ── face identify check-in ───────────────────────────────────────────────
+  // ── face identify check-in ────────────────────────────────────────────────
 
   async function doIdentify() {
     const photo = capturePhoto();
@@ -126,39 +122,15 @@ export default function HrCheckinPage() {
     }
   }
 
-  // ── PIN fallback ─────────────────────────────────────────────────────────
+  // ── face register (3 photos) ──────────────────────────────────────────────
 
-  function pressDigit(d: string) {
-    if (pin.length >= 4) return;
-    const next = pin + d;
-    setPin(next);
-    if (next.length === 4) { setPinError(""); setTimeout(() => submitPin(next), 150); }
+  function resetRegister() {
+    setRegStep("pick");
+    setRegTarget(null);
+    setRegMsg("");
+    setRegPhotos([]);
+    setRegPhotoStep(0);
   }
-
-  async function submitPin(pinValue: string) {
-    if (!pinSelected) return;
-    setPinSubmitting(true);
-    const res = await fetch("/api/hr/attendance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ staffId: pinSelected.id, pin: pinValue }),
-    });
-    const data = await res.json();
-    setPinSubmitting(false);
-    if (res.ok) {
-      setResult({ ...data, staffName: pinSelected.name });
-      setCheckinStep("success");
-      fetchStaff();
-      setTimeout(() => { setCheckinStep("idle"); setPinSelected(null); setPin(""); setResult(null); }, 3500);
-    } else {
-      setPinError(data.error ?? "เกิดข้อผิดพลาด");
-      setPin("");
-    }
-  }
-
-  // ── face register (3 photos) ─────────────────────────────────────────────
-
-  const REG_INSTRUCTIONS = ["มองตรงๆ", "หันซ้ายนิด", "หันขวานิด"];
 
   async function captureRegPhoto() {
     const photo = capturePhoto();
@@ -168,12 +140,10 @@ export default function HrCheckinPage() {
     setRegPhotos(next);
 
     if (next.length < 3) {
-      // move to next pose — camera stays open
       setRegPhotoStep(next.length);
       return;
     }
 
-    // All 3 photos captured → submit
     stopCamera();
     setRegStep("saving");
     setRegMsg("กำลังส่ง Azure ตรวจสอบ...");
@@ -205,15 +175,7 @@ export default function HrCheckinPage() {
     }
   }
 
-  function resetRegister() {
-    setRegStep("pick");
-    setRegTarget(null);
-    setRegMsg("");
-    setRegPhotos([]);
-    setRegPhotoStep(0);
-  }
-
-  // ── render ───────────────────────────────────────────────────────────────
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -230,28 +192,27 @@ export default function HrCheckinPage() {
         </div>
       )}
 
-      {/* ── TAB: เช็คอิน ──────────────────────────────────────────── */}
+      {/* ── TAB: เช็คอิน ───────────────────────────────────────────── */}
       {tab === "checkin" && (
         <>
           {/* idle */}
           {checkinStep === "idle" && (
-            <div className="flex-1 px-4 pt-5 pb-6">
+            <div className="flex-1 px-4 pt-6 pb-6 flex flex-col">
               <button
                 onClick={() => { setCheckinError(""); setCheckinStep("camera"); }}
-                className="w-full mb-5 py-4 bg-[#fb8500] rounded-2xl font-bold text-lg flex items-center justify-center gap-2 active:scale-95 transition-transform">
+                className="w-full py-5 bg-[#fb8500] rounded-2xl font-bold text-xl flex items-center justify-center gap-2 active:scale-95 transition-transform mb-4">
                 <span>📷</span> สแกนหน้าเช็คอิน
               </button>
 
               {checkinError && (
-                <p className="text-red-400 text-sm text-center mb-4">{checkinError}</p>
+                <p className="text-red-400 text-sm text-center mb-4 bg-red-400/10 rounded-xl py-2 px-3">{checkinError}</p>
               )}
 
-              <p className="text-[#f8f1e5]/40 text-xs text-center mb-3">หรือใช้ PIN แทน</p>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Read-only staff status */}
+              <div className="grid grid-cols-2 gap-3 mt-2">
                 {staff.map(s => (
-                  <button key={s.id}
-                    onClick={() => { setPinSelected(s); setPin(""); setPinError(""); setCheckinStep("pin"); }}
-                    className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-transform text-left">
+                  <div key={s.id}
+                    className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3">
                     <div className="relative shrink-0">
                       <Avatar s={s} size={12} />
                       <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#182a47] ${s.isCheckedIn ? "bg-emerald-400" : "bg-white/20"}`} />
@@ -262,7 +223,7 @@ export default function HrCheckinPage() {
                         {s.isCheckedIn ? "กำลังทำงาน" : "ยังไม่เข้า"}
                       </p>
                     </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -299,38 +260,6 @@ export default function HrCheckinPage() {
             </div>
           )}
 
-          {/* PIN fallback */}
-          {checkinStep === "pin" && pinSelected && (
-            <div className="flex-1 flex flex-col items-center justify-center px-6 gap-5">
-              <div className="flex items-center gap-3">
-                <Avatar s={pinSelected} size={12} />
-                <div>
-                  <p className="font-bold">{pinSelected.name}</p>
-                  <p className="text-[#f8f1e5]/50 text-xs">{pinSelected.isCheckedIn ? "ลงชื่อออกงาน" : "ลงชื่อเข้างาน"}</p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                {[0,1,2,3].map(i => (
-                  <div key={i} className={`w-4 h-4 rounded-full transition-colors ${i < pin.length ? "bg-[#fb8500]" : "bg-white/20"}`} />
-                ))}
-              </div>
-              {pinError && <p className="text-red-400 text-sm">{pinError}</p>}
-              {pinSubmitting && <p className="text-[#f8f1e5]/50 text-sm">กำลังตรวจสอบ...</p>}
-              <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
-                {["1","2","3","4","5","6","7","8","9"].map(d => (
-                  <button key={d} onClick={() => pressDigit(d)} disabled={pinSubmitting}
-                    className="bg-white/10 rounded-2xl h-14 text-xl font-semibold active:bg-white/20 disabled:opacity-40">{d}</button>
-                ))}
-                <button onClick={() => { setCheckinStep("idle"); setPinSelected(null); setPin(""); }}
-                  className="bg-white/5 rounded-2xl h-14 text-xs text-[#f8f1e5]/50">ยกเลิก</button>
-                <button onClick={() => pressDigit("0")} disabled={pinSubmitting}
-                  className="bg-white/10 rounded-2xl h-14 text-xl font-semibold active:bg-white/20 disabled:opacity-40">0</button>
-                <button onClick={() => setPin(p => p.slice(0,-1))} disabled={pinSubmitting}
-                  className="bg-white/5 rounded-2xl h-14 text-xl text-[#f8f1e5]/70">⌫</button>
-              </div>
-            </div>
-          )}
-
           {/* success */}
           {checkinStep === "success" && result && (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center px-6">
@@ -351,17 +280,17 @@ export default function HrCheckinPage() {
         </>
       )}
 
-      {/* ── TAB: ลงทะเบียนหน้า ──────────────────────────────────── */}
+      {/* ── TAB: ลงทะเบียนหน้า ───────────────────────────────────── */}
       {tab === "register" && (
         <div className="flex-1 flex flex-col">
           {regStep === "pick" && (
             <div className="flex-1 px-4 pt-5">
               <p className="text-[#f8f1e5]/50 text-xs mb-4">เลือกพนักงานที่จะลงทะเบียนใบหน้า</p>
-              {regMsg && <p className="text-red-400 text-sm text-center mb-3">{regMsg}</p>}
+              {regMsg && <p className="text-red-400 text-sm bg-red-400/10 rounded-xl py-2 px-3 mb-3">{regMsg}</p>}
               <div className="flex flex-col gap-3">
                 {staff.map(s => (
                   <button key={s.id}
-                    onClick={() => { setRegTarget(s); setRegMsg(""); setRegStep("camera"); }}
+                    onClick={() => { setRegTarget(s); setRegMsg(""); setRegPhotos([]); setRegPhotoStep(0); setRegStep("camera"); }}
                     className="flex items-center gap-4 p-4 bg-white/5 border border-white/10 rounded-2xl active:scale-[0.98] transition-transform text-left">
                     <Avatar s={s} size={12} />
                     <div className="flex-1 min-w-0">
@@ -388,7 +317,7 @@ export default function HrCheckinPage() {
                 {/* Progress dots */}
                 <div className="absolute top-4 left-0 right-0 flex justify-center gap-2 pointer-events-none">
                   {[0,1,2].map(i => (
-                    <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < regPhotos.length ? "bg-emerald-400" : i === regPhotoStep ? "bg-[#fb8500]" : "bg-white/20"}`} />
+                    <div key={i} className={`w-3 h-3 rounded-full ${i < regPhotos.length ? "bg-emerald-400" : i === regPhotoStep ? "bg-[#fb8500]" : "bg-white/20"}`} />
                   ))}
                 </div>
                 <div className="absolute bottom-20 left-0 right-0 text-center">
