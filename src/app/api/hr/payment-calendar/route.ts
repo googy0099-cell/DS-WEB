@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 
-function ownerOnly(session: Awaited<ReturnType<typeof auth>>) {
-  return (session?.user as { role?: string })?.role !== "OWNER";
-}
-
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (ownerOnly(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   const url = new URL(req.url);
   const now = new Date(Date.now() + 7 * 3600_000);
@@ -44,7 +42,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (ownerOnly(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const body = await req.json() as {
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       note?: string;
     };
 
-    if (!body.date || !body.amount || !body.description) {
+    if (!body.date || body.amount === undefined || !body.description) {
       return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
     }
 
@@ -79,7 +79,9 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = await auth();
-  if (ownerOnly(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const body = await req.json() as { id: number; isPaid?: boolean; amount?: number; note?: string };
@@ -101,7 +103,9 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await auth();
-  if (ownerOnly(session)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (session?.user?.role !== "OWNER") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
   try {
     const { id } = await req.json() as { id: number };
