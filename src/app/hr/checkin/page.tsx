@@ -31,11 +31,19 @@ const CHALLENGE_LABEL: Record<ChallengeType, string> = {
 };
 const CHALLENGES: ChallengeType[] = ["blink", "mouth", "left", "right"];
 
-const LIVENESS_TIMEOUT_MS = 15000;
+const CHALLENGES_PER_SCAN = 3;
+const PER_CHALLENGE_TIMEOUT_MS = 8000;
 const DETECT_INTERVAL_MS = 150;
 
-function pickChallenge(): ChallengeType {
-  return CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
+// Pick N unique random challenges in random order
+function pickChallengeSequence(n: number): ChallengeType[] {
+  const pool = [...CHALLENGES];
+  const out: ChallengeType[] = [];
+  for (let i = 0; i < n && pool.length > 0; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
 }
 
 function Avatar({ s, size = 14 }: { s: StaffMember; size?: number }) {
@@ -65,7 +73,8 @@ export default function HrCheckinPage() {
   // check-in state
   const [checkinStep, setCheckinStep] = useState<CheckinStep>("idle");
   const [checkinTarget, setCheckinTarget] = useState<StaffMember | null>(null);
-  const [challenge, setChallenge] = useState<ChallengeType>("blink");
+  const [challengeSequence, setChallengeSequence] = useState<ChallengeType[]>([]);
+  const [challengeIndex, setChallengeIndex] = useState(0);
   const [challengeProgress, setChallengeProgress] = useState(""); // shown to user
   const [checkinError, setCheckinError] = useState("");
   const [result, setResult] = useState<{
@@ -203,20 +212,24 @@ export default function HrCheckinPage() {
     }
   }
 
-  function startLivenessLoop(ch: ChallengeType) {
-    livenessStartRef.current = performance.now();
+  function resetChallengeState() {
     blinkStateRef.current = { eyesOpen: true, blinkCount: 0 };
     holdStartRef.current = null;
     setChallengeProgress("");
+  }
 
+  function startLivenessLoop(sequence: ChallengeType[]) {
+    livenessStartRef.current = performance.now();
+    resetChallengeState();
+    let currentIdx = 0;
     let lastDetect = 0;
 
     const tick = async () => {
       const now = performance.now();
 
-      if (now - livenessStartRef.current > LIVENESS_TIMEOUT_MS) {
+      if (now - livenessStartRef.current > PER_CHALLENGE_TIMEOUT_MS) {
         stopCamera();
-        setCheckinError("หมดเวลา ลองใหม่อีกครั้ง");
+        setCheckinError(`หมดเวลาท่าที่ ${currentIdx + 1} ลองใหม่`);
         setCheckinStep("idle");
         setCheckinTarget(null);
         return;
@@ -227,19 +240,28 @@ export default function HrCheckinPage() {
         try {
           const m = await detectMetrics(videoRef.current);
           if (m) {
+            const ch = sequence[currentIdx];
             const passed = checkChallengeMet(m, ch, now);
             if (passed) {
-              // Capture and submit
-              const photo = capturePhoto();
-              stopCamera();
-              if (!photo || !checkinTarget) {
-                setCheckinError("จับภาพไม่ได้");
-                setCheckinStep("idle");
-                setCheckinTarget(null);
+              // Advance to next challenge or finish
+              currentIdx += 1;
+              if (currentIdx >= sequence.length) {
+                // All challenges passed — capture and submit
+                const photo = capturePhoto();
+                stopCamera();
+                if (!photo || !checkinTarget) {
+                  setCheckinError("จับภาพไม่ได้");
+                  setCheckinStep("idle");
+                  setCheckinTarget(null);
+                  return;
+                }
+                await submitIdentify(checkinTarget.id, photo);
                 return;
               }
-              await submitIdentify(checkinTarget.id, photo);
-              return;
+              // Reset state + timer for next challenge
+              livenessStartRef.current = performance.now();
+              resetChallengeState();
+              setChallengeIndex(currentIdx);
             }
           } else {
             setChallengeProgress("มองตรงๆ ที่กล้อง");
@@ -288,20 +310,22 @@ export default function HrCheckinPage() {
     stopCamera();
     setCheckinStep("idle");
     setCheckinTarget(null);
+    setChallengeSequence([]);
+    setChallengeIndex(0);
     setChallengeProgress("");
   }
 
   // Trigger liveness when camera opens with a target
   useEffect(() => {
-    if (checkinStep !== "camera" || !checkinTarget) return;
+    if (checkinStep !== "camera" || !checkinTarget || challengeSequence.length === 0) return;
     const id = setTimeout(() => {
       if (videoRef.current && streamRef.current) {
-        startLivenessLoop(challenge);
+        startLivenessLoop(challengeSequence);
       }
     }, 800); // wait for video to start playing
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkinStep, checkinTarget, challenge]);
+  }, [checkinStep, checkinTarget, challengeSequence]);
 
   function pickStaffForCheckin(s: StaffMember) {
     if (!s.hasCredential) {
@@ -314,7 +338,8 @@ export default function HrCheckinPage() {
     }
     setCheckinError("");
     setCheckinTarget(s);
-    setChallenge(pickChallenge());
+    setChallengeSequence(pickChallengeSequence(CHALLENGES_PER_SCAN));
+    setChallengeIndex(0);
     setCheckinStep("camera");
   }
 
@@ -456,13 +481,28 @@ export default function HrCheckinPage() {
           )}
 
           {checkinStep === "camera" && checkinTarget && (
-            <div className="flex-1 flex flex-col items-center justify-center px-4 gap-4">
-              <p className="text-sm text-[#f8f1e5]/70">
-                {checkinTarget.name}
-              </p>
+            <div className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
+              <p className="text-sm text-[#f8f1e5]/70">{checkinTarget.name}</p>
+
+              {/* Progress dots */}
+              <div className="flex gap-2">
+                {challengeSequence.map((_, i) => (
+                  <span
+                    key={i}
+                    className={`w-3 h-3 rounded-full ${
+                      i < challengeIndex
+                        ? "bg-emerald-400"
+                        : i === challengeIndex
+                        ? "bg-[#fb8500] animate-pulse"
+                        : "bg-white/20"
+                    }`}
+                  />
+                ))}
+              </div>
+
               <div
                 className="relative rounded-full overflow-hidden border-4 border-[#fb8500] bg-black"
-                style={{ width: "min(72vw, 72vh)", height: "min(72vw, 72vh)" }}
+                style={{ width: "min(68vw, 68vh)", height: "min(68vw, 68vh)" }}
               >
                 <video
                   ref={videoRef}
@@ -472,7 +512,13 @@ export default function HrCheckinPage() {
                   className="w-full h-full object-cover scale-x-[-1]"
                 />
               </div>
-              <p className="text-xl font-bold text-center">{CHALLENGE_LABEL[challenge]}</p>
+
+              <p className="text-xs text-[#f8f1e5]/50">
+                ท่าที่ {challengeIndex + 1} / {challengeSequence.length}
+              </p>
+              <p className="text-xl font-bold text-center">
+                {challengeSequence[challengeIndex] && CHALLENGE_LABEL[challengeSequence[challengeIndex]]}
+              </p>
               {challengeProgress && (
                 <p className="text-sm text-[#fb8500]">{challengeProgress}</p>
               )}
