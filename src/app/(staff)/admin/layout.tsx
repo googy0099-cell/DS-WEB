@@ -40,6 +40,7 @@ const OWNER_ONLY_NAV = [
   { href: "/admin/rewards", label: "จัดการรางวัล", icon: "🎁" },
   { href: "/admin/tables", label: "โต๊ะ & QR Code", icon: "🪑" },
   { href: "/hr/schedule", label: "ตารางพนักงาน", icon: "📅" },
+  { href: "/hr/payroll", label: "เงินเดือน", icon: "💵" },
   { href: "/admin/settings", label: "การตั้งค่า", icon: "⚙️" },
 ];
 

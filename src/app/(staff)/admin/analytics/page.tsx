@@ -68,6 +68,14 @@ const MODULES = [
     color: "bg-amber-50 border-amber-200",
     iconBg: "bg-amber-100 text-amber-700",
   },
+  {
+    href: "/admin/analytics/hr-attendance",
+    icon: "🕐",
+    title: "การเข้างานพนักงาน",
+    desc: "สรุปการเข้างานรายเดือนต่อคน: ตรงเวลา/สาย/ออกก่อน/รวมชั่วโมง",
+    color: "bg-indigo-50 border-indigo-200",
+    iconBg: "bg-indigo-100 text-indigo-700",
+  },
 ];
 
 const CSV_SHEETS = [

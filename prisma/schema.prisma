@@ -566,6 +566,7 @@ model HrStaff {
   credentialCounter     Int          @default(0) @map("credential_counter")
   pendingChallenge      String?      @map("pending_challenge")
   azurePersonId         String?      @map("azure_person_id")
+  baseSalary            Int          @default(0) @map("base_salary")
   createdAt             DateTime     @default(now()) @map("created_at")
   user                  User         @relation("HrStaff", fields: [userId], references: [id])
   attendances           HrAttendance[]
@@ -573,7 +574,22 @@ model HrStaff {
   tasks                 HrTask[]     @relation("HrTaskAssignee")
   kpis                  HrKpi[]
   schedules             HrSchedule[]
+  deductions            HrDeduction[]
   @@map("hr_staff")
+}
+
+model HrDeduction {
+  id        Int      @id @default(autoincrement())
+  staffId   Int      @map("staff_id")
+  amount    Int
+  reason    String
+  note      String?
+  month     Int
+  year      Int
+  createdAt DateTime @default(now()) @map("created_at")
+  staff     HrStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  @@index([staffId, year, month])
+  @@map("hr_deduction")
 }
 
 model HrSchedule {
