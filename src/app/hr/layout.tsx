@@ -2,10 +2,14 @@ import type { Metadata, Viewport } from "next";
 
 export const metadata: Metadata = {
   title: "HR เช็คอิน | ร้านลูกเต๋า",
+  manifest: "/hr/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "HR เช็คอิน",
+  },
+  icons: {
+    apple: "/icon-192.png",
   },
 };
 
