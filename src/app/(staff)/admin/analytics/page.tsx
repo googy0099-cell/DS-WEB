@@ -60,6 +60,14 @@ const MODULES = [
     color: "bg-teal-50 border-teal-200",
     iconBg: "bg-teal-100 text-teal-700",
   },
+  {
+    href: "/admin/analytics/expenses",
+    icon: "🛍️",
+    title: "รายจ่ายจากเก๊ะ",
+    desc: "บันทึกซื้อของเข้าร้านและพนักงานออกเงินก่อน พร้อมรูปหลักฐาน",
+    color: "bg-amber-50 border-amber-200",
+    iconBg: "bg-amber-100 text-amber-700",
+  },
 ];
 
 const CSV_SHEETS = [

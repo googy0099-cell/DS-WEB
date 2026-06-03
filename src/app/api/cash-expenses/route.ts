@@ -2,24 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
 
-function todayBounds() {
-  const now = new Date();
-  const offsetMs = (7 * 60 + now.getTimezoneOffset()) * 60_000;
-  const bkkNow = new Date(now.getTime() + offsetMs);
-  const startBkk = new Date(bkkNow); startBkk.setHours(0, 0, 0, 0);
-  const endBkk = new Date(startBkk); endBkk.setDate(endBkk.getDate() + 1);
-  return { start: new Date(startBkk.getTime() - offsetMs), end: new Date(endBkk.getTime() - offsetMs) };
+function parseBounds(from: string, to: string) {
+  return {
+    start: new Date(from + "T00:00:00+07:00"),
+    end: new Date(to + "T23:59:59+07:00"),
+  };
+}
+function todayBKK() {
+  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.role || !["CASHIER", "STAFF", "OWNER"].includes(session.user.role)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const { start, end } = todayBounds();
+  const { searchParams } = req.nextUrl;
+  const today = todayBKK();
+  const from = searchParams.get("from") || today;
+  const to = searchParams.get("to") || today;
+  const { start, end } = parseBounds(from, to);
   const expenses = await db.cashExpense.findMany({
-    where: { createdAt: { gte: start, lt: end } },
-    orderBy: { createdAt: "asc" },
+    where: { createdAt: { gte: start, lte: end } },
+    orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(expenses);
 }
