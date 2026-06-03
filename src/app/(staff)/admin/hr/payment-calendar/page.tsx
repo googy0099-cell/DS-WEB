@@ -66,6 +66,16 @@ const PAY_TYPE_UNIT: Record<string, string> = { MONTHLY: "/เดือน", DAI
 
 function thb(n: number) { return n.toLocaleString("th-TH"); }
 
+function renderNote(text: string) {
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) =>
+    part.match(/^https?:\/\//)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer"
+           className="text-orange underline break-all hover:text-orange/80">{part}</a>
+      : <span key={i}>{part}</span>
+  );
+}
+
 function buildGrid(year: number, month: number) {
   const firstDay = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -467,9 +477,10 @@ export default function PaymentCalendarPage() {
                     ))}
                   </div>
 
-                  <label className="block text-sm text-gray-600 mb-1">หมายเหตุ (ไม่บังคับ)</label>
-                  <input value={specialNote} onChange={e => setSpecialNote(e.target.value)}
-                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm" />
+                  <label className="block text-sm text-gray-600 mb-1">หมายเหตุ / ลิงค์ (ไม่บังคับ)</label>
+                  <textarea value={specialNote} onChange={e => setSpecialNote(e.target.value)}
+                    rows={2} placeholder="https://... หรือข้อความทั่วไป"
+                    className="w-full border border-sand rounded-xl px-3 py-2 text-sm resize-none" />
                 </>
               )}
             </div>
@@ -522,7 +533,7 @@ export default function PaymentCalendarPage() {
               </p>
             )}
             {detail.note && !detail.note.startsWith("recurring:") && (
-              <p className="text-xs text-gray-400 mb-3">{detail.note}</p>
+              <p className="text-xs text-gray-400 mb-3 leading-relaxed">{renderNote(detail.note)}</p>
             )}
 
             {detail.isPaid && (
