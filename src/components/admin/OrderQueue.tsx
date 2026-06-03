@@ -1857,9 +1857,11 @@ function BillOrderGroupCard({
                       <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
                       {item.selectedSize && <span className="text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">{item.selectedSize}</span>}
                       <span className="text-gray-400">×{item.quantity}</span>
-                      {item.kitchenServedAt
-                        ? <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✅ พร้อม</span>
-                        : <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🍳 กำลังทำ</span>}
+                      {item.menuItem.queueTarget !== "none" && (
+                        item.kitchenServedAt
+                          ? <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✅ พร้อม</span>
+                          : <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🍳 กำลังทำ</span>
+                      )}
                     </div>
                     {addons.length > 0 && <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>}
                     {options.length > 0 && <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>}
@@ -2103,12 +2105,12 @@ function OrderCard({
                       </span>
                     )}
                     <span className="text-gray-400 font-normal">×{item.quantity}</span>
-                    {inKitchen && !item.kitchenServedAt && (
+                    {item.menuItem.queueTarget !== "none" && inKitchen && !item.kitchenServedAt && (
                       <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
                         🍳 กำลังทำ
                       </span>
                     )}
-                    {item.kitchenServedAt && (
+                    {item.menuItem.queueTarget !== "none" && item.kitchenServedAt && (
                       <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
                         ✅ พร้อม
                       </span>

@@ -43,6 +43,8 @@ export default function AdminHrPayrollPage() {
   const [data, setData] = useState<PayrollData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
 
   const [rateEdit, setRateEdit] = useState<{ staffId: number; payType: string; payRate: string } | null>(null);
   const [dedForm, setDedForm] = useState<{ staffId: number; name: string; amount: string; reason: string; note: string } | null>(null);
@@ -92,6 +94,24 @@ export default function AdminHrPayrollPage() {
     fetchData();
   }
 
+  function downloadCSV() {
+    window.location.href = `/api/hr/payroll/export?year=${year}&month=${month}`;
+  }
+
+  async function syncSheets() {
+    setSyncing(true); setSyncMsg("");
+    try {
+      const res = await fetch("/api/hr/sync-sheets", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ year, month }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setSyncMsg(`ไม่สำเร็จ: ${d.error}`); return; }
+      setSyncMsg(`ซิงค์แล้ว ${d.synced ?? 0} รายการ`);
+    } catch { setSyncMsg("เกิดข้อผิดพลาด"); }
+    finally { setSyncing(false); }
+  }
+
   return (
     <div>
       <div className="mb-5">
@@ -99,7 +119,7 @@ export default function AdminHrPayrollPage() {
         <h1 className="text-xl font-bold text-navy">เงินเดือนพนักงาน</h1>
       </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-3">
         <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm">
           {MONTH_LABELS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
         </select>
@@ -107,6 +127,15 @@ export default function AdminHrPayrollPage() {
           {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y + 543}</option>)}
         </select>
       </div>
+      <div className="flex gap-2 mb-4">
+        <button onClick={downloadCSV} className="flex-1 py-2 bg-navy text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5">
+          ↓ ดาวน์โหลด CSV
+        </button>
+        <button onClick={syncSheets} disabled={syncing} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl disabled:opacity-60">
+          {syncing ? "กำลังซิงค์..." : "↑ ซิงค์ Google Sheets"}
+        </button>
+      </div>
+      {syncMsg && <p className={`text-xs mb-3 px-3 py-2 rounded-xl ${syncMsg.startsWith("ไม่") || syncMsg.startsWith("เกิด") ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600"}`}>{syncMsg}</p>}
 
       {loading && <p className="text-center text-gray-400 text-sm py-8">กำลังโหลด...</p>}
       {error && <p className="text-center text-red-500 text-sm">{error}</p>}

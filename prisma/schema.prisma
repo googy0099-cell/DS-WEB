@@ -576,6 +576,7 @@ model HrStaff {
   kpis                  HrKpi[]
   schedules             HrSchedule[]
   deductions            HrDeduction[]
+  paymentEvents         HrPaymentEvent[]
   @@map("hr_staff")
 }
 
@@ -663,4 +664,21 @@ model HrKpi {
   year      Int
   staff     HrStaff @relation(fields: [staffId], references: [id])
   @@map("hr_kpi")
+}
+
+model HrPaymentEvent {
+  id          Int       @id @default(autoincrement())
+  staffId     Int?      @map("staff_id")
+  date        DateTime
+  amount      Int
+  description String
+  type        String    @default("SALARY")  // SALARY|BONUS|ADVANCE|COMMISSION|OTHER
+  isPaid      Boolean   @default(false) @map("is_paid")
+  paidAt      DateTime? @map("paid_at")
+  note        String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  staff       HrStaff?  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  @@index([date])
+  @@index([staffId])
+  @@map("hr_payment_event")
 }

@@ -83,6 +83,7 @@ const GROUP_HR: NavGroup = {
   items: [
     { href: "/admin/hr/schedule", label: "ตารางพนักงาน", icon: "hr-schedule" },
     { href: "/admin/hr/payroll", label: "เงินเดือน", icon: "hr-payroll" },
+    { href: "/admin/hr/payment-calendar", label: "ปฏิทินจ่ายเงิน", icon: "hr-calendar" },
   ],
 };
 
