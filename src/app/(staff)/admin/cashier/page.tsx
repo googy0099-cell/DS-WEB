@@ -90,6 +90,9 @@ export default function CashierPage() {
   const [expUploading, setExpUploading] = useState(false);
   const [expSaving, setExpSaving] = useState(false);
 
+  // Expense detail modal
+  const [detailExpense, setDetailExpense] = useState<CashExpense | null>(null);
+
   const [closeStep, setCloseStep] = useState<CloseStep>(1);
   const [counts, setCounts] = useState<Record<number, string>>(
     Object.fromEntries(DENOMINATIONS.map((d) => [d, ""]))
@@ -102,24 +105,56 @@ export default function CashierPage() {
   const [stockCheckLoading, setStockCheckLoading] = useState(false);
   const [reorderItems, setReorderItems] = useState<ReorderItem[]>([]);
 
-  // Restore today's shift from localStorage
+  // Restore today's shift — cross-device: validate localStorage against server
   useEffect(() => {
     const stored = localStorage.getItem(SHIFT_KEY());
-    if (stored) {
-      const { openedAt: oa, openingFloat: of_ } = JSON.parse(stored);
-      setOpenedAt(oa);
-      setOpeningFloat(String(of_));
-      setShiftState("OPEN");
-    }
+    fetch("/api/shop/status")
+      .then((r) => r.json())
+      .then(({ isOpen }: { isOpen: boolean }) => {
+        if (stored && isOpen) {
+          // Both local and server say open → restore
+          const { openedAt: oa, openingFloat: of_ } = JSON.parse(stored);
+          setOpenedAt(oa);
+          setOpeningFloat(String(of_));
+          setShiftState("OPEN");
+        } else if (stored && !isOpen) {
+          // Server says closed but localStorage still has it → another device closed
+          localStorage.removeItem(SHIFT_KEY());
+          setShiftState("CLOSED");
+        }
+        // If no stored → stay CLOSED (default)
+      })
+      .catch(() => {
+        // Network error — fall back to localStorage
+        if (stored) {
+          const { openedAt: oa, openingFloat: of_ } = JSON.parse(stored);
+          setOpenedAt(oa);
+          setOpeningFloat(String(of_));
+          setShiftState("OPEN");
+        }
+      });
   }, []);
 
-  // Live timer
+  // Live timer + periodic cross-device sync
   useEffect(() => {
     if (shiftState !== "OPEN" || !openedAt) return;
     const tick = () => setTimer(elapsed(openedAt));
     tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    const timerId = setInterval(tick, 30_000);
+    // Re-check server state every 60s — catches shift closed on another device
+    const syncId = setInterval(() => {
+      fetch("/api/shop/status")
+        .then((r) => r.json())
+        .then(({ isOpen }: { isOpen: boolean }) => {
+          if (!isOpen) {
+            localStorage.removeItem(SHIFT_KEY());
+            setShiftState("CLOSED");
+            setOpenedAt(null);
+          }
+        })
+        .catch(() => {});
+    }, 60_000);
+    return () => { clearInterval(timerId); clearInterval(syncId); };
   }, [shiftState, openedAt]);
 
   const loadSummary = useCallback(async () => {
@@ -350,8 +385,16 @@ export default function CashierPage() {
           ) : (
             <div className="divide-y divide-sand/50 max-h-52 overflow-y-auto">
               {summary!.pettyExpenses.map((e) => (
-                <div key={e.id} className="flex items-start gap-3 px-4 py-2.5">
-                  <span className="text-base shrink-0">{e.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
+                <button
+                  key={e.id}
+                  onClick={() => setDetailExpense(e)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-sand/30 transition-colors"
+                >
+                  {e.photoUrl ? (
+                    <img src={e.photoUrl} alt="receipt" className="w-9 h-9 rounded-lg object-cover shrink-0 border border-sand" />
+                  ) : (
+                    <span className="text-base shrink-0 w-9 h-9 flex items-center justify-center bg-sand/40 rounded-lg">{e.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-navy truncate">{e.description}</p>
                     <p className="text-xs text-gray-400">
@@ -360,7 +403,7 @@ export default function CashierPage() {
                     </p>
                   </div>
                   <p className="text-sm font-bold text-red-600 shrink-0">-฿{e.amount.toLocaleString()}</p>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -444,6 +487,79 @@ export default function CashierPage() {
               <button onClick={() => setShowExpenseModal(false)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
               <button onClick={saveExpense} disabled={expSaving || !expAmount || !expDesc} className="flex-1 bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
                 {expSaving ? "กำลังบันทึก..." : "✅ บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Expense detail modal */}
+      {detailExpense && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center p-4" onClick={() => setDetailExpense(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{detailExpense.type === "PETTY_CASH" ? "🗃️" : "👤"}</span>
+                <h3 className="font-bold text-navy text-base">
+                  {detailExpense.type === "PETTY_CASH" ? "ซื้อของเข้าร้าน" : "พนักงานออกเงินเอง"}
+                </h3>
+              </div>
+              <button onClick={() => setDetailExpense(null)} className="text-gray-400 text-xl">✕</button>
+            </div>
+
+            {detailExpense.photoUrl && (
+              <div className="px-5 pb-3">
+                <img
+                  src={detailExpense.photoUrl}
+                  alt="receipt"
+                  className="w-full max-h-64 object-contain rounded-2xl bg-sand/20 border border-sand"
+                />
+              </div>
+            )}
+
+            <div className="px-5 pb-5 space-y-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-0.5">รายละเอียด</p>
+                <p className="text-sm font-semibold text-navy">{detailExpense.description}</p>
+              </div>
+              <div className="flex gap-4">
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">จำนวนเงิน</p>
+                  <p className="text-xl font-bold text-red-600">-฿{detailExpense.amount.toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">เวลา</p>
+                  <p className="text-sm font-semibold text-navy">{formatTime(detailExpense.createdAt)} น.</p>
+                </div>
+              </div>
+              {detailExpense.note && (
+                <div>
+                  <p className="text-xs text-gray-400 mb-0.5">หมายเหตุ</p>
+                  <p className="text-sm text-navy">{detailExpense.note}</p>
+                </div>
+              )}
+              {detailExpense.type === "STAFF_ADVANCE" && (
+                <div className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${detailExpense.reimbursed ? "bg-green-50 border border-green-200" : "bg-yellow-50 border border-yellow-200"}`}>
+                  <span className="text-sm font-semibold">
+                    {detailExpense.reimbursed ? "✅ คืนเงินแล้ว" : "⏳ ยังไม่ได้คืนเงิน"}
+                  </span>
+                  <button
+                    onClick={async () => {
+                      await fetch("/api/cash-expenses", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: detailExpense.id }),
+                      });
+                      setDetailExpense((prev) => prev ? { ...prev, reimbursed: !prev.reimbursed } : null);
+                      loadSummary();
+                    }}
+                    className="text-xs font-semibold text-orange underline"
+                  >
+                    {detailExpense.reimbursed ? "ยกเลิก" : "กดเมื่อคืนแล้ว"}
+                  </button>
+                </div>
+              )}
+              <button onClick={() => setDetailExpense(null)} className="w-full border border-sand text-gray-400 py-2.5 rounded-2xl text-sm mt-1">
+                ปิด
               </button>
             </div>
           </div>
