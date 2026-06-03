@@ -24,6 +24,7 @@ export default function HrCheckinPage() {
   const [result, setResult] = useState<{ action: "checkin" | "checkout"; time: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [scanStatus, setScanStatus] = useState("กำลังโหลด AI...");
+  const [scanProgress, setScanProgress] = useState(0); // 0-3 consecutive matches
   const [registerTarget, setRegisterTarget] = useState<StaffMember | null>(null);
   const [registerProgress, setRegisterProgress] = useState(0);
 
@@ -79,23 +80,71 @@ export default function HrCheckinPage() {
       return;
     }
 
+    const REQUIRED_HITS = 3;
+    let consecutiveId: number | null = null;
+    let hitCount = 0;
+
     async function loop() {
       if (!isScanning.current || !videoRef.current) return;
       const descriptor = await getDescriptor(videoRef.current).catch(() => null);
       if (descriptor) {
         const match = matchDescriptor(descriptor, candidates);
         if (match) {
-          const found = staff.find((s) => s.id === match.id);
-          if (found) {
+          if (match.id === consecutiveId) {
+            hitCount++;
+            setScanProgress(hitCount);
+            const found = staff.find((s) => s.id === match.id);
+            if (found) setScanStatus(`กำลังยืนยัน ${found.name}... ${hitCount}/${REQUIRED_HITS}`);
+          } else {
+            consecutiveId = match.id;
+            hitCount = 1;
+            setScanProgress(1);
+            const found = staff.find((s) => s.id === match.id);
+            if (found) setScanStatus(`พบใบหน้า: ${found.name} (${hitCount}/${REQUIRED_HITS})`);
+          }
+          if (hitCount >= REQUIRED_HITS) {
+            const found = staff.find((s) => s.id === match.id)!;
             isScanning.current = false;
-            setSelected(found);
-            setStep("matched");
+            setScanProgress(0);
+            // Capture photo then submit — no PIN needed
+            const canvas = document.createElement("canvas");
+            canvas.width = videoRef.current!.videoWidth;
+            canvas.height = videoRef.current!.videoHeight;
+            canvas.getContext("2d")?.drawImage(videoRef.current!, 0, 0);
+            const photoBase64 = canvas.toDataURL("image/jpeg", 0.7);
             stopCamera();
+            setSelected(found);
+            setLoading(true);
+            const res = await fetch("/api/hr/attendance", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ staffId: found.id, photoBase64, faceCheckin: true }),
+            });
+            const data = await res.json();
+            setLoading(false);
+            if (res.ok) {
+              setResult(data);
+              setStep("success");
+              fetchStaff();
+              setTimeout(() => { setStep("scan"); setSelected(null); setResult(null); setScanStatus("กำลังสแกนใบหน้า..."); }, 3000);
+            } else {
+              setScanStatus(data.error ?? "เกิดข้อผิดพลาด");
+              setTimeout(() => { isScanning.current = true; setScanStatus("กำลังสแกนใบหน้า..."); hitCount = 0; consecutiveId = null; loop(); }, 2000);
+            }
             return;
           }
+        } else {
+          if (hitCount > 0) {
+            hitCount = 0;
+            consecutiveId = null;
+            setScanProgress(0);
+            setScanStatus("กำลังสแกนใบหน้า...");
+          }
         }
+      } else {
+        if (hitCount > 0) { hitCount = 0; consecutiveId = null; setScanProgress(0); }
       }
-      scanLoopRef.current = setTimeout(loop, 500);
+      scanLoopRef.current = setTimeout(loop, 400);
     }
     loop();
   }
@@ -216,8 +265,16 @@ export default function HrCheckinPage() {
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
             <div className="w-52 h-52 rounded-full border-2 border-[#fb8500]/60" style={{ boxShadow: "0 0 0 9999px rgba(24,42,71,0.5)" }} />
           </div>
-          <div className="absolute bottom-6 left-0 right-0 text-center">
-            <p className="text-white/80 text-sm font-medium">{scanStatus}</p>
+          <div className="absolute bottom-6 left-0 right-0 px-8 flex flex-col items-center gap-2">
+            <p className="text-white/80 text-sm font-medium text-center">{scanStatus}</p>
+            {scanProgress > 0 && (
+              <div className="flex gap-2">
+                {[1,2,3].map((n) => (
+                  <div key={n} className={`w-3 h-3 rounded-full transition-all ${n <= scanProgress ? "bg-[#fb8500] scale-110" : "bg-white/20"}`} />
+                ))}
+              </div>
+            )}
+            {loading && <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
           </div>
         </div>
 
@@ -266,30 +323,6 @@ export default function HrCheckinPage() {
     );
   }
 
-  // ── Matched ───────────────────────────────────────────────────────────────
-  if (step === "matched" && selected) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-5 px-6">
-        <div className="w-24 h-24 rounded-full bg-[#fb8500]/20 border-2 border-[#fb8500] flex items-center justify-center text-4xl">
-          {selected.avatarUrl ? (
-            <Image src={selected.avatarUrl} alt={selected.name} width={96} height={96} className="w-24 h-24 rounded-full object-cover" />
-          ) : selected.name.charAt(0)}
-        </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold">{selected.name}</p>
-          <p className="text-[#f8f1e5]/50 text-sm mt-1">ตรวจพบใบหน้าแล้ว</p>
-        </div>
-        <div className="flex flex-col gap-3 w-full max-w-xs">
-          <button onClick={confirmMatch} className="w-full py-4 bg-[#fb8500] text-white font-bold rounded-2xl text-lg">
-            {selected.isCheckedIn ? "ออกงาน ✓" : "เข้างาน ✓"}
-          </button>
-          <button onClick={() => { setStep("scan"); setSelected(null); }} className="text-[#f8f1e5]/40 text-sm text-center">
-            ไม่ใช่ฉัน
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // ── Registering ───────────────────────────────────────────────────────────
   if (step === "registering") {

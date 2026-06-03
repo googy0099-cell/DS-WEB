@@ -4,27 +4,36 @@ import bcrypt from "bcryptjs";
 import { notifyCheckin } from "@/lib/hr-notify";
 
 export async function POST(req: NextRequest) {
-  const { staffId, pin, photoBase64 } = (await req.json()) as {
+  const { staffId, pin, photoBase64, faceCheckin } = (await req.json()) as {
     staffId: number;
-    pin: string;
+    pin?: string;
     photoBase64?: string;
+    faceCheckin?: boolean;
   };
 
-  if (!staffId || !pin) {
-    return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
-  }
+  if (!staffId) return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
 
   const staff = await db.hrStaff.findUnique({
     where: { id: staffId },
     include: { user: { select: { firstName: true, lastName: true } } },
   });
-  if (!staff?.pin) {
-    return NextResponse.json({ error: "ยังไม่ได้ตั้ง PIN" }, { status: 400 });
-  }
 
-  const valid = await bcrypt.compare(pin, staff.pin);
-  if (!valid) {
-    return NextResponse.json({ error: "PIN ไม่ถูกต้อง" }, { status: 401 });
+  if (!staff) return NextResponse.json({ error: "ไม่พบพนักงาน" }, { status: 404 });
+
+  if (faceCheckin) {
+    // Face authentication — staff must have registered face data
+    if (!staff.faceData) {
+      return NextResponse.json({ error: "ยังไม่ได้ลงทะเบียนใบหน้า" }, { status: 400 });
+    }
+  } else {
+    // PIN authentication
+    if (!staff.pin) {
+      return NextResponse.json({ error: "ยังไม่ได้ตั้ง PIN" }, { status: 400 });
+    }
+    const valid = await bcrypt.compare(pin ?? "", staff.pin);
+    if (!valid) {
+      return NextResponse.json({ error: "PIN ไม่ถูกต้อง" }, { status: 401 });
+    }
   }
 
   const today = new Date();

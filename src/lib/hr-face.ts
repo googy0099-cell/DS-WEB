@@ -37,7 +37,7 @@ export async function getAverageDescriptor(video: HTMLVideoElement, samples = 5)
 export function matchDescriptor(
   target: Float32Array,
   candidates: { id: number; descriptor: Float32Array }[],
-  threshold = 0.4
+  threshold = 0.35
 ): { id: number; distance: number } | null {
   let best: { id: number; distance: number } | null = null;
   for (const c of candidates) {
