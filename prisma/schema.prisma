@@ -572,17 +572,32 @@ model HrStaff {
   checklists            HrChecklist[]
   tasks                 HrTask[]     @relation("HrTaskAssignee")
   kpis                  HrKpi[]
+  schedules             HrSchedule[]
   @@map("hr_staff")
 }
 
+model HrSchedule {
+  id            Int      @id @default(autoincrement())
+  staffId       Int      @map("staff_id")
+  dayOfWeek     Int      @map("day_of_week")
+  startTime     String   @map("start_time")
+  endTime       String   @map("end_time")
+  graceMinutes  Int      @default(10) @map("grace_minutes")
+  staff         HrStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  @@unique([staffId, dayOfWeek])
+  @@map("hr_schedule")
+}
+
 model HrAttendance {
-  id        Int       @id @default(autoincrement())
-  staffId   Int       @map("staff_id")
-  checkIn   DateTime  @map("check_in")
-  checkOut  DateTime? @map("check_out")
-  photoUrl  String?   @map("photo_url")
-  createdAt DateTime  @default(now()) @map("created_at")
-  staff     HrStaff   @relation(fields: [staffId], references: [id])
+  id              Int       @id @default(autoincrement())
+  staffId         Int       @map("staff_id")
+  checkIn         DateTime  @map("check_in")
+  checkOut        DateTime? @map("check_out")
+  photoUrl        String?   @map("photo_url")
+  checkInStatus   String?   @map("check_in_status")
+  checkOutStatus  String?   @map("check_out_status")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  staff           HrStaff   @relation(fields: [staffId], references: [id])
   @@map("hr_attendance")
 }
 

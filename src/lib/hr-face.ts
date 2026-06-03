@@ -8,12 +8,9 @@ export async function loadModels() {
   await Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
     faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL),
-    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
   ]);
   loaded = true;
 }
-
-// ── Liveness: Eye Aspect Ratio (EAR) ──────────────────────────────────────
 
 type Point = { x: number; y: number };
 
@@ -22,56 +19,67 @@ function euclidean(a: Point, b: Point) {
 }
 
 function eyeAR(pts: Point[]): number {
-  // pts = 6 landmark points of one eye
   const A = euclidean(pts[1], pts[5]);
   const B = euclidean(pts[2], pts[4]);
   const C = euclidean(pts[0], pts[3]);
   return (A + B) / (2.0 * C);
 }
 
-export async function getEAR(video: HTMLVideoElement): Promise<number | null> {
+export type LivenessMetrics = {
+  ear: number;          // average of both eyes; <0.20 closed, >0.28 open
+  mouthOpen: number;    // 0=closed, ~0.5+=wide open
+  yaw: number;          // -0.3..+0.3 (negative = head turned to right from camera, positive = head turned to left)
+};
+
+export async function detectMetrics(video: HTMLVideoElement): Promise<LivenessMetrics | null> {
   const det = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 }))
     .withFaceLandmarks(true);
   if (!det) return null;
   const p = det.landmarks.positions;
-  const left  = p.slice(36, 42);
-  const right = p.slice(42, 48);
-  return (eyeAR(left) + eyeAR(right)) / 2;
+
+  // EAR
+  const leftEye = p.slice(36, 42);
+  const rightEye = p.slice(42, 48);
+  const ear = (eyeAR(leftEye) + eyeAR(rightEye)) / 2;
+
+  // Mouth open: vertical distance between outer top (51) and outer bottom (57)
+  // normalized by mouth width (48 to 54)
+  const topLip = p[51];
+  const bottomLip = p[57];
+  const mouthLeft = p[48];
+  const mouthRight = p[54];
+  const mouthWidth = euclidean(mouthLeft, mouthRight);
+  const mouthHeight = euclidean(topLip, bottomLip);
+  const mouthOpen = mouthWidth > 0 ? mouthHeight / mouthWidth : 0;
+
+  // Yaw: nose tip (30) offset from face center, normalized by face width
+  const noseTip = p[30];
+  const jawLeft = p[0];
+  const jawRight = p[16];
+  const faceCenter = (jawLeft.x + jawRight.x) / 2;
+  const faceWidth = jawRight.x - jawLeft.x;
+  const yaw = faceWidth > 0 ? (noseTip.x - faceCenter) / faceWidth : 0;
+
+  return { ear, mouthOpen, yaw };
 }
 
-export async function getDescriptor(video: HTMLVideoElement): Promise<Float32Array | null> {
-  const detection = await faceapi
-    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
-    .withFaceLandmarks(true)
-    .withFaceDescriptor();
-  return detection?.descriptor ?? null;
-}
+// Blink counter state machine: pass-in the metric history, count valid blinks
+// (transition from open → closed → open within reasonable frames)
 
-export async function getAverageDescriptor(video: HTMLVideoElement, samples = 5): Promise<Float32Array | null> {
-  const descriptors: Float32Array[] = [];
-  for (let i = 0; i < samples; i++) {
-    await new Promise((r) => setTimeout(r, 300));
-    const d = await getDescriptor(video);
-    if (d) descriptors.push(d);
+export type BlinkState = {
+  eyesOpen: boolean;
+  blinkCount: number;
+};
+
+export function updateBlinkState(state: BlinkState, ear: number): BlinkState {
+  const EAR_CLOSE = 0.20;
+  const EAR_OPEN = 0.28;
+  if (state.eyesOpen && ear < EAR_CLOSE) {
+    return { eyesOpen: false, blinkCount: state.blinkCount };
   }
-  if (descriptors.length === 0) return null;
-  const avg = new Float32Array(128);
-  for (const d of descriptors) d.forEach((v, i) => { avg[i] += v / descriptors.length; });
-  return avg;
-}
-
-export function matchDescriptor(
-  target: Float32Array,
-  candidates: { id: number; descriptor: Float32Array }[],
-  threshold = 0.35
-): { id: number; distance: number } | null {
-  let best: { id: number; distance: number } | null = null;
-  for (const c of candidates) {
-    const dist = faceapi.euclideanDistance(target, c.descriptor);
-    if (dist < threshold && (!best || dist < best.distance)) {
-      best = { id: c.id, distance: dist };
-    }
+  if (!state.eyesOpen && ear > EAR_OPEN) {
+    return { eyesOpen: true, blinkCount: state.blinkCount + 1 };
   }
-  return best;
+  return state;
 }
