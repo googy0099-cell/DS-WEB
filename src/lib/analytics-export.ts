@@ -147,9 +147,25 @@ async function getGoogleToken(sa: { client_email: string; private_key: string })
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
   });
-  const data = await res.json() as { access_token?: string };
-  if (!data.access_token) throw new Error("Failed to get Google access token");
+  const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
+  if (!data.access_token) throw new Error(`[step1-token] ${data.error_description ?? data.error ?? "Failed to get Google access token"}`);
   return data.access_token;
+}
+
+async function purgeOrphanedFiles(token: string, folderId: string) {
+  const q = encodeURIComponent(`mimeType='application/vnd.google-apps.spreadsheet' and not '${folderId}' in parents`);
+  const listRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files?pageSize=100&q=${q}&fields=files(id)`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  const list = await listRes.json() as { files?: { id: string }[] };
+  if (!list.files?.length) return;
+  await Promise.all(list.files.map((f) =>
+    fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+  ));
 }
 
 export async function uploadToGoogleSheets(
@@ -163,6 +179,8 @@ export async function uploadToGoogleSheets(
   sa.private_key = sa.private_key.replace(/\\n/g, "\n");
   const token = await getGoogleToken(sa);
 
+  await purgeOrphanedFiles(token, folderId);
+
   // 1. Create file directly in target folder via Drive API
   const createFileRes = await fetch("https://www.googleapis.com/drive/v3/files?fields=id", {
     method: "POST",
@@ -174,7 +192,7 @@ export async function uploadToGoogleSheets(
     }),
   });
   const file = await createFileRes.json() as { id?: string; error?: { message: string } };
-  if (!file.id) throw new Error(file.error?.message ?? "Failed to create file in Drive");
+  if (!file.id) throw new Error(`[step2-create] ${file.error?.message ?? "Failed to create file in Drive"}`);
   const spreadsheetId = file.id;
 
   // 2. Rename first sheet and add remaining sheets
@@ -182,18 +200,22 @@ export async function uploadToGoogleSheets(
     { updateSheetProperties: { properties: { sheetId: 0, title: sheets[0].sheetName }, fields: "title" } },
     ...sheets.slice(1).map((s, i) => ({ addSheet: { properties: { sheetId: i + 1, title: s.sheetName } } })),
   ];
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+  const sheetRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ requests: sheetRequests }),
   });
+  if (!sheetRes.ok) {
+    const err = await sheetRes.json() as { error?: { message: string } };
+    throw new Error(`[step3-sheets] ${err.error?.message ?? "Failed to configure sheets"}`);
+  }
 
   // 3. Write data to each sheet
   const data = sheets.map((s) => ({
     range: `${s.sheetName}!A1`,
     values: [s.header, ...s.rows],
   }));
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+  const writeRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ valueInputOption: "USER_ENTERED", data }),

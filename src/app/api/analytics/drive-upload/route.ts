@@ -11,8 +11,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-  if (!folderId) return NextResponse.json({ error: "GOOGLE_DRIVE_FOLDER_ID not configured" }, { status: 500 });
+  const folderRaw = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!folderRaw) return NextResponse.json({ error: "GOOGLE_DRIVE_FOLDER_ID not configured" }, { status: 500 });
+  const folderMatch = folderRaw.match(/folders\/([^/?]+)/);
+  const folderId = folderMatch ? folderMatch[1] : folderRaw;
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_JSON) return NextResponse.json({ error: "GOOGLE_SERVICE_ACCOUNT_JSON not configured" }, { status: 500 });
 
   const { from, to } = (await req.json()) as { from: string; to: string };
