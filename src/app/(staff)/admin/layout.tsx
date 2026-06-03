@@ -24,6 +24,8 @@ const GROUP_SALES: NavGroup = {
   items: [
     { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "pos" },
     { href: "/admin/cashier", label: "รอบการขาย", icon: "cashier" },
+    { href: "/admin/kitchen", label: "คิวครัว", icon: "kitchen" },
+    { href: "/admin/bar", label: "คิวบาร์", icon: "bar" },
   ],
 };
 
@@ -33,8 +35,6 @@ const GROUP_MENU: NavGroup = {
     { href: "/admin/menu", label: "จัดการเมนู", icon: "menu" },
     { href: "/admin/addon-groups", label: "Set Add-on", icon: "addon-groups" },
     { href: "/admin/option-groups", label: "ตัวเลือก", icon: "option-groups" },
-    { href: "/admin/kitchen", label: "คิวครัว", icon: "kitchen" },
-    { href: "/admin/bar", label: "คิวบาร์", icon: "bar" },
     { href: "/admin/stock", label: "สต็อก", icon: "stock" },
     { href: "/admin/sop", label: "สูตรอาหาร", icon: "sop" },
   ],
