@@ -29,7 +29,7 @@ export function DashboardClock() {
       <p className="text-white/60 text-xs">เวลาปัจจุบัน</p>
       <p
         className="font-mono font-bold text-cream tracking-widest whitespace-nowrap"
-        style={{ fontSize: "clamp(1rem, 3.5vw, 1.75rem)" }}
+        style={{ fontSize: "clamp(1rem, 2vw, 1.75rem)" }}
       >
         {display.time}
       </p>
