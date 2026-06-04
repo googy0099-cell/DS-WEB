@@ -81,7 +81,7 @@ export async function GET(req: NextRequest) {
     config.deductionAmount > 0 &&
     !existing.deductionApplied
   ) {
-    const elapsed = (Date.now() - new Date(existing.startedAt).getTime()) / 60_000;
+    const elapsed = (Date.now() - new Date(existing.startedAt ?? existing.createdAt).getTime()) / 60_000;
     const allDone = existing.items.every((i) => i.done);
     if (elapsed > config.timeLimitMinutes && !allDone) {
       const now = new Date();

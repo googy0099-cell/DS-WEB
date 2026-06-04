@@ -625,7 +625,7 @@ model HrChecklist {
   type             String            // "OPEN" | "CLOSE"
   date             DateTime
   staffId          Int               @map("staff_id")
-  startedAt        DateTime          @default(now()) @map("started_at")
+  startedAt        DateTime?         @default(now()) @map("started_at")
   deductionApplied Boolean           @default(false) @map("deduction_applied")
   createdAt        DateTime          @default(now()) @map("created_at")
   staff            HrStaff           @relation(fields: [staffId], references: [id])
