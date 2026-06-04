@@ -87,6 +87,8 @@ const GROUP_HR: NavGroup = {
     { href: "/admin/hr/payroll", label: "เงินเดือน", icon: "hr-payroll" },
     { href: "/admin/hr/payment-calendar", label: "ปฏิทินจ่ายเงิน", icon: "hr-calendar" },
     { href: "/admin/hr/checklist", label: "เช็คลิสต์", icon: "hr-checklist" },
+    { href: "/admin/hr/tasks", label: "มอบหมายงาน", icon: "hr-tasks" },
+    { href: "/admin/hr/kpi", label: "ตั้ง KPI", icon: "hr-kpi" },
   ],
 };
 
@@ -98,13 +100,15 @@ export default async function AdminLayout({
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=/admin");
   const role = session.user.role;
-  if (role !== "CASHIER" && role !== "STAFF" && role !== "OWNER") {
+  if (!["CASHIER", "STAFF", "MANAGER", "OWNER"].includes(role ?? "")) {
     redirect("/");
   }
 
   const groups: NavGroup[] =
     role === "OWNER"
       ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_OWNER, GROUP_SYSTEM, GROUP_HR]
+      : role === "MANAGER"
+      ? [GROUP_HR]
       : role === "CASHIER"
       ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF]
       : [GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF];

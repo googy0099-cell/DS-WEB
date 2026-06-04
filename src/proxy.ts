@@ -31,7 +31,7 @@ export default auth((req) => {
       loginUrl.searchParams.set("callbackUrl", pathname);
       return NextResponse.redirect(loginUrl);
     }
-    if (user.role !== "STAFF" && user.role !== "OWNER" && user.role !== "CASHIER") {
+    if (!["STAFF", "CASHIER", "MANAGER", "OWNER"].includes(user.role ?? "")) {
       return NextResponse.redirect(new URL("/", req.url));
     }
   }

@@ -26,7 +26,7 @@ export default function TasksPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const role = (session?.user as { role?: string })?.role;
-  const canCreate = ["CASHIER", "OWNER"].includes(role ?? "");
+  const canCreate = ["MANAGER", "OWNER"].includes(role ?? "");
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [filter, setFilter] = useState<string>("ALL");

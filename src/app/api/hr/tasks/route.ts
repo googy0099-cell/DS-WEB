@@ -11,7 +11,7 @@ export async function GET() {
   const hrStaff = await db.hrStaff.findUnique({ where: { userId } });
 
   const tasks = await db.hrTask.findMany({
-    where: role === "STAFF" && hrStaff ? { assignedTo: hrStaff.id } : {},
+    where: !["MANAGER", "OWNER", "CASHIER"].includes(role ?? "") && hrStaff ? { assignedTo: hrStaff.id } : {},
     include: {
       assignee: { include: { user: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
     },
@@ -24,7 +24,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = await auth();
   const role = (session?.user as { role?: string })?.role;
-  if (!["CASHIER", "OWNER"].includes(role ?? "")) {
+  if (!["MANAGER", "OWNER"].includes(role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

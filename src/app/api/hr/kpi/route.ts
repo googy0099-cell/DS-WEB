@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     where: {
       month,
       year,
-      ...(role === "STAFF" && hrStaff ? { staffId: hrStaff.id } : {}),
+      ...(!["MANAGER", "OWNER", "CASHIER"].includes(role ?? "") && hrStaff ? { staffId: hrStaff.id } : {}),
     },
     include: {
       staff: { include: { user: { select: { firstName: true, lastName: true } } } },
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await auth();
   const role = (session?.user as { role?: string })?.role;
-  if (!["CASHIER", "OWNER"].includes(role ?? "")) {
+  if (!["MANAGER", "OWNER"].includes(role ?? "")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

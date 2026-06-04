@@ -23,7 +23,7 @@ export default function KpiPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const role = (session?.user as { role?: string })?.role;
-  const canManage = ["CASHIER", "OWNER"].includes(role ?? "");
+  const canManage = ["MANAGER", "OWNER"].includes(role ?? "");
 
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);

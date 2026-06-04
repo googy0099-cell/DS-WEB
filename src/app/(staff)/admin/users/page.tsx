@@ -151,8 +151,9 @@ export default function AdminUsersPage() {
                     onChange={(e) => changeRole(u.id, e.target.value)}
                     className="border border-sand rounded-lg px-2 py-1 text-xs"
                   >
-                    <option value="CASHIER">CASHIER</option>
                     <option value="STAFF">STAFF</option>
+                    <option value="CASHIER">CASHIER</option>
+                    <option value="MANAGER">MANAGER</option>
                     <option value="OWNER">OWNER</option>
                   </select>
                 </td>
@@ -285,6 +286,8 @@ export default function AdminUsersPage() {
                   className="w-full border border-sand rounded-xl px-3 py-2 text-sm"
                 >
                   <option value="STAFF">STAFF</option>
+                  <option value="CASHIER">CASHIER</option>
+                  <option value="MANAGER">MANAGER</option>
                   <option value="OWNER">OWNER</option>
                 </select>
               </div>
