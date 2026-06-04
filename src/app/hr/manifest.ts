@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "HR เช็คอิน | ร้านลูกเต๋า",
     short_name: "HR เช็คอิน",
     description: "ระบบเช็คอิน-เอาท์พนักงาน ร้านลูกเต๋า",
-    start_url: "/hr/checkin",
+    start_url: `/hr/${process.env.NEXT_PUBLIC_HR_CHECKIN_TOKEN ?? "xk9p2mqs"}`,
     scope: "/hr",
     display: "standalone",
     orientation: "portrait",

@@ -12,8 +12,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // Block direct access to /hr/checkin — must use the token URL
-  if (pathname === "/hr/checkin") {
+  // Block direct access to /hr/checkin (and any sub-paths) — must use the token URL
+  if (pathname === "/hr/checkin" || pathname.startsWith("/hr/checkin/")) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
