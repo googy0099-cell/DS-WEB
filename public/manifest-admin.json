@@ -3,6 +3,7 @@
   "short_name": "DS Admin",
   "description": "ระบบจัดการร้านลูกเต๋า",
   "start_url": "/admin",
+  "scope": "/admin/",
   "display": "standalone",
   "background_color": "#182a47",
   "theme_color": "#182a47",
