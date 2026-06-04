@@ -13,11 +13,14 @@ export default auth((req) => {
   if (pathname === `/hr/${TOKEN}`) {
     const url = req.nextUrl.clone();
     url.pathname = "/hr/checkin";
-    return NextResponse.rewrite(url);
+    const headers = new Headers(req.headers);
+    headers.set("x-checkin-verified", "1");
+    return NextResponse.rewrite(url, { request: { headers } });
   }
 
-  // Block direct access to /hr/checkin — must use token URL only
-  if (pathname === "/hr/checkin" || pathname.startsWith("/hr/checkin/")) {
+  // Block direct access to /hr/checkin — allow only when coming from token rewrite
+  if ((pathname === "/hr/checkin" || pathname.startsWith("/hr/checkin/")) &&
+      req.headers.get("x-checkin-verified") !== "1") {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
