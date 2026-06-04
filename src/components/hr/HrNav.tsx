@@ -4,10 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 
-const CHECKIN_PATH = `/hr/${process.env.NEXT_PUBLIC_HR_CHECKIN_TOKEN ?? "xk9p2mqs"}`;
-
 const NAV = [
-  { href: CHECKIN_PATH, label: "เช็คอิน", icon: "👋" },
   { href: "/hr/checklist", label: "เช็คลิสต์", icon: "✅" },
   { href: "/hr/tasks", label: "งาน", icon: "📋" },
   { href: "/hr/kpi", label: "KPI", icon: "🎯" },
