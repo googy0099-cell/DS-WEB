@@ -22,7 +22,7 @@ export default function HrNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-[#182a47]/95 backdrop-blur border-t border-white/10 z-50">
       <div className="flex">
         {items.map((n) => {
-          const active = pathname === n.href || (n.href === CHECKIN_PATH && pathname === "/hr/checkin");
+          const active = pathname === n.href;
           return (
             <Link
               key={n.href}
