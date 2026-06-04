@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import useSWR from "swr";
 
 type Template = {
@@ -9,35 +9,51 @@ type Template = {
 };
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
-const SECTIONS_OPEN = ["บาร์","วัตถุดิบบาร์","ร้าน","ห้องน้ำ","หน้าร้าน/ครัว"];
-const SECTIONS_CLOSE = ["POS/เงิน","บาร์","ร้าน","เกม","ครัว","ปิดร้าน"];
 
 export default function AdminChecklistPage() {
   const { data: templates = [], mutate } = useSWR<Template[]>("/api/hr/checklist/templates", fetcher);
   const [tab, setTab] = useState<"OPEN" | "CLOSE">("OPEN");
-  const [showAdd, setShowAdd] = useState(false);
-  const [editItem, setEditItem] = useState<Template | null>(null);
+
+  // Add/edit item modal
+  const [modalItem, setModalItem] = useState<Template | "new" | null>(null);
   const [form, setForm] = useState({ type: "OPEN", section: "", label: "", requiresPhoto: false });
   const [saving, setSaving] = useState(false);
 
+  // Inline section rename
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [sectionDraft, setSectionDraft] = useState("");
+  const sectionInputRef = useRef<HTMLInputElement>(null);
+
   const filtered = templates.filter((t) => t.type === tab).sort((a, b) => a.order - b.order);
+
+  // Unique sections in order of first appearance
+  const sectionOrder: (string | null)[] = [];
+  const bySection: Record<string, Template[]> = {};
+  for (const t of filtered) {
+    const key = t.section ?? "";
+    if (!bySection[key]) { bySection[key] = []; sectionOrder.push(t.section); }
+    bySection[key].push(t);
+  }
+  // All section names (for datalist)
+  const allSections = [...new Set(templates.filter((t) => t.section).map((t) => t.section as string))];
+
+  // ── Item CRUD ──────────────────────────────────────────────────────────────
 
   function openAdd() {
     setForm({ type: tab, section: "", label: "", requiresPhoto: false });
-    setShowAdd(true); setEditItem(null);
+    setModalItem("new");
   }
-
   function openEdit(t: Template) {
     setForm({ type: t.type, section: t.section ?? "", label: t.label, requiresPhoto: t.requiresPhoto });
-    setEditItem(t); setShowAdd(false);
+    setModalItem(t);
   }
 
-  async function save() {
+  async function saveItem() {
     setSaving(true);
-    if (editItem) {
+    if (modalItem && modalItem !== "new") {
       await fetch("/api/hr/checklist/templates", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editItem.id, ...form, section: form.section || null }),
+        body: JSON.stringify({ id: (modalItem as Template).id, ...form, section: form.section || null }),
       });
     } else {
       await fetch("/api/hr/checklist/templates", {
@@ -45,7 +61,7 @@ export default function AdminChecklistPage() {
         body: JSON.stringify({ ...form, section: form.section || null }),
       });
     }
-    await mutate(); setSaving(false); setShowAdd(false); setEditItem(null);
+    await mutate(); setSaving(false); setModalItem(null);
   }
 
   async function toggleActive(t: Template) {
@@ -56,21 +72,38 @@ export default function AdminChecklistPage() {
     mutate();
   }
 
-  async function deleteTemplate(t: Template) {
+  async function deleteItem(t: Template) {
     if (!confirm(`ลบ "${t.label}"?`)) return;
     await fetch(`/api/hr/checklist/templates?id=${t.id}`, { method: "DELETE" });
     mutate();
   }
 
-  const modalOpen = showAdd || !!editItem;
-  const sections = tab === "OPEN" ? SECTIONS_OPEN : SECTIONS_CLOSE;
+  // ── Section CRUD ───────────────────────────────────────────────────────────
 
-  // Group by section for display
-  const bySection: Record<string, Template[]> = {};
-  for (const t of filtered) {
-    const key = t.section ?? "(ไม่มีหมวด)";
-    if (!bySection[key]) bySection[key] = [];
-    bySection[key].push(t);
+  function startRenameSection(section: string | null) {
+    setEditingSection(section ?? "");
+    setSectionDraft(section ?? "");
+    setTimeout(() => sectionInputRef.current?.select(), 50);
+  }
+
+  async function saveRenameSection() {
+    const oldSection = editingSection === "" ? null : editingSection;
+    const newSection = sectionDraft.trim() || null;
+    if (newSection === oldSection) { setEditingSection(null); return; }
+    await fetch("/api/hr/checklist/templates", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: tab, oldSection, newSection }),
+    });
+    await mutate();
+    setEditingSection(null);
+  }
+
+  async function deleteSection(section: string | null) {
+    const label = section || "(ไม่มีหมวด)";
+    const count = bySection[section ?? ""]?.length ?? 0;
+    if (!confirm(`ลบหมวด "${label}" และรายการทั้งหมด ${count} รายการ?`)) return;
+    await fetch(`/api/hr/checklist/templates?type=${tab}&section=${encodeURIComponent(section ?? "")}`, { method: "DELETE" });
+    mutate();
   }
 
   return (
@@ -95,47 +128,82 @@ export default function AdminChecklistPage() {
         ))}
       </div>
 
-      {/* Template list by section */}
+      {/* Sections */}
       <div className="space-y-4">
-        {Object.entries(bySection).map(([section, items]) => (
-          <div key={section}>
-            <p className="text-xs font-bold text-orange uppercase tracking-wider mb-2">{section}</p>
-            <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
-              {items.map((t) => (
-                <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.isActive ? "opacity-40" : ""}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-navy truncate">{t.label}</p>
-                    <div className="flex gap-1 mt-0.5">
-                      {t.requiresPhoto && <span className="text-[10px] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">📷 ต้องถ่ายรูป</span>}
-                      {!t.isActive && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">ปิดใช้งาน</span>}
+        {sectionOrder.map((section) => {
+          const key = section ?? "";
+          const items = bySection[key] ?? [];
+          const isEditing = editingSection === key;
+
+          return (
+            <div key={key}>
+              {/* Section header — editable */}
+              <div className="flex items-center gap-2 mb-2 group">
+                {isEditing ? (
+                  <input
+                    ref={sectionInputRef}
+                    value={sectionDraft}
+                    onChange={(e) => setSectionDraft(e.target.value)}
+                    onBlur={saveRenameSection}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveRenameSection(); if (e.key === "Escape") setEditingSection(null); }}
+                    className="text-xs font-bold text-orange border-b-2 border-orange bg-transparent outline-none uppercase tracking-wider flex-1 max-w-[200px]"
+                    autoFocus
+                  />
+                ) : (
+                  <button
+                    onClick={() => startRenameSection(section)}
+                    className="text-xs font-bold text-orange uppercase tracking-wider hover:text-orange/70 flex items-center gap-1"
+                  >
+                    {section || "(ไม่มีหมวด)"}
+                    <span className="opacity-0 group-hover:opacity-100 text-[10px] transition-opacity">✏️</span>
+                  </button>
+                )}
+                <span className="text-xs text-gray-300">{items.length} รายการ</span>
+                <button
+                  onClick={() => deleteSection(section)}
+                  className="opacity-0 group-hover:opacity-100 text-[10px] text-red-400 hover:text-red-600 transition-opacity ml-auto"
+                >
+                  ลบหมวด
+                </button>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
+                {items.map((t) => (
+                  <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.isActive ? "opacity-40" : ""}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-navy truncate">{t.label}</p>
+                      <div className="flex gap-1 mt-0.5">
+                        {t.requiresPhoto && <span className="text-[10px] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">📷 ถ่ายรูป</span>}
+                        {!t.isActive && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">ปิดใช้งาน</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <button onClick={() => openEdit(t)} className="text-xs border border-sand text-navy px-2 py-1 rounded-lg hover:border-navy">แก้ไข</button>
+                      <button onClick={() => toggleActive(t)} className={`text-xs px-2 py-1 rounded-lg border ${t.isActive ? "border-red-200 text-red-400" : "border-green-200 text-green-600"}`}>
+                        {t.isActive ? "ปิด" : "เปิด"}
+                      </button>
+                      <button onClick={() => deleteItem(t)} className="text-xs px-2 py-1 rounded-lg border border-red-300 text-red-500">ลบ</button>
                     </div>
                   </div>
-                  <div className="flex gap-1 shrink-0">
-                    <button onClick={() => openEdit(t)} className="text-xs border border-sand text-navy px-2 py-1 rounded-lg hover:border-navy">แก้ไข</button>
-                    <button onClick={() => toggleActive(t)} className={`text-xs px-2 py-1 rounded-lg border ${t.isActive ? "border-red-200 text-red-400" : "border-green-200 text-green-600"}`}>
-                      {t.isActive ? "ปิด" : "เปิด"}
-                    </button>
-                    <button onClick={() => deleteTemplate(t)} className="text-xs px-2 py-1 rounded-lg border border-red-300 text-red-500">ลบ</button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         {filtered.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">ยังไม่มีรายการ</p>}
       </div>
 
       {/* Note */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">
         <p className="font-semibold mb-1">⚠️ หมายเหตุ</p>
-        <p>การแก้ไข Template จะมีผลกับเช็คลิสต์วันถัดไปเท่านั้น เช็คลิสต์วันนี้ที่สร้างไปแล้วจะไม่เปลี่ยนแปลง</p>
+        <p>การแก้ไขจะมีผลกับเช็คลิสต์วันถัดไปเท่านั้น เช็คลิสต์วันนี้ที่สร้างไปแล้วจะไม่เปลี่ยนแปลง</p>
       </div>
 
       {/* Add/Edit modal */}
-      {modalOpen && (
+      {modalItem !== null && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
-            <h3 className="font-bold text-navy text-lg">{editItem ? "แก้ไขรายการ" : "เพิ่มรายการ"}</h3>
+            <h3 className="font-bold text-navy text-lg">{modalItem === "new" ? "เพิ่มรายการ" : "แก้ไขรายการ"}</h3>
 
             <div className="space-y-3">
               <div>
@@ -147,12 +215,16 @@ export default function AdminChecklistPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-navy block mb-1">หมวด (Section)</label>
-                <input value={form.section} onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))}
-                  list="section-list" placeholder="เช่น บาร์, ร้าน, ครัว"
-                  className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+                <label className="text-xs font-semibold text-navy block mb-1">หมวด</label>
+                <input
+                  value={form.section}
+                  onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))}
+                  list="section-list"
+                  placeholder="เช่น บาร์, ร้าน, ครัว"
+                  className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
+                />
                 <datalist id="section-list">
-                  {sections.map((s) => <option key={s} value={s} />)}
+                  {allSections.map((s) => <option key={s} value={s} />)}
                 </datalist>
               </div>
               <div>
@@ -170,11 +242,10 @@ export default function AdminChecklistPage() {
             </div>
 
             <div className="flex gap-2 pt-1">
-              <button onClick={() => { setShowAdd(false); setEditItem(null); }}
-                className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
-              <button onClick={save} disabled={saving || !form.label.trim()}
+              <button onClick={() => setModalItem(null)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
+              <button onClick={saveItem} disabled={saving || !form.label.trim()}
                 className="flex-1 bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-40">
-                {saving ? "..." : editItem ? "บันทึก" : "เพิ่ม"}
+                {saving ? "..." : modalItem === "new" ? "เพิ่ม" : "บันทึก"}
               </button>
             </div>
           </div>

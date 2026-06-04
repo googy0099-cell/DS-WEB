@@ -59,7 +59,29 @@ export async function DELETE(req: NextRequest) {
   if (!(await requireOwner())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const id = Number(searchParams.get("id"));
+  const section = searchParams.get("section");
+  const type = searchParams.get("type");
+
+  if (section !== null && type) {
+    // Delete all items in a section
+    await db.hrChecklistTemplate.deleteMany({
+      where: { type, section: section === "" ? null : section },
+    });
+    return NextResponse.json({ ok: true });
+  }
+
   if (!id) return NextResponse.json({ error: "id จำเป็น" }, { status: 400 });
   await db.hrChecklistTemplate.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
+
+// PUT — rename a section across all its items
+export async function PUT(req: NextRequest) {
+  if (!(await requireOwner())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { type, oldSection, newSection } = await req.json() as { type: string; oldSection: string | null; newSection: string | null };
+  await db.hrChecklistTemplate.updateMany({
+    where: { type, section: oldSection },
+    data: { section: newSection },
+  });
   return NextResponse.json({ ok: true });
 }
