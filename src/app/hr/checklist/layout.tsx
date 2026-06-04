@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "เช็คลิสต์ | ร้านลูกเต๋า",
-  manifest: "/hr/checklist/manifest.webmanifest",
+  manifest: "/manifest-hr-checklist.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

@@ -3,7 +3,7 @@ import RegisterSW from "@/components/admin/RegisterSW";
 
 export const metadata: Metadata = {
   title: "HR เช็คอิน | ร้านลูกเต๋า",
-  manifest: "/hr/manifest.webmanifest",
+  manifest: "/manifest-hr-checkin.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
