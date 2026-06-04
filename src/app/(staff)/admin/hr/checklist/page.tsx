@@ -17,6 +17,7 @@ export default function AdminChecklistPage() {
   // Add/edit item modal
   const [modalItem, setModalItem] = useState<Template | "new" | null>(null);
   const [form, setForm] = useState({ type: "OPEN", section: "", label: "", requiresPhoto: false });
+  const [customSectionMode, setCustomSectionMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Inline section rename
@@ -40,10 +41,13 @@ export default function AdminChecklistPage() {
   // ── Item CRUD ──────────────────────────────────────────────────────────────
 
   function openAdd() {
+    setCustomSectionMode(false);
     setForm({ type: tab, section: "", label: "", requiresPhoto: false });
     setModalItem("new");
   }
   function openEdit(t: Template) {
+    const isKnown = allSections.includes(t.section ?? "");
+    setCustomSectionMode(!!t.section && !isKnown);
     setForm({ type: t.type, section: t.section ?? "", label: t.label, requiresPhoto: t.requiresPhoto });
     setModalItem(t);
   }
@@ -216,16 +220,32 @@ export default function AdminChecklistPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">หมวด</label>
-                <input
-                  value={form.section}
-                  onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))}
-                  list="section-list"
-                  placeholder="เช่น บาร์, ร้าน, ครัว"
+                <select
+                  value={customSectionMode ? "__custom__" : (form.section || "")}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom__") {
+                      setCustomSectionMode(true);
+                      setForm((p) => ({ ...p, section: "" }));
+                    } else {
+                      setCustomSectionMode(false);
+                      setForm((p) => ({ ...p, section: e.target.value }));
+                    }
+                  }}
                   className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
-                />
-                <datalist id="section-list">
-                  {allSections.map((s) => <option key={s} value={s} />)}
-                </datalist>
+                >
+                  <option value="">(ไม่มีหมวด)</option>
+                  {allSections.map((s) => <option key={s} value={s}>{s}</option>)}
+                  <option value="__custom__">+ เพิ่มหมวดใหม่...</option>
+                </select>
+                {customSectionMode && (
+                  <input
+                    value={form.section}
+                    onChange={(e) => setForm((p) => ({ ...p, section: e.target.value }))}
+                    placeholder="ชื่อหมวดใหม่"
+                    className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange mt-2"
+                    autoFocus
+                  />
+                )}
               </div>
               <div>
                 <label className="text-xs font-semibold text-navy block mb-1">รายการ *</label>
