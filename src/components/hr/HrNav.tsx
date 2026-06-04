@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 
+const CHECKIN_PATH = `/hr/${process.env.NEXT_PUBLIC_HR_CHECKIN_TOKEN ?? "xk9p2mqs"}`;
+
 const NAV = [
-  { href: "/hr/checkin", label: "เช็คอิน", icon: "👋" },
+  { href: CHECKIN_PATH, label: "เช็คอิน", icon: "👋" },
   { href: "/hr/checklist", label: "เช็คลิสต์", icon: "✅" },
   { href: "/hr/tasks", label: "งาน", icon: "📋" },
   { href: "/hr/kpi", label: "KPI", icon: "🎯" },
@@ -23,7 +25,7 @@ export default function HrNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-[#182a47]/95 backdrop-blur border-t border-white/10 z-50">
       <div className="flex">
         {items.map((n) => {
-          const active = pathname === n.href;
+          const active = pathname === n.href || (n.href === CHECKIN_PATH && pathname === "/hr/checkin");
           return (
             <Link
               key={n.href}
