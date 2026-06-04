@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
 import {
   DndContext, closestCenter, PointerSensor, TouchSensor,
   useSensor, useSensors, DragEndEvent,
@@ -15,6 +15,10 @@ import { CSS } from "@dnd-kit/utilities";
 type Template = {
   id: number; type: string; section: string | null; label: string;
   order: number; requiresPhoto: boolean; isActive: boolean;
+};
+
+type ChecklistConfig = {
+  id: number; type: string; timeLimitMinutes: number | null; deductionAmount: number;
 };
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
@@ -166,10 +170,103 @@ function SortableSection({
   );
 }
 
+// ── Time limit config panel ───────────────────────────────────────────────────
+function TimeLimitConfig({
+  config, type, saving, onSave,
+}: {
+  config: ChecklistConfig | null;
+  type: string;
+  saving: boolean;
+  onSave: (type: string, timeLimitMinutes: number | null, deductionAmount: number) => void;
+}) {
+  const [enabled, setEnabled] = useState(!!config?.timeLimitMinutes);
+  const [minutes, setMinutes] = useState(String(config?.timeLimitMinutes ?? 30));
+  const [deduction, setDeduction] = useState(String(config?.deductionAmount ?? 0));
+
+  // Sync when config loads
+  const prevType = useRef(type);
+  if (prevType.current !== type) {
+    prevType.current = type;
+    setEnabled(!!config?.timeLimitMinutes);
+    setMinutes(String(config?.timeLimitMinutes ?? 30));
+    setDeduction(String(config?.deductionAmount ?? 0));
+  }
+
+  function handleSave() {
+    const mins = enabled ? (parseInt(minutes) || null) : null;
+    const ded = parseInt(deduction) || 0;
+    onSave(type, mins, ded);
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-navy text-sm">⏱ ตั้งค่าเวลา{type === "OPEN" ? "เปิดร้าน" : "ปิดร้าน"}</h3>
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <span className="text-xs text-gray-400">{enabled ? "เปิดใช้งาน" : "ปิดใช้งาน"}</span>
+          <div
+            onClick={() => setEnabled((v) => !v)}
+            className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${enabled ? "bg-orange" : "bg-gray-200"}`}
+          >
+            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-all ${enabled ? "left-5" : "left-1"}`} />
+          </div>
+        </label>
+      </div>
+
+      {enabled && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="text-xs font-semibold text-navy block mb-1">เวลาจำกัด (นาที)</label>
+              <input
+                type="number"
+                min="1"
+                max="480"
+                value={minutes}
+                onChange={(e) => setMinutes(e.target.value)}
+                className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
+                placeholder="เช่น 30"
+              />
+            </div>
+            {type === "OPEN" && (
+              <div className="flex-1">
+                <label className="text-xs font-semibold text-navy block mb-1">หักเงิน (บาท)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={deduction}
+                  onChange={(e) => setDeduction(e.target.value)}
+                  className="w-full border-2 border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange"
+                  placeholder="เช่น 50"
+                />
+              </div>
+            )}
+          </div>
+          {type === "OPEN" && parseInt(deduction) > 0 && (
+            <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
+              ⚠️ หากทำเช็คลิสต์เปิดร้านไม่เสร็จภายใน {minutes} นาที จะหักเงิน {deduction} บาทอัตโนมัติ
+            </p>
+          )}
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="w-full bg-orange text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-50"
+      >
+        {saving ? "กำลังบันทึก..." : "บันทึกการตั้งค่า"}
+      </button>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AdminChecklistPage() {
   const { data: templates = [], mutate } = useSWR<Template[]>("/api/hr/checklist/templates", fetcher);
+  const { data: configs = [] } = useSWR<ChecklistConfig[]>("/api/hr/checklist/config", fetcher);
   const [tab, setTab] = useState<"OPEN" | "CLOSE">("OPEN");
+  const [configSaving, setConfigSaving] = useState(false);
 
   const [modalItem, setModalItem] = useState<Template | "new" | null>(null);
   const [form, setForm] = useState({ type: "OPEN", section: "", label: "", requiresPhoto: false });
@@ -326,6 +423,19 @@ export default function AdminChecklistPage() {
     mutate();
   }
 
+  async function saveConfig(type: string, timeLimitMinutes: number | null, deductionAmount: number) {
+    setConfigSaving(true);
+    await fetch("/api/hr/checklist/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, timeLimitMinutes, deductionAmount }),
+    });
+    await globalMutate("/api/hr/checklist/config");
+    setConfigSaving(false);
+  }
+
+  const currentConfig = configs.find((c) => c.type === tab);
+
   return (
     <div className="max-w-2xl mx-auto space-y-5">
       <div className="flex items-center justify-between">
@@ -384,6 +494,14 @@ export default function AdminChecklistPage() {
           </div>
         </SortableContext>
       </DndContext>
+
+      {/* Time limit config */}
+      <TimeLimitConfig
+        config={currentConfig ?? null}
+        type={tab}
+        saving={configSaving}
+        onSave={saveConfig}
+      />
 
       {/* Note */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">

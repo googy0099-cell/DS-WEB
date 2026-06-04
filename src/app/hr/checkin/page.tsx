@@ -18,9 +18,7 @@ type StaffMember = {
   hasCredential: boolean;
 };
 
-type Tab = "checkin" | "register";
 type CheckinStep = "idle" | "pickStaff" | "camera" | "identifying" | "success";
-type RegisterStep = "pick" | "camera" | "saving" | "done";
 
 type ChallengeType = "blink" | "mouth" | "left" | "right";
 const CHALLENGE_LABEL: Record<ChallengeType, string> = {
@@ -67,7 +65,6 @@ function Avatar({ s, size = 14 }: { s: StaffMember; size?: number }) {
 
 export default function HrCheckinPage() {
   const [staff, setStaff] = useState<StaffMember[]>([]);
-  const [tab, setTab] = useState<Tab>("checkin");
   const [modelsReady, setModelsReady] = useState(false);
 
   // check-in state
@@ -88,12 +85,6 @@ export default function HrCheckinPage() {
     doneCount: number; totalCount: number; canForce: boolean;
     staffId: number; photo: string;
   } | null>(null);
-
-  // register state
-  const [regStep, setRegStep] = useState<RegisterStep>("pick");
-  const [regTarget, setRegTarget] = useState<StaffMember | null>(null);
-  const [regMsg, setRegMsg] = useState("");
-  const [regCountdown, setRegCountdown] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -122,9 +113,7 @@ export default function HrCheckinPage() {
 
   // ── camera ────────────────────────────────────────────────────────────────
 
-  const needsCamera =
-    (tab === "checkin" && checkinStep === "camera") ||
-    (tab === "register" && regStep === "camera");
+  const needsCamera = checkinStep === "camera";
 
   useEffect(() => {
     if (!needsCamera) {
@@ -140,14 +129,8 @@ export default function HrCheckinPage() {
         if (videoRef.current) videoRef.current.srcObject = stream;
       })
       .catch(() => {
-        if (tab === "checkin") {
-          resetCheckin();
-          setCheckinError("เปิดกล้องไม่ได้");
-        }
-        if (tab === "register") {
-          resetRegister();
-          setRegMsg("เปิดกล้องไม่ได้");
-        }
+        resetCheckin();
+        setCheckinError("เปิดกล้องไม่ได้");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsCamera]);
@@ -357,92 +340,15 @@ export default function HrCheckinPage() {
     setCheckinStep("camera");
   }
 
-  // ── register flow (1 photo) ───────────────────────────────────────────────
-
-  function resetRegister() {
-    stopCamera();
-    setRegStep("pick");
-    setRegTarget(null);
-    setRegMsg("");
-    setRegCountdown(0);
-  }
-
-  // countdown 3..2..1 then capture
-  useEffect(() => {
-    if (regStep !== "camera" || !regTarget) return;
-    setRegCountdown(3);
-    const tick = (n: number) => {
-      if (n === 0) {
-        captureAndRegister();
-        return;
-      }
-      setRegCountdown(n);
-      setTimeout(() => tick(n - 1), 1000);
-    };
-    const id = setTimeout(() => tick(3), 800); // start after camera warmup
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regStep, regTarget]);
-
-  async function captureAndRegister() {
-    const photo = capturePhoto();
-    stopCamera();
-    if (!photo || !regTarget) {
-      setRegMsg("จับภาพไม่ได้");
-      setRegStep("pick");
-      setRegTarget(null);
-      return;
-    }
-    setRegStep("saving");
-    setRegMsg("กำลังบันทึก...");
-    try {
-      const res = await fetch("/api/hr/face/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffId: regTarget.id, photo }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setRegMsg(data.error ?? "บันทึกไม่สำเร็จ");
-        setRegStep("pick");
-        return;
-      }
-      setRegMsg(`ลงทะเบียน ${regTarget.name} สำเร็จ`);
-      setRegStep("done");
-      fetchStaff();
-      setTimeout(() => resetRegister(), 2500);
-    } catch (e) {
-      setRegMsg(e instanceof Error ? e.message : "Network error");
-      setRegStep("pick");
-    }
-  }
-
   // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen flex flex-col">
-      <div className="flex border-b border-white/10">
-        {(["checkin", "register"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => {
-              resetCheckin();
-              resetRegister();
-              setTab(t);
-            }}
-            className={`flex-1 py-3 text-sm font-bold ${
-              tab === t ? "text-[#fb8500] border-b-2 border-[#fb8500]" : "text-[#f8f1e5]/50"
-            }`}
-          >
-            {t === "checkin" ? "เช็คอิน / เอาท์" : "ลงทะเบียนหน้า"}
-          </button>
-        ))}
+      <div className="flex border-b border-white/10 px-4 py-3">
+        <p className="text-sm font-bold text-[#fb8500]">เช็คอิน / เอาท์</p>
       </div>
 
-      {/* ── TAB: เช็คอิน ───────────────────────────────────────────── */}
-      {tab === "checkin" && (
-        <>
-          {checkinStep === "idle" && (
+      {checkinStep === "idle" && (
             <div className="flex-1 px-4 pt-6 pb-6 flex flex-col">
               <p className="text-center mb-4 text-[#f8f1e5]/70 text-sm">
                 เลือกชื่อตัวเองเพื่อเช็คอิน/เอาท์
@@ -561,7 +467,7 @@ export default function HrCheckinPage() {
                 ต้องทำให้ครบก่อนจึงจะเช็คเอาท์ได้
               </p>
               <button
-                onClick={() => { setChecklistBlock(null); window.location.href = "/hr/checklist"; }}
+                onClick={() => { setChecklistBlock(null); window.location.href = "/staff/checklist"; }}
                 className="w-full bg-[#fb8500] text-white font-bold py-4 rounded-2xl text-base"
               >
                 ไปทำเช็คลิสต์ปิดร้าน →
@@ -611,95 +517,6 @@ export default function HrCheckinPage() {
               </p>
             </div>
           )}
-        </>
-      )}
-
-      {/* ── TAB: ลงทะเบียน ──────────────────────────────────────────── */}
-      {tab === "register" && (
-        <>
-          {regStep === "pick" && (
-            <div className="flex-1 px-4 pt-6 pb-6">
-              <p className="text-center mb-4 text-[#f8f1e5]/70 text-sm">
-                เลือกพนักงานที่จะลงทะเบียนใบหน้า
-              </p>
-
-              {regMsg && (
-                <p className="text-red-400 text-sm text-center mb-4 bg-red-400/10 rounded-xl py-2 px-3">
-                  {regMsg}
-                </p>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                {staff.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => {
-                      setRegTarget(s);
-                      setRegMsg("");
-                      setRegStep("camera");
-                    }}
-                    className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 active:scale-95 transition-transform text-left"
-                  >
-                    <Avatar s={s} size={12} />
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-sm truncate">{s.name}</p>
-                      <p className="text-[#f8f1e5]/50 text-xs">
-                        {s.hasCredential ? "ลงทะเบียนแล้ว (ลงใหม่ทับได้)" : "ยังไม่ลงทะเบียน"}
-                      </p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {regStep === "camera" && regTarget && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4">
-              <p className="text-sm text-[#f8f1e5]/70">{regTarget.name}</p>
-              <div
-                className="relative rounded-full overflow-hidden border-4 border-[#fb8500] bg-black"
-                style={{ width: "min(72vw, 72vh)", height: "min(72vw, 72vh)" }}
-              >
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover scale-x-[-1]"
-                />
-                {regCountdown > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-8xl font-bold text-[#fb8500] drop-shadow-lg">
-                      {regCountdown}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <p className="text-lg font-bold">มองตรงๆ ที่กล้อง</p>
-              <button
-                onClick={resetRegister}
-                className="text-sm text-[#f8f1e5]/50 underline"
-              >
-                ยกเลิก
-              </button>
-            </div>
-          )}
-
-          {regStep === "saving" && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4">
-              <div className="w-16 h-16 border-4 border-[#fb8500] border-t-transparent rounded-full animate-spin" />
-              <p className="text-[#f8f1e5]/60 text-sm">{regMsg}</p>
-            </div>
-          )}
-
-          {regStep === "done" && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-6">
-              <div className="text-5xl">✅</div>
-              <p className="font-bold text-lg">{regMsg}</p>
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }

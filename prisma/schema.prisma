@@ -621,14 +621,25 @@ model HrAttendance {
 }
 
 model HrChecklist {
-  id        Int               @id @default(autoincrement())
-  type      String            // "OPEN" | "CLOSE"
-  date      DateTime
-  staffId   Int               @map("staff_id")
-  createdAt DateTime          @default(now()) @map("created_at")
-  staff     HrStaff           @relation(fields: [staffId], references: [id])
-  items     HrChecklistItem[]
+  id               Int               @id @default(autoincrement())
+  type             String            // "OPEN" | "CLOSE"
+  date             DateTime
+  staffId          Int               @map("staff_id")
+  startedAt        DateTime          @default(now()) @map("started_at")
+  deductionApplied Boolean           @default(false) @map("deduction_applied")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  staff            HrStaff           @relation(fields: [staffId], references: [id])
+  items            HrChecklistItem[]
   @@map("hr_checklist")
+}
+
+model HrChecklistConfig {
+  id                 Int      @id @default(autoincrement())
+  type               String   @unique // "OPEN" | "CLOSE"
+  timeLimitMinutes   Int?     @map("time_limit_minutes")
+  deductionAmount    Int      @default(0) @map("deduction_amount")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
+  @@map("hr_checklist_config")
 }
 
 model HrChecklistItem {

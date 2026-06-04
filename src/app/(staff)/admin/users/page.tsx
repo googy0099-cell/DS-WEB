@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
@@ -14,7 +14,7 @@ type AdminUser = {
   lastName: string;
   role: string;
   createdAt: string;
-  hrStaff: { id: number; hasPin: boolean } | null;
+  hrStaff: { id: number; hasPin: boolean; hasFace: boolean } | null;
 };
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -38,6 +38,14 @@ export default function AdminUsersPage() {
   const [pin, setPin] = useState("");
   const [pinSaving, setPinSaving] = useState(false);
   const [pinError, setPinError] = useState("");
+
+  // Face registration modal
+  const [faceUser, setFaceUser] = useState<AdminUser | null>(null);
+  const [faceStep, setFaceStep] = useState<"idle" | "camera" | "saving" | "done">("idle");
+  const [faceMsg, setFaceMsg] = useState("");
+  const [faceCountdown, setFaceCountdown] = useState(0);
+  const faceVideoRef = useRef<HTMLVideoElement>(null);
+  const faceStreamRef = useRef<MediaStream | null>(null);
 
   if (session && session.user.role !== "OWNER") {
     redirect("/admin");
@@ -119,6 +127,83 @@ export default function AdminUsersPage() {
     mutate();
   }
 
+  function stopFaceCamera() {
+    faceStreamRef.current?.getTracks().forEach((t) => t.stop());
+    faceStreamRef.current = null;
+  }
+
+  function openFaceRegister(u: AdminUser) {
+    if (!u.hrStaff) {
+      alert("ต้องตั้ง HR PIN ก่อนถึงจะลงทะเบียนใบหน้าได้");
+      return;
+    }
+    setFaceUser(u);
+    setFaceStep("camera");
+    setFaceMsg("");
+    setFaceCountdown(3);
+  }
+
+  function closeFaceModal() {
+    stopFaceCamera();
+    setFaceUser(null);
+    setFaceStep("idle");
+    setFaceMsg("");
+    setFaceCountdown(0);
+  }
+
+  useEffect(() => {
+    if (faceStep !== "camera" || !faceUser) return;
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 640 } } })
+      .then((stream) => {
+        faceStreamRef.current = stream;
+        if (faceVideoRef.current) faceVideoRef.current.srcObject = stream;
+        // countdown 3..2..1 then capture
+        let n = 3;
+        setFaceCountdown(n);
+        const tick = () => {
+          n -= 1;
+          setFaceCountdown(n);
+          if (n === 0) { captureAndSaveFace(); return; }
+          setTimeout(tick, 1000);
+        };
+        setTimeout(tick, 1000);
+      })
+      .catch(() => {
+        setFaceMsg("เปิดกล้องไม่ได้");
+        setFaceStep("idle");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [faceStep, faceUser]);
+
+  async function captureAndSaveFace() {
+    if (!faceVideoRef.current || !faceUser?.hrStaff) return;
+    const v = faceVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    canvas.getContext("2d")?.drawImage(v, 0, 0);
+    const photo = canvas.toDataURL("image/jpeg", 0.85);
+    stopFaceCamera();
+    setFaceStep("saving");
+    setFaceMsg("กำลังบันทึก...");
+    const res = await fetch("/api/hr/face/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ staffId: faceUser.hrStaff.id, photo }),
+    });
+    if (!res.ok) {
+      const d = await res.json();
+      setFaceMsg(d.error ?? "บันทึกไม่สำเร็จ");
+      setFaceStep("idle");
+      return;
+    }
+    setFaceMsg(`ลงทะเบียนใบหน้า ${faceUser.firstName} สำเร็จ`);
+    setFaceStep("done");
+    await mutate();
+    setTimeout(() => closeFaceModal(), 2500);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -158,18 +243,32 @@ export default function AdminUsersPage() {
                   </select>
                 </td>
                 <td className="p-3">
-                  <button
-                    onClick={() => { setPinUser(u); setPin(""); setPinError(""); }}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
-                      u.hrStaff?.hasPin
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                        : u.hrStaff
-                        ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                        : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
-                    }`}
-                  >
-                    {u.hrStaff?.hasPin ? "HR ✓" : u.hrStaff ? "ไม่มี PIN" : "ตั้ง HR"}
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => { setPinUser(u); setPin(""); setPinError(""); }}
+                      className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                        u.hrStaff?.hasPin
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                          : u.hrStaff
+                          ? "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                          : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                      }`}
+                    >
+                      {u.hrStaff?.hasPin ? "PIN ✓" : u.hrStaff ? "ไม่มี PIN" : "ตั้ง HR"}
+                    </button>
+                    {u.hrStaff && (
+                      <button
+                        onClick={() => openFaceRegister(u)}
+                        className={`text-xs px-2.5 py-1 rounded-lg font-medium border transition-colors ${
+                          u.hrStaff.hasFace
+                            ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                            : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                        }`}
+                      >
+                        {u.hrStaff.hasFace ? "ใบหน้า ✓" : "ลงทะเบียนหน้า"}
+                      </button>
+                    )}
+                  </div>
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-3 justify-end">
@@ -252,6 +351,52 @@ export default function AdminUsersPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Face registration modal */}
+      {faceUser && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center gap-5 px-6">
+          {(faceStep === "camera" || faceStep === "saving") && (
+            <>
+              <p className="text-white text-sm">{faceUser.firstName} {faceUser.lastName}</p>
+              <div
+                className="relative rounded-full overflow-hidden border-4 border-orange bg-black"
+                style={{ width: "min(72vw, 280px)", height: "min(72vw, 280px)" }}
+              >
+                <video
+                  ref={faceVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover scale-x-[-1]"
+                />
+                {faceStep === "camera" && faceCountdown > 0 && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-7xl font-bold text-orange drop-shadow-lg">{faceCountdown}</div>
+                  </div>
+                )}
+                {faceStep === "saving" && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                    <div className="w-12 h-12 border-4 border-orange border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+              </div>
+              <p className="text-white font-bold">มองตรงๆ ที่กล้อง</p>
+            </>
+          )}
+          {faceStep === "idle" && faceMsg && (
+            <p className="text-red-400 text-sm text-center bg-red-400/10 rounded-xl py-3 px-4">{faceMsg}</p>
+          )}
+          {faceStep === "done" && (
+            <>
+              <div className="text-6xl">✅</div>
+              <p className="text-white font-bold text-lg text-center">{faceMsg}</p>
+            </>
+          )}
+          {faceStep !== "saving" && (
+            <button onClick={closeFaceModal} className="text-white/60 text-sm underline">ยกเลิก / ปิด</button>
+          )}
         </div>
       )}
 

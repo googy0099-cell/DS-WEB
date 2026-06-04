@@ -52,7 +52,7 @@ export default function ChecklistStatusBanner() {
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Link href="/hr/checklist" className="text-[10px] text-amber-700 font-bold px-2 py-1 rounded-lg border border-amber-400/60">
+          <Link href="/staff/checklist" className="text-[10px] text-amber-700 font-bold px-2 py-1 rounded-lg border border-amber-400/60">
             ทำเช็คลิสต์
           </Link>
           <button onClick={() => setDismissed(true)} className="text-amber-400 hover:text-amber-600 text-lg leading-none px-1">✕</button>

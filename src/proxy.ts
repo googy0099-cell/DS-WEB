@@ -36,6 +36,18 @@ export default auth((req) => {
     }
   }
 
+  if (pathname.startsWith("/staff")) {
+    const user = req.auth?.user;
+    if (!user) {
+      const loginUrl = new URL("/login", req.url);
+      loginUrl.searchParams.set("callbackUrl", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+    if (!["STAFF", "CASHIER", "MANAGER", "OWNER"].includes(user.role ?? "")) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+  }
+
   if (pathname.startsWith("/profile")) {
     if (!req.auth?.user) {
       return NextResponse.redirect(new URL("/login?callbackUrl=/profile", req.url));
@@ -46,5 +58,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/admin/:path*", "/profile/:path*", "/hr/:path*"],
+  matcher: ["/admin/:path*", "/profile/:path*", "/hr/:path*", "/staff/:path*"],
 };

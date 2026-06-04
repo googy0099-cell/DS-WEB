@@ -17,14 +17,14 @@ export async function GET() {
     where: { role: { in: ["CASHIER", "STAFF", "OWNER"] } },
     select: {
       id: true, email: true, username: true, firstName: true, lastName: true, role: true, createdAt: true,
-      hrStaff: { select: { id: true, pin: true } },
+      hrStaff: { select: { id: true, pin: true, faceData: true } },
     },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(
     users.map((u) => ({
       ...u,
-      hrStaff: u.hrStaff ? { id: u.hrStaff.id, hasPin: !!u.hrStaff.pin } : null,
+      hrStaff: u.hrStaff ? { id: u.hrStaff.id, hasPin: !!u.hrStaff.pin, hasFace: !!u.hrStaff.faceData } : null,
     }))
   );
 }

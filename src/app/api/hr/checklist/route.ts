@@ -24,9 +24,11 @@ export async function GET(req: NextRequest) {
   const tomorrow = new Date(today.getTime() + 86400_000);
 
   const userId = Number(session.user.id);
-  // Try current user's HrStaff record; fall back to any staff so anyone can access the checklist
   let hrStaff = await db.hrStaff.findUnique({ where: { userId } });
   if (!hrStaff) hrStaff = await db.hrStaff.findFirst();
+
+  // Fetch config for this type
+  const config = await db.hrChecklistConfig.findUnique({ where: { type } });
 
   // Find today's shared checklist (any staff)
   let existing = await db.hrChecklist.findFirst({
@@ -58,6 +60,7 @@ export async function GET(req: NextRequest) {
         type,
         date: today,
         staffId: hrStaff.id,
+        startedAt: new Date(),
         items: {
           create: templates.map((t) => ({
             templateId: t.id,
@@ -71,7 +74,38 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json(existing);
+  // Check time limit expiry for OPEN checklist — auto-create deduction if needed
+  if (
+    type === "OPEN" &&
+    config?.timeLimitMinutes &&
+    config.deductionAmount > 0 &&
+    !existing.deductionApplied
+  ) {
+    const elapsed = (Date.now() - new Date(existing.startedAt).getTime()) / 60_000;
+    const allDone = existing.items.every((i) => i.done);
+    if (elapsed > config.timeLimitMinutes && !allDone) {
+      const now = new Date();
+      await db.hrDeduction.create({
+        data: {
+          staffId: existing.staffId,
+          amount: config.deductionAmount,
+          reason: "เช็คลิสต์เปิดร้านไม่เสร็จภายในเวลาที่กำหนด",
+          month: now.getMonth() + 1,
+          year: now.getFullYear(),
+        },
+      });
+      await db.hrChecklist.update({
+        where: { id: existing.id },
+        data: { deductionApplied: true },
+      });
+      existing.deductionApplied = true;
+    }
+  }
+
+  return NextResponse.json({
+    ...existing,
+    timeLimitMinutes: config?.timeLimitMinutes ?? null,
+  });
 }
 
 // GET /api/hr/checklist/today-status — exported via separate route
