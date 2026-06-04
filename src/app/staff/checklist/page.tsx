@@ -69,9 +69,12 @@ export default function ChecklistPage() {
     setLoadError("");
     fetch(`/api/hr/checklist?type=${type}`)
       .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok) { setLoadError(data.error ?? "โหลดข้อมูลไม่สำเร็จ"); return; }
-        setChecklist(data);
+        const text = await r.text();
+        let data: Record<string, unknown>;
+        try { data = JSON.parse(text); } catch { setLoadError(`Server error (${r.status})`); return; }
+        if (!r.ok) { setLoadError((data.error as string) ?? "โหลดข้อมูลไม่สำเร็จ"); return; }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setChecklist(data as any);
       })
       .catch(() => setLoadError("เกิดข้อผิดพลาด กรุณาลองใหม่"))
       .finally(() => setLoading(false));
