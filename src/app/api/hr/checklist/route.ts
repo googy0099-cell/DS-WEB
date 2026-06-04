@@ -23,24 +23,31 @@ export async function GET(req: NextRequest) {
   const today = todayBKK();
   const tomorrow = new Date(today.getTime() + 86400_000);
 
+  const userId = Number(session.user.id);
+  const hrStaff = await db.hrStaff.findUnique({ where: { userId } });
+  if (!hrStaff) return NextResponse.json({ error: "ไม่พบข้อมูลพนักงาน HR" }, { status: 404 });
+
   // Find today's shared checklist (any staff)
-  let checklist = await db.hrChecklist.findFirst({
+  let existing = await db.hrChecklist.findFirst({
     where: { type, date: { gte: today, lt: tomorrow } },
     include: { items: { orderBy: { id: "asc" }, include: { doneByStaff: { include: { user: { select: { firstName: true } } } } } } },
   });
 
-  if (!checklist) {
-    // Auto-create from active DB templates
-    const userId = Number(session.user.id);
-    const hrStaff = await db.hrStaff.findUnique({ where: { userId } });
-    if (!hrStaff) return NextResponse.json({ error: "ไม่พบข้อมูลพนักงาน HR" }, { status: 404 });
+  // If existing checklist was built from old hardcoded template (no templateId), rebuild from DB
+  const isOldFormat = existing && existing.items.every((i) => i.templateId === null);
+  if (isOldFormat && existing) {
+    await db.hrChecklistItem.deleteMany({ where: { checklistId: existing.id } });
+    await db.hrChecklist.delete({ where: { id: existing.id } });
+    existing = null;
+  }
 
+  if (!existing) {
     const templates = await db.hrChecklistTemplate.findMany({
       where: { type, isActive: true },
       orderBy: { order: "asc" },
     });
 
-    checklist = await db.hrChecklist.create({
+    existing = await db.hrChecklist.create({
       data: {
         type,
         date: today,
@@ -58,7 +65,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json(checklist);
+  return NextResponse.json(existing);
 }
 
 // GET /api/hr/checklist/today-status — exported via separate route
