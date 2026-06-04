@@ -275,7 +275,11 @@ export default function HrCheckinPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ staffId, photoBase64: photo, force }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let data: any;
+      try { data = JSON.parse(text); }
+      catch { setCheckinError(`Server error (${res.status})`); setCheckinStep("idle"); setCheckinTarget(null); return; }
       if (!res.ok) {
         if (data.checklistIncomplete) {
           setChecklistBlock({ doneCount: data.doneCount, totalCount: data.totalCount, canForce: data.canForce, staffId, photo });

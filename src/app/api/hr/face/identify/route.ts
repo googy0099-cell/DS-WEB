@@ -11,6 +11,7 @@ import {
 const BKK = 7 * 3600_000;
 
 export async function POST(req: NextRequest) {
+  try {
   const { staffId, photoBase64, force } = (await req.json()) as {
     staffId: number;
     photoBase64: string;
@@ -125,4 +126,8 @@ export async function POST(req: NextRequest) {
     status,
     similarity: result.similarity,
   });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: `Server error: ${msg}` }, { status: 500 });
+  }
 }
