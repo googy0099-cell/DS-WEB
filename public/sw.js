@@ -1,3 +1,8 @@
+// PWA install handlers (required for Chrome "Install app" prompt)
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener("fetch", (e) => e.respondWith(fetch(e.request)));
+
 // handle push from server (Web Push API)
 self.addEventListener("push", (event) => {
   let data = { title: "🔔 ออเดอร์ใหม่!", body: "มีออเดอร์รอรับ", tag: "order-alert" };

@@ -1,0 +1,19 @@
+import { MetadataRoute } from "next";
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "เช็คลิสต์ | ร้านลูกเต๋า",
+    short_name: "เช็คลิสต์",
+    description: "เช็คลิสต์เปิด-ปิดร้านประจำวัน",
+    start_url: "/hr/checklist",
+    scope: "/hr/checklist",
+    display: "standalone",
+    orientation: "portrait",
+    background_color: "#182a47",
+    theme_color: "#182a47",
+    icons: [
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+  };
+}

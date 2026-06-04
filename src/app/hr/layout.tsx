@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import RegisterSW from "@/components/admin/RegisterSW";
 
 export const metadata: Metadata = {
   title: "HR เช็คอิน | ร้านลูกเต๋า",
@@ -24,6 +25,7 @@ export const viewport: Viewport = {
 export default function HrLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#182a47] text-[#f8f1e5]">
+      <RegisterSW />
       {children}
     </div>
   );
