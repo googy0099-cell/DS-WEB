@@ -75,13 +75,25 @@ export async function DELETE(req: NextRequest) {
   return NextResponse.json({ ok: true });
 }
 
-// PUT — rename a section across all its items
+// PUT — rename a section OR bulk reorder items
 export async function PUT(req: NextRequest) {
   if (!(await requireOwner())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { type, oldSection, newSection } = await req.json() as { type: string; oldSection: string | null; newSection: string | null };
+  const body = await req.json() as
+    | { type: string; oldSection: string | null; newSection: string | null }
+    | { items: { id: number; order: number }[] };
+
+  if ("items" in body) {
+    await Promise.all(
+      body.items.map((item) =>
+        db.hrChecklistTemplate.update({ where: { id: item.id }, data: { order: item.order } })
+      )
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   await db.hrChecklistTemplate.updateMany({
-    where: { type, section: oldSection },
-    data: { section: newSection },
+    where: { type: body.type, section: body.oldSection },
+    data: { section: body.newSection },
   });
   return NextResponse.json({ ok: true });
 }

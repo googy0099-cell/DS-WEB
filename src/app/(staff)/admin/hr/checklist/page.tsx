@@ -2,6 +2,15 @@
 
 import { useRef, useState } from "react";
 import useSWR from "swr";
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor,
+  useSensor, useSensors, DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext, verticalListSortingStrategy,
+  useSortable, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Template = {
   id: number; type: string; section: string | null; label: string;
@@ -9,6 +18,53 @@ type Template = {
 };
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
+
+function SortableItem({
+  t, onEdit, onToggle, onDelete,
+}: {
+  t: Template;
+  onEdit: (t: Template) => void;
+  onToggle: (t: Template) => void;
+  onDelete: (t: Template) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: t.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex items-center gap-3 px-4 py-3 bg-white ${isDragging ? "shadow-lg z-10 opacity-90" : ""} ${!t.isActive ? "opacity-40" : ""}`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="text-gray-300 hover:text-gray-400 cursor-grab active:cursor-grabbing touch-none shrink-0"
+        tabIndex={-1}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
+          <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
+          <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
+        </svg>
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-navy truncate">{t.label}</p>
+        <div className="flex gap-1 mt-0.5">
+          {t.requiresPhoto && <span className="text-[10px] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">📷 ถ่ายรูป</span>}
+          {!t.isActive && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">ปิดใช้งาน</span>}
+        </div>
+      </div>
+      <div className="flex gap-1 shrink-0">
+        <button onClick={() => onEdit(t)} className="text-xs border border-sand text-navy px-2 py-1 rounded-lg hover:border-navy">แก้ไข</button>
+        <button onClick={() => onToggle(t)} className={`text-xs px-2 py-1 rounded-lg border ${t.isActive ? "border-red-200 text-red-400" : "border-green-200 text-green-600"}`}>
+          {t.isActive ? "ปิด" : "เปิด"}
+        </button>
+        <button onClick={() => onDelete(t)} className="text-xs px-2 py-1 rounded-lg border border-red-300 text-red-500">ลบ</button>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminChecklistPage() {
   const { data: templates = [], mutate } = useSWR<Template[]>("/api/hr/checklist/templates", fetcher);
@@ -25,6 +81,11 @@ export default function AdminChecklistPage() {
   const [sectionDraft, setSectionDraft] = useState("");
   const sectionInputRef = useRef<HTMLInputElement>(null);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  );
+
   const filtered = templates.filter((t) => t.type === tab).sort((a, b) => a.order - b.order);
 
   // Unique sections in order of first appearance
@@ -35,8 +96,37 @@ export default function AdminChecklistPage() {
     if (!bySection[key]) { bySection[key] = []; sectionOrder.push(t.section); }
     bySection[key].push(t);
   }
-  // All section names (for datalist)
   const allSections = [...new Set(templates.filter((t) => t.section).map((t) => t.section as string))];
+
+  // ── Drag end ───────────────────────────────────────────────────────────────
+
+  async function handleDragEnd(event: DragEndEvent, section: string | null) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const key = section ?? "";
+    const items = bySection[key] ?? [];
+    const oldIndex = items.findIndex((t) => t.id === active.id);
+    const newIndex = items.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(items, oldIndex, newIndex);
+
+    // Optimistic update
+    const newOrder = reordered.map((t, i) => ({ ...t, order: t.order - items.length + i }));
+    mutate(
+      templates.map((t) => {
+        const updated = newOrder.find((n) => n.id === t.id);
+        return updated ?? t;
+      }),
+      false
+    );
+
+    await fetch("/api/hr/checklist/templates", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: reordered.map((t, i) => ({ id: t.id, order: i + 1 })) }),
+    });
+    mutate();
+  }
 
   // ── Item CRUD ──────────────────────────────────────────────────────────────
 
@@ -171,26 +261,25 @@ export default function AdminChecklistPage() {
                 </button>
               </div>
 
-              <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
-                {items.map((t) => (
-                  <div key={t.id} className={`flex items-center gap-3 px-4 py-3 ${!t.isActive ? "opacity-40" : ""}`}>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-navy truncate">{t.label}</p>
-                      <div className="flex gap-1 mt-0.5">
-                        {t.requiresPhoto && <span className="text-[10px] bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">📷 ถ่ายรูป</span>}
-                        {!t.isActive && <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">ปิดใช้งาน</span>}
-                      </div>
-                    </div>
-                    <div className="flex gap-1 shrink-0">
-                      <button onClick={() => openEdit(t)} className="text-xs border border-sand text-navy px-2 py-1 rounded-lg hover:border-navy">แก้ไข</button>
-                      <button onClick={() => toggleActive(t)} className={`text-xs px-2 py-1 rounded-lg border ${t.isActive ? "border-red-200 text-red-400" : "border-green-200 text-green-600"}`}>
-                        {t.isActive ? "ปิด" : "เปิด"}
-                      </button>
-                      <button onClick={() => deleteItem(t)} className="text-xs px-2 py-1 rounded-lg border border-red-300 text-red-500">ลบ</button>
-                    </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => handleDragEnd(e, section)}
+              >
+                <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
+                    {items.map((t) => (
+                      <SortableItem
+                        key={t.id}
+                        t={t}
+                        onEdit={openEdit}
+                        onToggle={toggleActive}
+                        onDelete={deleteItem}
+                      />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </SortableContext>
+              </DndContext>
             </div>
           );
         })}
