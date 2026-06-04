@@ -24,8 +24,9 @@ export async function GET(req: NextRequest) {
   const tomorrow = new Date(today.getTime() + 86400_000);
 
   const userId = Number(session.user.id);
-  const hrStaff = await db.hrStaff.findUnique({ where: { userId } });
-  if (!hrStaff) return NextResponse.json({ error: "ไม่พบข้อมูลพนักงาน HR" }, { status: 404 });
+  // Try current user's HrStaff record; fall back to any staff so anyone can access the checklist
+  let hrStaff = await db.hrStaff.findUnique({ where: { userId } });
+  if (!hrStaff) hrStaff = await db.hrStaff.findFirst();
 
   // Find today's shared checklist (any staff)
   let existing = await db.hrChecklist.findFirst({
@@ -42,10 +43,15 @@ export async function GET(req: NextRequest) {
   }
 
   if (!existing) {
+    if (!hrStaff) return NextResponse.json({ error: "ยังไม่มีข้อมูลพนักงานในระบบ HR" }, { status: 404 });
+
     const templates = await db.hrChecklistTemplate.findMany({
       where: { type, isActive: true },
       orderBy: { order: "asc" },
     });
+
+    if (templates.length === 0)
+      return NextResponse.json({ error: "ยังไม่มีรายการเช็คลิสต์ในระบบ" }, { status: 404 });
 
     existing = await db.hrChecklist.create({
       data: {

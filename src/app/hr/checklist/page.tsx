@@ -42,6 +42,7 @@ export default function ChecklistPage() {
   const [type, setType] = useState<"OPEN" | "CLOSE" | null>(null);
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [savingId, setSavingId] = useState<number | null>(null);
   const [cameraItem, setCameraItem] = useState<ChecklistItem | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -54,9 +55,14 @@ export default function ChecklistPage() {
   useEffect(() => {
     if (!type) return;
     setLoading(true);
+    setLoadError("");
     fetch(`/api/hr/checklist?type=${type}`)
-      .then((r) => r.json())
-      .then(setChecklist)
+      .then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) { setLoadError(data.error ?? "โหลดข้อมูลไม่สำเร็จ"); return; }
+        setChecklist(data);
+      })
+      .catch(() => setLoadError("เกิดข้อผิดพลาด กรุณาลองใหม่"))
       .finally(() => setLoading(false));
   }, [type]);
 
@@ -162,6 +168,10 @@ export default function ChecklistPage() {
 
           {loading ? (
             <div className="text-center text-[#f8f1e5]/40 text-sm py-10">กำลังโหลด...</div>
+          ) : loadError ? (
+            <div className="text-center text-red-400 text-sm py-10 bg-red-500/10 rounded-2xl px-4">
+              ❌ {loadError}
+            </div>
           ) : (
             <div className="space-y-4">
               {sections.map((sec, si) => (
