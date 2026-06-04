@@ -19,6 +19,18 @@ type Template = {
 
 const fetcher = (u: string) => fetch(u).then((r) => r.json());
 
+// ── Drag handle icon ──────────────────────────────────────────────────────────
+function GripIcon({ className }: { className?: string }) {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className={className}>
+      <circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
+      <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
+      <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
+    </svg>
+  );
+}
+
+// ── Sortable item row ─────────────────────────────────────────────────────────
 function SortableItem({
   t, onEdit, onToggle, onDelete,
 }: {
@@ -42,11 +54,7 @@ function SortableItem({
         className="text-gray-300 hover:text-gray-400 cursor-grab active:cursor-grabbing touch-none shrink-0"
         tabIndex={-1}
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <circle cx="5" cy="4" r="1.5"/><circle cx="11" cy="4" r="1.5"/>
-          <circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/>
-          <circle cx="5" cy="12" r="1.5"/><circle cx="11" cy="12" r="1.5"/>
-        </svg>
+        <GripIcon />
       </button>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-navy truncate">{t.label}</p>
@@ -66,17 +74,108 @@ function SortableItem({
   );
 }
 
+// ── Sortable section container ────────────────────────────────────────────────
+function SortableSection({
+  sectionKey, section, items, sensors,
+  editingSection, sectionDraft, sectionInputRef,
+  onStartRename, onSaveDraft, onDraftChange, onCancelRename,
+  onDeleteSection, onItemDragEnd,
+  onEdit, onToggle, onDelete,
+}: {
+  sectionKey: string;
+  section: string | null;
+  items: Template[];
+  sensors: ReturnType<typeof useSensors>;
+  editingSection: string | null;
+  sectionDraft: string;
+  sectionInputRef: React.RefObject<HTMLInputElement | null>;
+  onStartRename: (s: string | null) => void;
+  onSaveDraft: () => void;
+  onDraftChange: (v: string) => void;
+  onCancelRename: () => void;
+  onDeleteSection: (s: string | null) => void;
+  onItemDragEnd: (e: DragEndEvent, s: string | null) => void;
+  onEdit: (t: Template) => void;
+  onToggle: (t: Template) => void;
+  onDelete: (t: Template) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: sectionKey });
+
+  const isEditing = editingSection === sectionKey;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-70" : ""}
+    >
+      <div className="flex items-center gap-2 mb-2 group">
+        <button
+          {...attributes}
+          {...listeners}
+          className="text-gray-300 hover:text-gray-400 cursor-grab active:cursor-grabbing touch-none shrink-0"
+          tabIndex={-1}
+        >
+          <GripIcon />
+        </button>
+
+        {isEditing ? (
+          <input
+            ref={sectionInputRef}
+            value={sectionDraft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            onBlur={onSaveDraft}
+            onKeyDown={(e) => { if (e.key === "Enter") onSaveDraft(); if (e.key === "Escape") onCancelRename(); }}
+            className="text-xs font-bold text-orange border-b-2 border-orange bg-transparent outline-none uppercase tracking-wider flex-1 max-w-[200px]"
+            autoFocus
+          />
+        ) : (
+          <button
+            onClick={() => onStartRename(section)}
+            className="text-xs font-bold text-orange uppercase tracking-wider hover:text-orange/70 flex items-center gap-1"
+          >
+            {section || "(ไม่มีหมวด)"}
+            <span className="opacity-0 group-hover:opacity-100 text-[10px] transition-opacity">✏️</span>
+          </button>
+        )}
+
+        <span className="text-xs text-gray-300">{items.length} รายการ</span>
+        <button
+          onClick={() => onDeleteSection(section)}
+          className="opacity-0 group-hover:opacity-100 text-[10px] text-red-400 hover:text-red-600 transition-opacity ml-auto"
+        >
+          ลบหมวด
+        </button>
+      </div>
+
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(e) => onItemDragEnd(e, section)}
+      >
+        <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
+            {items.map((t) => (
+              <SortableItem key={t.id} t={t} onEdit={onEdit} onToggle={onToggle} onDelete={onDelete} />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 export default function AdminChecklistPage() {
   const { data: templates = [], mutate } = useSWR<Template[]>("/api/hr/checklist/templates", fetcher);
   const [tab, setTab] = useState<"OPEN" | "CLOSE">("OPEN");
 
-  // Add/edit item modal
   const [modalItem, setModalItem] = useState<Template | "new" | null>(null);
   const [form, setForm] = useState({ type: "OPEN", section: "", label: "", requiresPhoto: false });
   const [customSectionMode, setCustomSectionMode] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Inline section rename
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [sectionDraft, setSectionDraft] = useState("");
   const sectionInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +187,6 @@ export default function AdminChecklistPage() {
 
   const filtered = templates.filter((t) => t.type === tab).sort((a, b) => a.order - b.order);
 
-  // Unique sections in order of first appearance
   const sectionOrder: (string | null)[] = [];
   const bySection: Record<string, Template[]> = {};
   for (const t of filtered) {
@@ -98,9 +196,47 @@ export default function AdminChecklistPage() {
   }
   const allSections = [...new Set(templates.filter((t) => t.section).map((t) => t.section as string))];
 
-  // ── Drag end ───────────────────────────────────────────────────────────────
+  // ── Bulk save order to API ────────────────────────────────────────────────
 
-  async function handleDragEnd(event: DragEndEvent, section: string | null) {
+  async function saveOrder(updates: { id: number; order: number }[]) {
+    await fetch("/api/hr/checklist/templates", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: updates }),
+    });
+    mutate();
+  }
+
+  // ── Section drag ──────────────────────────────────────────────────────────
+
+  async function handleSectionDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = sectionOrder.findIndex((s) => (s ?? "") === active.id);
+    const newIndex = sectionOrder.findIndex((s) => (s ?? "") === over.id);
+    const newOrder = arrayMove(sectionOrder, oldIndex, newIndex);
+
+    // Reassign order values section-by-section
+    let counter = 1;
+    const updates: { id: number; order: number }[] = [];
+    for (const sec of newOrder) {
+      for (const item of bySection[sec ?? ""] ?? []) {
+        updates.push({ id: item.id, order: counter++ });
+      }
+    }
+
+    mutate(templates.map((t) => {
+      const u = updates.find((x) => x.id === t.id);
+      return u ? { ...t, order: u.order } : t;
+    }), false);
+
+    await saveOrder(updates);
+  }
+
+  // ── Item drag ─────────────────────────────────────────────────────────────
+
+  async function handleItemDragEnd(event: DragEndEvent, section: string | null) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -110,25 +246,15 @@ export default function AdminChecklistPage() {
     const newIndex = items.findIndex((t) => t.id === over.id);
     const reordered = arrayMove(items, oldIndex, newIndex);
 
-    // Optimistic update
-    const newOrder = reordered.map((t, i) => ({ ...t, order: t.order - items.length + i }));
-    mutate(
-      templates.map((t) => {
-        const updated = newOrder.find((n) => n.id === t.id);
-        return updated ?? t;
-      }),
-      false
-    );
+    mutate(templates.map((t) => {
+      const i = reordered.findIndex((r) => r.id === t.id);
+      return i >= 0 ? { ...t, order: items[0].order + i } : t;
+    }), false);
 
-    await fetch("/api/hr/checklist/templates", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: reordered.map((t, i) => ({ id: t.id, order: i + 1 })) }),
-    });
-    mutate();
+    await saveOrder(reordered.map((t, i) => ({ id: t.id, order: i + 1 })));
   }
 
-  // ── Item CRUD ──────────────────────────────────────────────────────────────
+  // ── Item CRUD ─────────────────────────────────────────────────────────────
 
   function openAdd() {
     setCustomSectionMode(false);
@@ -172,7 +298,7 @@ export default function AdminChecklistPage() {
     mutate();
   }
 
-  // ── Section CRUD ───────────────────────────────────────────────────────────
+  // ── Section CRUD ──────────────────────────────────────────────────────────
 
   function startRenameSection(section: string | null) {
     setEditingSection(section ?? "");
@@ -222,69 +348,42 @@ export default function AdminChecklistPage() {
         ))}
       </div>
 
-      {/* Sections */}
-      <div className="space-y-4">
-        {sectionOrder.map((section) => {
-          const key = section ?? "";
-          const items = bySection[key] ?? [];
-          const isEditing = editingSection === key;
-
-          return (
-            <div key={key}>
-              {/* Section header — editable */}
-              <div className="flex items-center gap-2 mb-2 group">
-                {isEditing ? (
-                  <input
-                    ref={sectionInputRef}
-                    value={sectionDraft}
-                    onChange={(e) => setSectionDraft(e.target.value)}
-                    onBlur={saveRenameSection}
-                    onKeyDown={(e) => { if (e.key === "Enter") saveRenameSection(); if (e.key === "Escape") setEditingSection(null); }}
-                    className="text-xs font-bold text-orange border-b-2 border-orange bg-transparent outline-none uppercase tracking-wider flex-1 max-w-[200px]"
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    onClick={() => startRenameSection(section)}
-                    className="text-xs font-bold text-orange uppercase tracking-wider hover:text-orange/70 flex items-center gap-1"
-                  >
-                    {section || "(ไม่มีหมวด)"}
-                    <span className="opacity-0 group-hover:opacity-100 text-[10px] transition-opacity">✏️</span>
-                  </button>
-                )}
-                <span className="text-xs text-gray-300">{items.length} รายการ</span>
-                <button
-                  onClick={() => deleteSection(section)}
-                  className="opacity-0 group-hover:opacity-100 text-[10px] text-red-400 hover:text-red-600 transition-opacity ml-auto"
-                >
-                  ลบหมวด
-                </button>
-              </div>
-
-              <DndContext
+      {/* Sections — outer drag */}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleSectionDragEnd}
+      >
+        <SortableContext
+          items={sectionOrder.map((s) => s ?? "")}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="space-y-4">
+            {sectionOrder.map((section) => (
+              <SortableSection
+                key={section ?? ""}
+                sectionKey={section ?? ""}
+                section={section}
+                items={bySection[section ?? ""] ?? []}
                 sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={(e) => handleDragEnd(e, section)}
-              >
-                <SortableContext items={items.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                  <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-sand/40">
-                    {items.map((t) => (
-                      <SortableItem
-                        key={t.id}
-                        t={t}
-                        onEdit={openEdit}
-                        onToggle={toggleActive}
-                        onDelete={deleteItem}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">ยังไม่มีรายการ</p>}
-      </div>
+                editingSection={editingSection}
+                sectionDraft={sectionDraft}
+                sectionInputRef={sectionInputRef}
+                onStartRename={startRenameSection}
+                onSaveDraft={saveRenameSection}
+                onDraftChange={setSectionDraft}
+                onCancelRename={() => setEditingSection(null)}
+                onDeleteSection={deleteSection}
+                onItemDragEnd={handleItemDragEnd}
+                onEdit={openEdit}
+                onToggle={toggleActive}
+                onDelete={deleteItem}
+              />
+            ))}
+            {filtered.length === 0 && <p className="text-center text-gray-400 py-8 text-sm">ยังไม่มีรายการ</p>}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Note */}
       <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-xs text-amber-700">
