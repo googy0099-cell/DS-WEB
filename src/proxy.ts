@@ -2,10 +2,24 @@ import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 
+const TOKEN = process.env.NEXT_PUBLIC_HR_CHECKIN_TOKEN ?? "xk9p2mqs";
+
 const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+
+  // HR checkin URL obfuscation: /hr/{TOKEN} → /hr/checkin (internal rewrite)
+  if (pathname === `/hr/${TOKEN}`) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/hr/checkin";
+    return NextResponse.rewrite(url);
+  }
+
+  // Block direct access to /hr/checkin — must use token URL only
+  if (pathname === "/hr/checkin" || pathname.startsWith("/hr/checkin/")) {
+    return NextResponse.redirect(new URL("/", req.url));
+  }
 
   if (pathname.startsWith("/admin")) {
     const user = req.auth?.user;
@@ -29,5 +43,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/admin/:path*", "/profile/:path*"],
+  matcher: ["/admin/:path*", "/profile/:path*", "/hr/:path*"],
 };
