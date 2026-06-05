@@ -17,6 +17,7 @@ type CartEntry = {
 const CAT_LABELS: Record<string, string> = {
   milktea: "🧋 Milk & Tea", coffee: "☕ Coffee", soda: "🥤 Soda",
   drink: "🧊 เครื่องดื่ม", food: "🍜 อาหาร", snack: "🍿 ของทานเล่น", dessert: "🍮 ของหวาน",
+  gametime: "⏱️ ชั่วโมงเกม",
 };
 
 // ---- Item detail picker (size / addons / options) ----
@@ -190,7 +191,7 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
   const loadMenu = useCallback(async () => {
     const res = await fetch("/api/menu").then((r) => r.json()).catch(() => []);
     const items = Array.isArray(res) ? (res as MenuItemType[]) : [];
-    setMenuItems(items.filter((m) => m.isAvailable && m.category !== "gametime"));
+    setMenuItems(items.filter((m) => m.isAvailable));
   }, []);
 
   function openModal() {
