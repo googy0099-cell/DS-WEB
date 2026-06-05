@@ -10,7 +10,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const bill = await db.bill.findUnique({
     where: { id: billId },
-    include: { sessions: { where: { status: "ACTIVE" } } },
+    select: {
+      id: true, status: true, tableId: true, startsAt: true,
+      sessions: {
+        where: { status: "ACTIVE" },
+        select: { id: true, userId: true, timeRemaining: true, updatedAt: true },
+      },
+    },
   });
   if (!bill) return NextResponse.json({ error: "ไม่พบบิล" }, { status: 404 });
 
@@ -86,10 +92,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Telegram notification (fire-and-forget)
     db.bill.findUnique({
       where: { id: billId },
-      include: {
+      select: {
+        name: true,
         table: { select: { number: true } },
         sessions: { where: { status: "PAID" }, select: { packageType: true, packagePrice: true, status: true } },
-        orders: { where: { status: "SERVED" }, include: { payment: { select: { method: true } } } },
+        orders: { where: { status: "SERVED" }, select: { totalTHB: true, payment: { select: { method: true } } } },
       },
     }).then((b) => {
       if (!b) return;

@@ -30,7 +30,8 @@ export async function GET(req: NextRequest) {
 
   const bills = await db.bill.findMany({
     where: { createdAt: { gte: start, lt: end } },
-    include: {
+    select: {
+      id: true, name: true, status: true, createdAt: true,
       table: { select: { number: true } },
       sessions: {
         select: { id: true, nickname: true, packageType: true, packagePrice: true, status: true, userId: true, user: { select: { firstName: true, memberCode: true } } },
