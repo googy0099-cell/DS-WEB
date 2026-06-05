@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { notifyCheckin } from "@/lib/hr-notify";
-import { computeCheckInStatus, computeLateMinutes, getTodaySchedule } from "@/lib/hr-attendance";
+import { computeCheckInStatus, computeLateMinutes, computeLateDeductionAmount, getTodaySchedule } from "@/lib/hr-attendance";
 
 const BKK = 7 * 3600_000;
 
@@ -90,13 +90,17 @@ export async function POST(req: NextRequest) {
         const lateConfig = await db.hrLateConfig.findFirst();
         if (lateConfig && lateConfig.deductionAmount > 0) {
           const lateMinutes = computeLateMinutes(now, schedule);
-          const amount = lateConfig.deductionAmount * lateMinutes;
+          const amount = computeLateDeductionAmount(lateMinutes, lateConfig, {
+            baseSalary: staff.baseSalary ?? 0,
+            payType: staff.payType ?? "MONTHLY",
+          });
           if (amount > 0) {
+            const typeLabel = lateConfig.deductionType === "PERCENT" ? ` (${lateConfig.deductionAmount}%/นาที)` : "";
             await db.hrDeduction.create({
               data: {
                 staffId,
                 amount,
-                reason: `เข้างานสาย ${lateMinutes} นาที`,
+                reason: `เข้างานสาย ${lateMinutes} นาที${typeLabel}`,
                 month: now.getMonth() + 1,
                 year: now.getFullYear(),
               },

@@ -19,9 +19,10 @@ export async function PUT(req: NextRequest) {
     const session = await auth();
     if (!session?.user || !["MANAGER", "OWNER"].includes(session.user.role ?? ""))
       return NextResponse.json({ error: "ต้องเป็น OWNER" }, { status: 403 });
-    const body = await req.json() as { deductionAmount?: number; absentDeductionAmount?: number };
+    const body = await req.json() as { deductionType?: string; deductionAmount?: number; absentDeductionAmount?: number };
     let config = await db.hrLateConfig.findFirst();
-    const data: { deductionAmount?: number; absentDeductionAmount?: number } = {};
+    const data: { deductionType?: string; deductionAmount?: number; absentDeductionAmount?: number } = {};
+    if (body.deductionType != null && ["FIXED", "PERCENT"].includes(body.deductionType)) data.deductionType = body.deductionType;
     if (body.deductionAmount != null) data.deductionAmount = body.deductionAmount;
     if (body.absentDeductionAmount != null) data.absentDeductionAmount = body.absentDeductionAmount;
     if (!config) {

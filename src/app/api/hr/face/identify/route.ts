@@ -6,6 +6,7 @@ import {
   computeCheckInStatus,
   computeCheckOutStatus,
   computeLateMinutes,
+  computeLateDeductionAmount,
   getTodaySchedule,
 } from "@/lib/hr-attendance";
 
@@ -133,20 +134,24 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Auto-deduction for late check-in (rate per minute)
+  // Auto-deduction for late check-in
   let lateDeductionAmount = 0;
   if (checkInStatus === "LATE") {
     try {
       const lateConfig = await db.hrLateConfig.findFirst();
       if (lateConfig && lateConfig.deductionAmount > 0) {
         const lateMinutes = computeLateMinutes(now, schedule);
-        const amount = lateConfig.deductionAmount * lateMinutes;
+        const amount = computeLateDeductionAmount(lateMinutes, lateConfig, {
+          baseSalary: staff.baseSalary ?? 0,
+          payType: staff.payType ?? "MONTHLY",
+        });
         if (amount > 0) {
+          const typeLabel = lateConfig.deductionType === "PERCENT" ? ` (${lateConfig.deductionAmount}%/นาที)` : "";
           await db.hrDeduction.create({
             data: {
               staffId: staff.id,
               amount,
-              reason: `เข้างานสาย ${lateMinutes} นาที`,
+              reason: `เข้างานสาย ${lateMinutes} นาที${typeLabel}`,
               month: now.getMonth() + 1,
               year: now.getFullYear(),
             },

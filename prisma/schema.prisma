@@ -636,6 +636,7 @@ model HrAttendance {
 
 model HrLateConfig {
   id                    Int      @id @default(autoincrement())
+  deductionType         String   @default("FIXED") @map("deduction_type")
   deductionAmount       Int      @default(0) @map("deduction_amount")
   absentDeductionAmount Int      @default(0) @map("absent_deduction_amount")
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")

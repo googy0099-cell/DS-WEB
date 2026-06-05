@@ -43,6 +43,26 @@ export function computeLateMinutes(checkIn: Date, schedule: Schedule | null): nu
   return Math.max(0, toMinutes(now.h, now.m) - cutoff);
 }
 
+// Compute deduction amount based on config type
+// FIXED: deductionAmount (฿) × lateMinutes
+// PERCENT: (deductionAmount% of daily wage) × lateMinutes
+export function computeLateDeductionAmount(
+  lateMinutes: number,
+  config: { deductionType: string; deductionAmount: number },
+  staff: { baseSalary: number; payType: string }
+): number {
+  if (lateMinutes <= 0 || config.deductionAmount <= 0) return 0;
+  if (config.deductionType === "PERCENT") {
+    const dailyWage =
+      staff.payType === "DAILY" ? staff.baseSalary
+      : staff.payType === "HOURLY" ? staff.baseSalary * 8
+      : staff.baseSalary / 30; // MONTHLY
+    const ratePerMin = (config.deductionAmount / 100) * dailyWage;
+    return Math.max(1, Math.round(ratePerMin * lateMinutes));
+  }
+  return config.deductionAmount * lateMinutes;
+}
+
 export function computeCheckOutStatus(
   checkOut: Date,
   schedule: Schedule | null
