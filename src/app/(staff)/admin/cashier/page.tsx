@@ -99,6 +99,7 @@ export default function CashierPage() {
   );
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [checklistBlock, setChecklistBlock] = useState<{ done: number; total: number } | null>(null);
 
   // Stock checks
   const [lowMenus, setLowMenus] = useState<LowMenu[] | null>(null);
@@ -216,7 +217,17 @@ export default function CashierPage() {
     loadSummary();
   }
 
-  function startClose() {
+  async function startClose() {
+    try {
+      const data = await fetch("/api/hr/checklist/today-status").then((r) => r.json());
+      const close = data?.CLOSE as { done: number; total: number } | undefined;
+      if (close && close.total > 0 && close.done < close.total) {
+        setChecklistBlock(close);
+        return;
+      }
+    } catch {
+      // if API fails, allow close to proceed
+    }
     loadSummary();
     setShiftState("CLOSING");
     setCloseStep(1);
@@ -562,6 +573,37 @@ export default function CashierPage() {
                 ปิด
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLOSE checklist blocker modal */}
+      {checklistBlock && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 space-y-4 shadow-2xl">
+            <div className="text-center space-y-2">
+              <p className="text-4xl">🔒</p>
+              <h3 className="font-bold text-navy text-lg">เช็คลิสต์ปิดร้านยังไม่เสร็จ</h3>
+              <p className="text-gray-500 text-sm">
+                ทำรายการให้ครบก่อนถึงจะปิดยอดได้
+                <br />
+                <span className="font-semibold text-orange">
+                  {checklistBlock.done}/{checklistBlock.total} รายการ
+                </span>
+              </p>
+            </div>
+            <Link
+              href="/staff/checklist"
+              className="block w-full text-center bg-orange text-white font-bold py-3 rounded-2xl text-sm"
+            >
+              ไปทำเช็คลิสต์ →
+            </Link>
+            <button
+              onClick={() => setChecklistBlock(null)}
+              className="w-full text-gray-400 text-sm py-2"
+            >
+              ยกเลิก
+            </button>
           </div>
         </div>
       )}

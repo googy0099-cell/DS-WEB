@@ -608,16 +608,24 @@ model HrSchedule {
 }
 
 model HrAttendance {
-  id              Int       @id @default(autoincrement())
-  staffId         Int       @map("staff_id")
-  checkIn         DateTime  @map("check_in")
-  checkOut        DateTime? @map("check_out")
-  photoUrl        String?   @map("photo_url")
-  checkInStatus   String?   @map("check_in_status")
-  checkOutStatus  String?   @map("check_out_status")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  staff           HrStaff   @relation(fields: [staffId], references: [id])
+  id                    Int       @id @default(autoincrement())
+  staffId               Int       @map("staff_id")
+  checkIn               DateTime  @map("check_in")
+  checkOut              DateTime? @map("check_out")
+  photoUrl              String?   @map("photo_url")
+  checkInStatus         String?   @map("check_in_status")
+  checkOutStatus        String?   @map("check_out_status")
+  lateDeductionApplied  Boolean   @default(false) @map("late_deduction_applied")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  staff                 HrStaff   @relation(fields: [staffId], references: [id])
   @@map("hr_attendance")
+}
+
+model HrLateConfig {
+  id               Int      @id @default(autoincrement())
+  deductionAmount  Int      @default(0) @map("deduction_amount")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  @@map("hr_late_config")
 }
 
 model HrChecklist {

@@ -1,0 +1,9 @@
+ALTER TABLE hr_attendance ADD COLUMN late_deduction_applied INTEGER NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS hr_late_config (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  deduction_amount INTEGER NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO hr_late_config (id, deduction_amount) VALUES (1, 0);

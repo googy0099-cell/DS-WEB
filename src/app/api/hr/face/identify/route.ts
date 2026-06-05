@@ -118,6 +118,33 @@ export async function POST(req: NextRequest) {
       checkInStatus: status,
     },
   });
+
+  // Auto-deduction for late check-in
+  let lateDeductionAmount = 0;
+  if (status === "LATE") {
+    try {
+      const lateConfig = await db.hrLateConfig.findFirst();
+      if (lateConfig && lateConfig.deductionAmount > 0) {
+        await db.hrDeduction.create({
+          data: {
+            staffId: staff.id,
+            amount: lateConfig.deductionAmount,
+            reason: "เข้างานสาย",
+            month: now.getMonth() + 1,
+            year: now.getFullYear(),
+          },
+        });
+        await db.hrAttendance.update({
+          where: { id: record.id },
+          data: { lateDeductionApplied: true },
+        });
+        lateDeductionAmount = lateConfig.deductionAmount;
+      }
+    } catch {
+      // deduction failed — don't block check-in
+    }
+  }
+
   notifyCheckin(staffName, "checkin").catch(() => {});
   return NextResponse.json({
     action: "checkin",
@@ -125,6 +152,7 @@ export async function POST(req: NextRequest) {
     staffName,
     status,
     similarity: result.similarity,
+    ...(lateDeductionAmount > 0 && { lateDeduction: lateDeductionAmount }),
   });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
