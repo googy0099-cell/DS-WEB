@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import useSWR from "swr";
-import Image from "next/image";
 import ImageUpload from "@/components/admin/ImageUpload";
 import NumpadInput from "@/components/admin/NumpadInput";
 
@@ -468,7 +467,7 @@ export default function AdminGamesPage() {
               <div className="flex gap-4 p-4 items-start">
                 <div className="shrink-0 w-20 h-20 rounded-xl overflow-hidden bg-sand flex items-center justify-center">
                   {game.imageUrl ? (
-                    <Image src={game.imageUrl} alt={game.nameTh} width={80} height={80} className="object-cover w-full h-full" />
+                    <img src={game.imageUrl} alt={game.nameTh} className="object-cover w-full h-full" />
                   ) : (
                     <span className="text-3xl">🎲</span>
                   )}

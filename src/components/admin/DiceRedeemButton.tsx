@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import Image from "next/image";
 
 type RewardItem = { id: number; nameTh: string; description: string; cost: number; imageUrl: string | null; isAvailable: boolean };
 type MemberInfo = { id: number; firstName: string; username: string; memberCode: string; dicePoints: number };
@@ -108,7 +107,7 @@ export default function DiceRedeemButton() {
                       >
                         <div className="relative w-14 h-14 rounded-xl overflow-hidden shrink-0 bg-sand/40">
                           {r.imageUrl ? (
-                            <Image src={r.imageUrl} alt={r.nameTh} fill className="object-cover" />
+                            <img src={r.imageUrl} alt={r.nameTh} className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-2xl">🎁</div>
                           )}

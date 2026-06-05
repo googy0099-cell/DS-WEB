@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import useSWR from "swr";
-import Image from "next/image";
 
 type Recipe = {
   id: number;
@@ -120,7 +119,7 @@ export default function SOPPage() {
                 onClick={() => setExpanded(isOpen ? null : item.id)}
               >
                 {item.imageUrl ? (
-                  <Image src={item.imageUrl} alt={item.nameTh} width={48} height={48}
+                  <img src={item.imageUrl} alt={item.nameTh}
                     className="w-12 h-12 rounded-xl object-cover shrink-0" />
                 ) : (
                   <div className="w-12 h-12 rounded-xl bg-sand/50 shrink-0 flex items-center justify-center text-xl">🍽️</div>

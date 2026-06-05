@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { X, Pencil, Trash2, KeyRound } from "lucide-react";
-import Image from "next/image";
 import { useSession } from "next-auth/react";
 import NumpadInput from "@/components/admin/NumpadInput";
 
@@ -165,13 +164,15 @@ export default function AdminMembersPage() {
               className="flex items-center gap-3 p-3 active:bg-sand/20 cursor-pointer"
               onClick={() => { setSelected(m); setEditing(false); setConfirmDelete(false); }}
             >
-              {avatar ? (
-                <Image src={avatar} alt="" width={44} height={44} className="rounded-full object-cover w-11 h-11 shrink-0" />
-              ) : (
-                <div className="w-11 h-11 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-lg shrink-0">
+              <div className="relative w-11 h-11 shrink-0">
+                {avatar ? (
+                  <img src={avatar} alt="" className="rounded-full object-cover w-11 h-11 absolute inset-0"
+                    onError={(e) => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden"); }} />
+                ) : null}
+                <div hidden={!!avatar} className="w-11 h-11 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-lg">
                   {m.firstName[0]?.toUpperCase()}
                 </div>
-              )}
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-navy text-sm truncate">{m.nickname || `${m.firstName} ${m.lastName}`}</p>
                 <p className="text-gray-400 text-xs truncate">{m.email}</p>
@@ -213,13 +214,15 @@ export default function AdminMembersPage() {
                 >
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      {avatar ? (
-                        <Image src={avatar} alt="" width={32} height={32} className="rounded-full object-cover w-8 h-8 shrink-0" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm shrink-0">
+                      <div className="relative w-8 h-8 shrink-0">
+                        {avatar ? (
+                          <img src={avatar} alt="" className="rounded-full object-cover w-8 h-8 absolute inset-0"
+                            onError={(e) => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden"); }} />
+                        ) : null}
+                        <div hidden={!!avatar} className="w-8 h-8 rounded-full bg-orange/20 flex items-center justify-center text-orange font-bold text-sm">
                           {m.firstName[0]?.toUpperCase()}
                         </div>
-                      )}
+                      </div>
                       <div>
                         <p className="font-medium text-navy">{m.nickname || `${m.firstName} ${m.lastName}`}</p>
                         <p className="text-gray-400 text-xs">{m.email}</p>
@@ -357,11 +360,15 @@ export default function AdminMembersPage() {
                 <div className="text-center">
                   {(() => {
                     const av = selected.avatarUrl || googleAvatarUrl(selected.googleId);
-                    return av ? (
-                      <Image src={av} alt="" width={72} height={72} className="rounded-full object-cover mx-auto mb-2 w-18 h-18" />
-                    ) : (
-                      <div className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange text-2xl font-bold mx-auto mb-2">
-                        {selected.firstName[0]?.toUpperCase()}
+                    return (
+                      <div className="relative w-16 h-16 mx-auto mb-2">
+                        {av ? (
+                          <img src={av} alt="" className="rounded-full object-cover w-16 h-16 absolute inset-0"
+                            onError={(e) => { e.currentTarget.style.display = "none"; (e.currentTarget.nextElementSibling as HTMLElement | null)?.removeAttribute("hidden"); }} />
+                        ) : null}
+                        <div hidden={!!av} className="w-16 h-16 rounded-full bg-orange/20 flex items-center justify-center text-orange text-2xl font-bold">
+                          {selected.firstName[0]?.toUpperCase()}
+                        </div>
                       </div>
                     );
                   })()}

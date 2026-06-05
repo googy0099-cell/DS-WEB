@@ -2,7 +2,6 @@
 
 import { useState, useRef } from "react";
 import useSWR from "swr";
-import Image from "next/image";
 import NumpadInput from "@/components/admin/NumpadInput";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -83,8 +82,8 @@ export default function RewardsAdminPage() {
           {items.map((item) => (
             <div key={item.id} className={`bg-white rounded-2xl shadow-sm overflow-hidden border-2 ${item.isAvailable ? "border-transparent" : "border-gray-200 opacity-60"}`}>
               {item.imageUrl ? (
-                <div className="relative w-full aspect-video bg-gray-100">
-                  <Image src={item.imageUrl} alt={item.nameTh} fill className="object-cover" />
+                <div className="w-full aspect-video bg-gray-100">
+                  <img src={item.imageUrl} alt={item.nameTh} className="w-full h-full object-cover" />
                 </div>
               ) : (
                 <div className="w-full aspect-video bg-sand/40 flex items-center justify-center text-3xl">🎁</div>
@@ -171,7 +170,7 @@ function RewardForm({ form, setForm }: { form: typeof BLANK; setForm: React.Disp
         >
           {form.imageUrl ? (
             <div className="relative w-full aspect-video">
-              <Image src={form.imageUrl} alt="reward" fill className="object-cover" />
+              <img src={form.imageUrl} alt="reward" className="w-full h-full object-cover" />
               <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                 <p className="text-white text-xs font-semibold">เปลี่ยนรูป</p>
               </div>
