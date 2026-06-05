@@ -892,10 +892,22 @@ export default function OrderQueue() {
     });
   }
 
-  function handlePurge(orderId: number) {
+  async function purgeBill(billId: number) {
+    try {
+      await fetch(`/api/pos/bills/${billId}/purge`, { method: "DELETE" });
+      await Promise.all([mutate(), mutateTodayOrders()]);
+    } catch (e) {
+      console.error("purgeBill failed", e);
+    }
+  }
+
+  function handlePurge(orderId: number, billId?: number | null) {
+    const hasBill = !!billId;
     setConfirmAction({
-      message: "⚠️ ทำลายบิลถาวร?",
-      detail: "ออเดอร์ รายการ และการชำระเงินจะถูกลบออกจากระบบถาวร ใช้สำหรับทดสอบระบบเท่านั้น",
+      message: "⚠️ ทำลายข้อมูลถาวร?",
+      detail: hasBill
+        ? "บิล ออเดอร์ทั้งหมด เซสชันผู้เล่น ใบเสร็จ และการชำระเงินจะถูกลบออกจากระบบถาวร"
+        : "ออเดอร์ รายการ และการชำระเงินจะถูกลบออกจากระบบถาวร",
       confirmLabel: "ยืนยัน — ขั้นที่ 1",
       confirmColor: "bg-red-500 text-white",
       onConfirm: () => {
@@ -904,7 +916,7 @@ export default function OrderQueue() {
           detail: "ข้อมูลทั้งหมดจะหายถาวร ไม่สามารถกู้คืนได้",
           confirmLabel: "ทำลายเลย",
           confirmColor: "bg-red-700 text-white",
-          onConfirm: () => deleteOrder(orderId),
+          onConfirm: () => hasBill ? purgeBill(billId!) : deleteOrder(orderId),
         });
       },
     });
@@ -1326,6 +1338,7 @@ export default function OrderQueue() {
                     setSplitReceivedStr("");
                     resetDiscount();
                   }}
+                  onPurgeBill={(billId) => handlePurge(0, billId)}
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
                   onPrintReceipt={(orders) => void printBillGroupReceipt(orders, receiptSettings)}
@@ -2364,6 +2377,7 @@ function BillOrderGroupCard({
   onPrintReceipt,
   onEdit,
   onCancelOrder,
+  onPurgeBill,
 }: {
   orders: OrderWithItems[];
   servedAcked: Set<number>;
@@ -2377,6 +2391,7 @@ function BillOrderGroupCard({
   onPrintReceipt: (orders: OrderWithItems[]) => void;
   onEdit: (order: OrderWithItems) => void;
   onCancelOrder: (id: number) => void;
+  onPurgeBill: (billId: number) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
@@ -2556,6 +2571,17 @@ function BillOrderGroupCard({
           </button>
         </div>
       )}
+      {/* Purge bill — test only */}
+      {first.billId && (
+        <button
+          onClick={() => onPurgeBill(first.billId!)}
+          disabled={isLoading}
+          className="mt-1 w-full flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-400 hover:text-red-700 text-xs font-medium py-2 rounded-xl disabled:opacity-40 transition-colors"
+          title="ทำลายบิลทั้งหมด (สำหรับทดสอบ)"
+        >
+          ⛔ ทำลายบิลนี้ออกจากระบบ
+        </button>
+      )}
     </div>
   );
 }
@@ -2588,7 +2614,7 @@ function OrderCard({
   onUpdate: (id: number, status: string) => void;
   onEdit: (order: OrderWithItems) => void;
   onDelete: (id: number) => void;
-  onPurge: (id: number) => void;
+  onPurge: (id: number, billId?: number | null) => void;
   onPrint: (order: OrderWithItems) => void;
   onSplitOrder: (order: OrderWithItems) => void;
   onKitchen: (order: OrderWithItems) => void;
@@ -3045,10 +3071,10 @@ function OrderCard({
             🗑️
           </button>
           <button
-            onClick={() => onPurge(order.id)}
+            onClick={() => onPurge(order.id, order.billId)}
             disabled={isLoading}
             className="bg-red-50 text-red-400 border border-red-100 text-xs px-2 py-2 rounded-xl disabled:opacity-40 hover:text-red-700 hover:border-red-300"
-            title="ทำลายบิล (สำหรับทดสอบ)"
+            title={order.billId ? "ทำลายบิลทั้งหมด" : "ลบออเดอร์นี้"}
           >
             ⛔
           </button>
