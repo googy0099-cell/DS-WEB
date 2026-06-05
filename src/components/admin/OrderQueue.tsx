@@ -461,6 +461,14 @@ export default function OrderQueue() {
     billId: number; billName: string; orders: OrderWithItems[]; total: number;
   } | null>(null);
   const [billScanLoading, setBillScanLoading] = useState(false);
+  // Split payment modal (cash portion first, then scan for remainder)
+  const [billGroupSplit, setBillGroupSplit] = useState<{
+    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+    step: "cash-portion" | "cash-received" | "scan"; cashPaid: number;
+  } | null>(null);
+  const [splitCashStr, setSplitCashStr] = useState("");
+  const [splitReceivedStr, setSplitReceivedStr] = useState("");
+  const [splitLoading, setSplitLoading] = useState(false);
   // Discount state shared by cash + scan bill-group modals
   const [discount, setDiscount] = useState<{ type: "PERCENT" | "FIXED"; value: string; note: string }>
     ({ type: "PERCENT", value: "", note: "" });
@@ -1005,6 +1013,26 @@ export default function OrderQueue() {
     }
   }
 
+  async function confirmBillGroupSplit() {
+    if (!billGroupSplit) return;
+    const snapshot = billGroupSplit;
+    setSplitLoading(true);
+    try {
+      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", ...discountBody() }),
+      });
+      setBillGroupSplit(null);
+      setSplitCashStr("");
+      setSplitReceivedStr("");
+      resetDiscount();
+      await mutate();
+    } finally {
+      setSplitLoading(false);
+    }
+  }
+
   async function confirmQrPayment(order: OrderWithItems) {
     if (!order.payment?.id) return;
     ackAlertOrders([order.id]);
@@ -1276,6 +1304,20 @@ export default function OrderQueue() {
                       orders,
                       total: orders.reduce((s, o) => s + o.totalTHB, 0),
                     });
+                  }}
+                  onSplitCheckout={(orders) => {
+                    ackAlertOrders(orders.map((o) => o.id));
+                    setBillGroupSplit({
+                      billId: orders[0].billId!,
+                      billName: orders[0].bill?.name ?? "",
+                      orders,
+                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
+                      step: "cash-portion",
+                      cashPaid: 0,
+                    });
+                    setSplitCashStr("");
+                    setSplitReceivedStr("");
+                    resetDiscount();
                   }}
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
@@ -1715,6 +1757,237 @@ export default function OrderQueue() {
         );
       })()}
 
+      {/* Split payment modal */}
+      {billGroupSplit && (() => {
+        const discAmt = calcDiscountAmount(billGroupSplit.total);
+        const finalTotal = billGroupSplit.total - discAmt;
+        const { step } = billGroupSplit;
+
+        // --- Step: cash-portion ---
+        if (step === "cash-portion") {
+          const cashAmount = parseInt(splitCashStr.replace(/,/g, ""), 10) || 0;
+          const scanRemaining = finalTotal - cashAmount;
+          const canProceed = cashAmount > 0 && cashAmount < finalTotal;
+          function pressCashDigit(d: string) { setSplitCashStr((p) => (p === "" || p === "0") ? d : p + d); }
+          function pressCashBack() { setSplitCashStr((p) => p.slice(0, -1)); }
+          return (
+            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+                <p className="text-xs text-center text-gray-400">{billGroupSplit.orders.length} ออเดอร์รวมกัน</p>
+
+                {/* Discount */}
+                <div className="bg-gray-50 rounded-2xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-gray-500">ส่วนลด (ถ้ามี)</p>
+                  <div className="flex gap-1.5">
+                    <button type="button"
+                      onClick={() => setDiscount((d) => ({ ...d, type: "PERCENT" }))}
+                      className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "PERCENT" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                      %
+                    </button>
+                    <button type="button"
+                      onClick={() => setDiscount((d) => ({ ...d, type: "FIXED" }))}
+                      className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "FIXED" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                      ฿
+                    </button>
+                    <input type="number" min={0} placeholder={discount.type === "PERCENT" ? "0–100" : "0"}
+                      value={discount.value}
+                      onChange={(e) => setDiscount((d) => ({ ...d, value: e.target.value }))}
+                      className="w-24 border border-sand rounded-xl px-2 py-1.5 text-sm text-center text-navy font-bold bg-white" />
+                  </div>
+                  <input type="text" placeholder="หมายเหตุ เช่น สมาชิก, นักเรียน"
+                    value={discount.note}
+                    onChange={(e) => setDiscount((d) => ({ ...d, note: e.target.value }))}
+                    className="w-full border border-sand rounded-xl px-3 py-1.5 text-xs text-gray-600 bg-white" />
+                  <div className="text-center pt-1">
+                    {discAmt > 0 ? (
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-gray-400 line-through">฿{billGroupSplit.total.toLocaleString()}</p>
+                        <p className="text-xs text-green-600">ส่วนลด −฿{discAmt.toLocaleString()}</p>
+                        <p className="text-xl font-bold text-navy">รวม ฿{finalTotal.toLocaleString()}</p>
+                      </div>
+                    ) : (
+                      <p className="text-xl font-bold text-navy">รวม ฿{finalTotal.toLocaleString()}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Step label */}
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">1</span>
+                  ระบุยอดที่ลูกค้าจ่ายด้วยเงินสด
+                </div>
+
+                {/* Cash amount display */}
+                <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                  {splitCashStr ? `฿${cashAmount.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
+                </div>
+
+                {/* Remaining preview */}
+                {cashAmount > 0 && cashAmount < finalTotal && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-center">
+                    <p className="text-xs text-blue-500">ยอดที่ต้องสแกนเพิ่ม</p>
+                    <p className="text-xl font-bold text-blue-700">฿{scanRemaining.toLocaleString()}</p>
+                  </div>
+                )}
+                {cashAmount >= finalTotal && finalTotal > 0 && (
+                  <p className="text-xs text-red-500 text-center">ยอดเกินทั้งหมด — ใช้ปุ่มเงินสดแทน</p>
+                )}
+
+                {/* Numpad */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                    <button key={d} type="button" onClick={() => pressCashDigit(d)}
+                      className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">{d}</button>
+                  ))}
+                  <button type="button" onClick={() => setSplitCashStr((p) => p === "" ? "" : p + "00")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">00</button>
+                  <button type="button" onClick={() => pressCashDigit("0")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">0</button>
+                  <button type="button" onClick={pressCashBack}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">⌫</button>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {[20, 50, 100, 500, 1000].map((amt) => (
+                    <button key={amt} type="button" onClick={() => setSplitCashStr(String((parseInt(splitCashStr) || 0) + amt))}
+                      className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">+{amt}</button>
+                  ))}
+                  <button type="button" onClick={() => setSplitCashStr("")}
+                    className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => { setBillGroupSplit(null); setSplitCashStr(""); setSplitReceivedStr(""); resetDiscount(); }}
+                    className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                  <button
+                    disabled={!canProceed}
+                    onClick={() => setBillGroupSplit((s) => s ? { ...s, step: "cash-received", cashPaid: cashAmount } : s)}
+                    className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                    ถัดไป →
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // --- Step: cash-received (calculate change) ---
+        if (step === "cash-received") {
+          const { cashPaid } = billGroupSplit;
+          const received = parseInt(splitReceivedStr.replace(/,/g, ""), 10) || 0;
+          const change = received - cashPaid;
+          function pressRecDigit(d: string) { setSplitReceivedStr((p) => (p === "" || p === "0") ? d : p + d); }
+          function pressRecBack() { setSplitReceivedStr((p) => p.slice(0, -1)); }
+          return (
+            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-green-600">ยอดเงินสด</p>
+                  <p className="text-2xl font-bold text-green-700">฿{cashPaid.toLocaleString()}</p>
+                  <p className="text-xs text-blue-500 mt-1">ยอดที่ต้องสแกนเพิ่ม ฿{(finalTotal - cashPaid).toLocaleString()}</p>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">1</span>
+                  ระบุเงินที่รับมาจากลูกค้า (เงินสด)
+                </div>
+
+                <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                  {splitReceivedStr ? `฿${received.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
+                </div>
+                {splitReceivedStr && (
+                  <div className={`rounded-xl p-2.5 text-center ${received >= cashPaid ? "bg-green-50" : "bg-red-50"}`}>
+                    {received >= cashPaid
+                      ? <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
+                      : <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(cashPaid - received).toLocaleString()}</p>}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                    <button key={d} type="button" onClick={() => pressRecDigit(d)}
+                      className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">{d}</button>
+                  ))}
+                  <button type="button" onClick={() => setSplitReceivedStr((p) => p === "" ? "" : p + "00")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">00</button>
+                  <button type="button" onClick={() => pressRecDigit("0")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">0</button>
+                  <button type="button" onClick={pressRecBack}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">⌫</button>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {[20, 50, 100, 500, 1000].map((amt) => (
+                    <button key={amt} type="button" onClick={() => setSplitReceivedStr(String((parseInt(splitReceivedStr) || 0) + amt))}
+                      className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">+{amt}</button>
+                  ))}
+                  <button type="button" onClick={() => setSplitReceivedStr("")}
+                    className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => { setBillGroupSplit((s) => s ? { ...s, step: "cash-portion" } : s); setSplitReceivedStr(""); }}
+                    className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">← กลับ</button>
+                  <button
+                    disabled={!splitReceivedStr || received < cashPaid}
+                    onClick={() => setBillGroupSplit((s) => s ? { ...s, step: "scan" } : s)}
+                    className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                    ยืนยันรับเงินสด →
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // --- Step: scan ---
+        const scanAmount = finalTotal - billGroupSplit.cashPaid;
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+              <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+
+              <div className="flex gap-2">
+                <div className="flex-1 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-green-600">รับเงินสดแล้ว</p>
+                  <p className="text-xl font-bold text-green-700">฿{billGroupSplit.cashPaid.toLocaleString()}</p>
+                </div>
+                <div className="flex-1 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-blue-600">คงเหลือ (สแกน)</p>
+                  <p className="text-xl font-bold text-blue-700">฿{scanAmount.toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">2</span>
+                ให้ลูกค้าสแกนจ่ายยอดที่เหลือ แล้วกดยืนยัน
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                <p className="text-xs text-blue-600 mb-1">ยอดที่ต้องสแกน</p>
+                <p className="text-3xl font-black text-blue-700">฿{scanAmount.toLocaleString()}</p>
+              </div>
+              <p className="text-xs text-center text-gray-400">ยืนยันว่าลูกค้าโอนเงินครบถ้วนแล้ว</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setBillGroupSplit(null); setSplitCashStr(""); setSplitReceivedStr(""); resetDiscount(); }}
+                  disabled={splitLoading}
+                  className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">
+                  ยกเลิก
+                </button>
+                <button
+                  onClick={confirmBillGroupSplit}
+                  disabled={splitLoading}
+                  className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
+                  {splitLoading ? "กำลังบันทึก..." : "✅ ยืนยันชำระครบแล้ว"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Confirm Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
@@ -1910,6 +2183,7 @@ function BillOrderGroupCard({
   isLoading,
   onOpenCashModal,
   onScanCheckout,
+  onSplitCheckout,
   kitchenItemAcked,
   onAckKitchenItems,
   onPrintReceipt,
@@ -1922,6 +2196,7 @@ function BillOrderGroupCard({
   isLoading: boolean;
   onOpenCashModal: (orders: OrderWithItems[]) => void;
   onScanCheckout: (orders: OrderWithItems[]) => void;
+  onSplitCheckout: (orders: OrderWithItems[]) => void;
   kitchenItemAcked: Set<number>;
   onAckKitchenItems: (itemIds: number[]) => void;
   onPrintReceipt: (orders: OrderWithItems[]) => void;
@@ -2070,6 +2345,14 @@ function BillOrderGroupCard({
           {isLoading ? "..." : "สแกน"}
         </button>
       </div>
+      <button
+        onClick={() => onSplitCheckout(orders)}
+        disabled={isLoading}
+        className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-60 transition-colors"
+      >
+        <span>💵📷</span>
+        {isLoading ? "..." : "แบ่งจ่าย (เงินสด + สแกน)"}
+      </button>
 
       {/* Print receipt */}
       <button
