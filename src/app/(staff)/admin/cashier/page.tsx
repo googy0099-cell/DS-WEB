@@ -106,14 +106,14 @@ export default function CashierPage() {
   const [stockCheckLoading, setStockCheckLoading] = useState(false);
   const [reorderItems, setReorderItems] = useState<ReorderItem[]>([]);
 
-  // Restore today's shift — cross-device: validate localStorage against server
+  // Restore today's shift — cross-device and cross-midnight: validate localStorage against server
   useEffect(() => {
     const stored = localStorage.getItem(SHIFT_KEY());
     fetch("/api/shop/status")
       .then((r) => r.json())
-      .then(({ isOpen }: { isOpen: boolean }) => {
+      .then(({ isOpen, openedAt: serverOpenedAt }: { isOpen: boolean; openedAt: string | null }) => {
         if (stored && isOpen) {
-          // Both local and server say open → restore
+          // Both local and server say open → restore from localStorage
           const { openedAt: oa, openingFloat: of_ } = JSON.parse(stored);
           setOpenedAt(oa);
           setOpeningFloat(String(of_));
@@ -122,8 +122,14 @@ export default function CashierPage() {
           // Server says closed but localStorage still has it → another device closed
           localStorage.removeItem(SHIFT_KEY());
           setShiftState("CLOSED");
+        } else if (!stored && isOpen && serverOpenedAt) {
+          // localStorage key missing (e.g. crossed midnight or cleared) but server still open
+          // → restore from DB and re-persist with today's key
+          setOpenedAt(serverOpenedAt);
+          setShiftState("OPEN");
+          localStorage.setItem(SHIFT_KEY(), JSON.stringify({ openedAt: serverOpenedAt, openingFloat: 0 }));
         }
-        // If no stored → stay CLOSED (default)
+        // else: no stored, server says closed → stay CLOSED (default)
       })
       .catch(() => {
         // Network error — fall back to localStorage
