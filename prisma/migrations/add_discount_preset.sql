@@ -1,0 +1,8 @@
+CREATE TABLE "Discount" (
+  "id"         INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  "name_th"    TEXT    NOT NULL,
+  "type"       TEXT    NOT NULL DEFAULT 'FIXED',
+  "value"      INTEGER NOT NULL DEFAULT 0,
+  "is_active"  INTEGER NOT NULL DEFAULT 1,
+  "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

@@ -478,6 +478,15 @@ export default function OrderQueue() {
   // Discount state shared by cash + scan bill-group modals
   const [discount, setDiscount] = useState<{ type: "PERCENT" | "FIXED"; value: string; note: string }>
     ({ type: "PERCENT", value: "", note: "" });
+  // Discount preset picker for bills
+  const [discountModal, setDiscountModal] = useState<{
+    billId: number; billName: string; total: number; currentAmount: number | null;
+  } | null>(null);
+  const [discountPresets, setDiscountPresets] = useState<{ id: number; nameTh: string; type: string; value: number }[]>([]);
+  const [discountPickType, setDiscountPickType] = useState<"PERCENT" | "FIXED">("FIXED");
+  const [discountPickValue, setDiscountPickValue] = useState("");
+  const [discountPickNote, setDiscountPickNote] = useState("");
+  const [discountSaving, setDiscountSaving] = useState(false);
   // QR data URLs for scan-at-counter, keyed by order id
   const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
@@ -490,6 +499,12 @@ export default function OrderQueue() {
   const [editNote, setEditNote] = useState("");
   const [editBillId, setEditBillId] = useState<number | null | undefined>(undefined);
   const [savingEdit, setSavingEdit] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/discounts").then((r) => r.json()).then((data) => {
+      if (Array.isArray(data)) setDiscountPresets(data.filter((d) => d.isActive));
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     async function setupPush() {
@@ -981,6 +996,44 @@ export default function OrderQueue() {
     setDiscount({ type: "PERCENT", value: "", note: "" });
   }
 
+  function openDiscountModal(orders: OrderWithItems[]) {
+    const bill = orders[0].bill;
+    const total = orders.reduce((s, o) => s + o.totalTHB, 0);
+    if (bill?.discountType && bill?.discountValue) {
+      setDiscountPickType(bill.discountType as "PERCENT" | "FIXED");
+      setDiscountPickValue(String(bill.discountValue));
+      setDiscountPickNote(bill.discountNote ?? "");
+    } else {
+      setDiscountPickType("FIXED");
+      setDiscountPickValue("");
+      setDiscountPickNote("");
+    }
+    setDiscountModal({ billId: bill?.id ?? orders[0].billId!, billName: bill?.name ?? "", total, currentAmount: bill?.discountAmount ?? null });
+  }
+
+  async function applyBillDiscount() {
+    if (!discountModal) return;
+    const n = Number(discountPickValue);
+    if (!n || n <= 0) return;
+    setDiscountSaving(true);
+    try {
+      await fetch(`/api/pos/bills/${discountModal.billId}/set-discount`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ discountType: discountPickType, discountValue: n, ...(discountPickNote.trim() ? { discountNote: discountPickNote.trim() } : {}) }),
+      });
+      setDiscountModal(null);
+      await mutate();
+    } finally {
+      setDiscountSaving(false);
+    }
+  }
+
+  async function removeBillDiscount(billId: number) {
+    await fetch(`/api/pos/bills/${billId}/set-discount`, { method: "DELETE" });
+    await mutate();
+  }
+
   function discountBody() {
     const n = Number(discount.value);
     if (!n || n <= 0) return {};
@@ -1314,6 +1367,10 @@ export default function OrderQueue() {
                       total: orders.reduce((s, o) => s + o.totalTHB, 0),
                     });
                     setBillCashInputStr("");
+                    const b = orders[0].bill;
+                    if (b?.discountType && b?.discountValue) {
+                      setDiscount({ type: b.discountType as "PERCENT" | "FIXED", value: String(b.discountValue), note: b.discountNote ?? "" });
+                    } else { resetDiscount(); }
                   }}
                   onScanCheckout={(orders) => {
                     ackAlertOrders(orders.map((o) => o.id));
@@ -1323,6 +1380,10 @@ export default function OrderQueue() {
                       orders,
                       total: orders.reduce((s, o) => s + o.totalTHB, 0),
                     });
+                    const b = orders[0].bill;
+                    if (b?.discountType && b?.discountValue) {
+                      setDiscount({ type: b.discountType as "PERCENT" | "FIXED", value: String(b.discountValue), note: b.discountNote ?? "" });
+                    } else { resetDiscount(); }
                   }}
                   onSplitCheckout={(orders) => {
                     ackAlertOrders(orders.map((o) => o.id));
@@ -1338,6 +1399,8 @@ export default function OrderQueue() {
                     setSplitReceivedStr("");
                     resetDiscount();
                   }}
+                  onSetDiscount={openDiscountModal}
+                  onRemoveDiscount={removeBillDiscount}
                   onPurgeBill={(billId) => handlePurge(0, billId)}
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
@@ -2176,6 +2239,83 @@ export default function OrderQueue() {
         );
       })()}
 
+      {/* Discount preset picker modal */}
+      {discountModal && (() => {
+        const n = Number(discountPickValue);
+        const previewAmt = n > 0
+          ? discountPickType === "PERCENT"
+            ? Math.round(discountModal.total * Math.min(n, 100) / 100)
+            : Math.min(n, discountModal.total)
+          : 0;
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-4">
+              <h3 className="font-bold text-navy text-lg text-center">💸 ส่วนลด — ตี้ {discountModal.billName}</h3>
+
+              {/* Presets */}
+              {discountPresets.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">เลือก preset</p>
+                  <div className="flex flex-wrap gap-2">
+                    {discountPresets.map((p) => (
+                      <button key={p.id}
+                        onClick={() => { setDiscountPickType(p.type as "PERCENT" | "FIXED"); setDiscountPickValue(String(p.value)); setDiscountPickNote(p.nameTh); }}
+                        className={`text-sm font-semibold px-3 py-1.5 rounded-xl border transition-colors ${discountPickValue === String(p.value) && discountPickNote === p.nameTh ? "bg-orange text-white border-orange" : "bg-orange/10 text-orange border-orange/30"}`}>
+                        {p.nameTh} ({p.type === "PERCENT" ? `${p.value}%` : `฿${p.value}`})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Custom input */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">หรือใส่เอง</p>
+                <div className="flex gap-1.5">
+                  <div className="flex rounded-xl border border-sand overflow-hidden">
+                    <button onClick={() => setDiscountPickType("FIXED")}
+                      className={`px-4 py-2 text-sm font-bold transition-colors ${discountPickType === "FIXED" ? "bg-orange text-white" : "bg-white text-gray-400"}`}>฿</button>
+                    <button onClick={() => setDiscountPickType("PERCENT")}
+                      className={`px-4 py-2 text-sm font-bold transition-colors ${discountPickType === "PERCENT" ? "bg-orange text-white" : "bg-white text-gray-400"}`}>%</button>
+                  </div>
+                  <input type="number" min={0}
+                    placeholder={discountPickType === "PERCENT" ? "0–100" : "0"}
+                    value={discountPickValue}
+                    onChange={(e) => setDiscountPickValue(e.target.value)}
+                    className="flex-1 border border-sand rounded-xl px-3 py-2 text-sm text-center text-navy font-bold" />
+                </div>
+                <input type="text" placeholder="หมายเหตุ เช่น สมาชิก, นักเรียน"
+                  value={discountPickNote}
+                  onChange={(e) => setDiscountPickNote(e.target.value)}
+                  className="w-full border border-sand rounded-xl px-3 py-1.5 text-xs text-gray-600" />
+              </div>
+
+              {/* Preview */}
+              {previewAmt > 0 && (
+                <div className="bg-green-50 rounded-xl p-3 text-center space-y-0.5">
+                  <p className="text-xs text-gray-400 line-through">฿{discountModal.total.toLocaleString()}</p>
+                  <p className="text-sm text-green-600 font-semibold">− ฿{previewAmt.toLocaleString()}</p>
+                  <p className="text-xl font-black text-navy">฿{(discountModal.total - previewAmt).toLocaleString()}</p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button onClick={() => setDiscountModal(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">ยกเลิก</button>
+                {discountModal.currentAmount != null && (
+                  <button onClick={async () => { await removeBillDiscount(discountModal.billId); setDiscountModal(null); }}
+                    className="px-4 py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">ลบส่วนลด</button>
+                )}
+                <button onClick={applyBillDiscount} disabled={!discountPickValue || Number(discountPickValue) <= 0 || discountSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-orange text-white font-bold text-sm disabled:opacity-50">
+                  {discountSaving ? "..." : "✅ ตั้งค่า"}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Confirm Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
@@ -2377,6 +2517,8 @@ function BillOrderGroupCard({
   onPrintReceipt,
   onEdit,
   onCancelOrder,
+  onSetDiscount,
+  onRemoveDiscount,
   onPurgeBill,
 }: {
   orders: OrderWithItems[];
@@ -2391,12 +2533,16 @@ function BillOrderGroupCard({
   onPrintReceipt: (orders: OrderWithItems[]) => void;
   onEdit: (order: OrderWithItems) => void;
   onCancelOrder: (id: number) => void;
+  onSetDiscount: (orders: OrderWithItems[]) => void;
+  onRemoveDiscount: (billId: number) => void;
   onPurgeBill: (billId: number) => void;
 }) {
   const first = orders[0];
   const bill = first.bill;
   const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
-  const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
+  const rawTotal = orders.reduce((s, o) => s + o.totalTHB, 0);
+  const discountAmt = bill?.discountAmount ?? 0;
+  const totalTHB = rawTotal - discountAmt;
   const allItems = orders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
   const kitchenDone = isKitchenDone(allItems);
   const allServedAcked = orders.every((o) => servedAcked.has(o.id));
@@ -2478,11 +2624,33 @@ function BillOrderGroupCard({
             )}
           </div>
         ))}
+        {discountAmt > 0 && (
+          <div className="flex justify-between items-center text-sm text-green-600 font-semibold pt-1">
+            <span className="flex items-center gap-1">
+              💸 {bill?.discountNote || "ส่วนลด"}
+              <button onClick={() => onRemoveDiscount(bill!.id)} className="text-xs text-red-400 hover:text-red-600 ml-1">✕</button>
+            </span>
+            <span>− ฿{discountAmt.toLocaleString()}</span>
+          </div>
+        )}
         <div className="border-t border-gray-200 pt-1.5 flex justify-between font-black text-navy text-base">
           <span>รวมทั้งหมด</span>
           <span>฿{totalTHB.toLocaleString()}</span>
         </div>
       </div>
+
+      {/* Discount button */}
+      <button
+        onClick={() => onSetDiscount(orders)}
+        disabled={isLoading}
+        className={`w-full flex items-center justify-center gap-2 font-semibold py-2 rounded-xl text-sm mb-2 border transition-colors disabled:opacity-40 ${
+          discountAmt > 0
+            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+            : "bg-orange/10 border-orange/20 text-orange hover:bg-orange/20"
+        }`}
+      >
+        💸 {discountAmt > 0 ? `ส่วนลด ฿${discountAmt.toLocaleString()} — แก้ไข` : "เพิ่มส่วนลด"}
+      </button>
 
       {/* Per-item kitchen-done acknowledgment — dismiss alert as items complete */}
       {unackedReadyItems.length > 0 && (

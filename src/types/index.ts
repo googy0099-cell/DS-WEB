@@ -87,7 +87,7 @@ export interface OrderWithItems {
   createdAt: string;
   kitchenServedAt: string | null;
   payment?: { id: number; slipUrl: string | null; status: string; method: string; amountTHB: number } | null;
-  bill?: { id: number; name: string; color: string; table: { number: number } } | null;
+  bill?: { id: number; name: string; color: string; table: { number: number }; discountType: string | null; discountValue: number | null; discountAmount: number | null; discountNote: string | null } | null;
   items: {
     id: number;
     quantity: number;
