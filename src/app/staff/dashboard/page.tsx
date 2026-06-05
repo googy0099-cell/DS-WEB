@@ -24,6 +24,8 @@ export default function HrDashboardPage() {
   const router = useRouter();
   const role = (session?.user as { role?: string })?.role;
   const [data, setData] = useState<DashboardData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
@@ -34,12 +36,17 @@ export default function HrDashboardPage() {
 
   useEffect(() => {
     if (role !== "OWNER") return;
-    fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
-    const id = setInterval(() => {
-      fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
-    }, 60_000);
+    const load = () =>
+      fetch("/api/hr/dashboard")
+        .then((r) => r.json())
+        .then((d) => { if (d?.error) setLoadError(d.error); else { setData(d); setLoadError(null); } })
+        .catch(() => setLoadError("โหลดข้อมูลไม่ได้ กรุณาลองใหม่"));
+    load();
+    const id = setInterval(load, 60_000);
     return () => clearInterval(id);
-  }, [role]);
+    // retryCount is intentionally included to re-run on manual retry
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, retryCount]);
 
   async function syncSheets() {
     setSyncing(true);
@@ -49,6 +56,17 @@ export default function HrDashboardPage() {
     setSyncing(false);
     setSyncMsg(res.ok ? `✓ ซิงค์แล้ว ${d.synced} รายการ` : `✗ ${d.error}`);
     setTimeout(() => setSyncMsg(""), 4000);
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 px-6">
+        <p className="text-red-400 text-sm text-center">โหลดแดชบอร์ดไม่ได้</p>
+        <p className="text-[#f8f1e5]/30 text-xs text-center break-all">{loadError}</p>
+        <button onClick={() => { setLoadError(null); setRetryCount((n) => n + 1); }} className="text-xs text-[#fb8500] underline">ลองใหม่</button>
+        <StaffNav />
+      </div>
+    );
   }
 
   if (status === "loading" || !data) {
