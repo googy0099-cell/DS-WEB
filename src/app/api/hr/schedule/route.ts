@@ -62,13 +62,17 @@ export async function POST(req: NextRequest) {
 
   const grace = graceMinutes ?? 10;
 
-  const upserted = await db.hrSchedule.upsert({
-    where: { staffId_dayOfWeek: { staffId, dayOfWeek } },
-    update: { startTime, endTime, graceMinutes: grace },
-    create: { staffId, dayOfWeek, startTime, endTime, graceMinutes: grace },
-  });
-
-  return NextResponse.json(upserted);
+  try {
+    const upserted = await db.hrSchedule.upsert({
+      where: { staffId_dayOfWeek: { staffId, dayOfWeek } },
+      update: { startTime, endTime, graceMinutes: grace },
+      create: { staffId, dayOfWeek, startTime, endTime, graceMinutes: grace },
+    });
+    return NextResponse.json(upserted);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function DELETE(req: NextRequest) {

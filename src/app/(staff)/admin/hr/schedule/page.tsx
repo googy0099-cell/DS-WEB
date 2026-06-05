@@ -62,23 +62,29 @@ export default function AdminHrSchedulePage() {
   async function saveDayEdit() {
     if (!dayEdit) return;
     setSaving(true);
-    const res = await fetch("/api/hr/schedule", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(dayEdit),
-    });
-    setSaving(false);
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      setError((d as { error?: string }).error ?? "บันทึกไม่สำเร็จ");
-      return;
+    setError("");
+    try {
+      const res = await fetch("/api/hr/schedule", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dayEdit),
+      });
+      const d = await res.json().catch(() => ({})) as { error?: string; startTime?: string; endTime?: string; graceMinutes?: number };
+      if (!res.ok) {
+        setError(d.error ?? `บันทึกไม่สำเร็จ (${res.status})`);
+        return;
+      }
+      applyScheduleToState(dayEdit.staffId, dayEdit.dayOfWeek, {
+        dayOfWeek: dayEdit.dayOfWeek,
+        startTime: d.startTime ?? dayEdit.startTime,
+        endTime: d.endTime ?? dayEdit.endTime,
+        graceMinutes: d.graceMinutes ?? dayEdit.graceMinutes,
+      });
+      setDayEdit(null);
+    } catch (e) {
+      setError(`เชื่อมต่อไม่ได้: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSaving(false);
     }
-    applyScheduleToState(dayEdit.staffId, dayEdit.dayOfWeek, {
-      dayOfWeek: dayEdit.dayOfWeek,
-      startTime: dayEdit.startTime,
-      endTime: dayEdit.endTime,
-      graceMinutes: dayEdit.graceMinutes,
-    });
-    setDayEdit(null);
   }
 
   async function deleteDay(staffId: number, dayOfWeek: number) {
