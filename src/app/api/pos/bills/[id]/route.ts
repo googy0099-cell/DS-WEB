@@ -8,6 +8,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const billId = Number(id);
   const body = (await req.json()) as { tableId?: number; status?: string; name?: string; color?: string; setTimeAll?: number; addTimeAll?: number };
 
+  try {
   const bill = await db.bill.findUnique({
     where: { id: billId },
     select: {
@@ -122,4 +123,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   return NextResponse.json({ ok: true });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[PATCH /api/pos/bills]", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

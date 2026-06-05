@@ -955,7 +955,11 @@ export default function AdminTimePage() {
 
   async function closeBill(bill: Bill) {
     if (!confirm(`ปิดบิล "${bill.name}" ทั้งหมด?`)) return;
-    await fetch(`/api/pos/bills/${bill.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "CLOSED" }) });
+    const res = await fetch(`/api/pos/bills/${bill.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "CLOSED" }) });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({})) as { error?: string };
+      alert(d.error ?? `ปิดบิลไม่สำเร็จ (${res.status})`);
+    }
     load();
   }
 

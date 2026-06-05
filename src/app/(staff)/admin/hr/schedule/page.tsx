@@ -73,13 +73,8 @@ export default function AdminHrSchedulePage() {
         setError(d.error ?? `บันทึกไม่สำเร็จ (${res.status})`);
         return;
       }
-      applyScheduleToState(dayEdit.staffId, dayEdit.dayOfWeek, {
-        dayOfWeek: dayEdit.dayOfWeek,
-        startTime: d.startTime ?? dayEdit.startTime,
-        endTime: d.endTime ?? dayEdit.endTime,
-        graceMinutes: d.graceMinutes ?? dayEdit.graceMinutes,
-      });
       setDayEdit(null);
+      await fetchData();
     } catch (e) {
       setError(`เชื่อมต่อไม่ได้: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
