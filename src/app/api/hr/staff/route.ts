@@ -4,15 +4,16 @@ import { auth } from "@/lib/auth";
 import bcrypt from "bcryptjs";
 
 export async function GET() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const bkkNow = new Date(Date.now() + 7 * 3600_000);
+  const dateStr = bkkNow.toISOString().slice(0, 10);
+  const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
 
   const staff = await db.hrStaff.findMany({
     include: {
       user: { select: { id: true, firstName: true, lastName: true, avatarUrl: true } },
       attendances: {
-        where: { checkIn: { gte: today }, checkOut: null },
-        take: 1,
+        where: { checkIn: { gte: todayBKK } },
+        select: { checkOut: true },
         orderBy: { checkIn: "desc" },
       },
     },
@@ -25,7 +26,8 @@ export async function GET() {
       userId: s.userId,
       name: `${s.user.firstName} ${s.user.lastName}`.trim(),
       avatarUrl: s.user.avatarUrl,
-      isCheckedIn: s.attendances.length > 0,
+      isCheckedIn: s.attendances.some((a) => a.checkOut === null),
+      hasAttendanceToday: s.attendances.length > 0,
       faceData: s.faceData ?? null,
       hasCredential: !!s.faceData,
     }))

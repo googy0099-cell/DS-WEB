@@ -48,12 +48,23 @@ export async function GET(req: NextRequest) {
       where: { staffId, checkIn: { gte: fromDate, lte: toEnd } },
     });
 
-    let daysWorked = 0;
-    let workMinutes = 0;
+    // Group by BKK date: one work-day per calendar day
+    const byDate = new Map<string, { firstIn: Date; lastOut: Date | null }>();
     for (const a of attendances) {
-      daysWorked += 1;
-      if (a.checkOut) {
-        const ms = a.checkOut.getTime() - a.checkIn.getTime();
+      const key = new Date(a.checkIn.getTime() + BKK).toISOString().slice(0, 10);
+      const entry = byDate.get(key);
+      if (!entry) {
+        byDate.set(key, { firstIn: a.checkIn, lastOut: a.checkOut });
+      } else {
+        if (a.checkIn < entry.firstIn) entry.firstIn = a.checkIn;
+        if (a.checkOut && (!entry.lastOut || a.checkOut > entry.lastOut)) entry.lastOut = a.checkOut;
+      }
+    }
+    const daysWorked = byDate.size;
+    let workMinutes = 0;
+    for (const { firstIn, lastOut } of byDate.values()) {
+      if (lastOut) {
+        const ms = lastOut.getTime() - firstIn.getTime();
         if (ms > 0) workMinutes += Math.floor(ms / 60000);
       }
     }

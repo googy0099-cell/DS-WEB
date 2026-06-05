@@ -12,10 +12,11 @@ const BKK = 7 * 3600_000;
 
 export async function POST(req: NextRequest) {
   try {
-  const { staffId, photoBase64, force } = (await req.json()) as {
+  const { staffId, photoBase64, force, mode } = (await req.json()) as {
     staffId: number;
     photoBase64: string;
     force?: boolean;
+    mode: "checkin" | "checkout";
   };
 
   if (!staffId || !photoBase64) {
@@ -53,26 +54,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Identity passed → record attendance with punctuality status
+  // Identity passed → record attendance
   const now = new Date();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const bkkNow = new Date(Date.now() + BKK);
+  const dateStr = bkkNow.toISOString().slice(0, 10);
+  const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
+  const tomorrowBKK = new Date(todayBKK.getTime() + 86400_000);
 
   const schedule = await getTodaySchedule(staff.id, now);
   const staffName = `${staff.user.firstName} ${staff.user.lastName}`.trim();
 
-  const openRecord = await db.hrAttendance.findFirst({
-    where: { staffId: staff.id, checkIn: { gte: today }, checkOut: null },
-    orderBy: { checkIn: "desc" },
-  });
-
-  if (openRecord) {
+  // ── CHECKOUT ────────────────────────────────────────────────────────────────
+  if (mode === "checkout") {
     // Block checkout if CLOSE checklist is incomplete
     if (!force) {
-      const bkkNow = new Date(Date.now() + BKK);
-      const dateStr = bkkNow.toISOString().slice(0, 10);
-      const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
-      const tomorrowBKK = new Date(todayBKK.getTime() + 86400_000);
       const closeChecklist = await db.hrChecklist.findFirst({
         where: { type: "CLOSE", date: { gte: todayBKK, lt: tomorrowBKK } },
         include: { items: { select: { done: true } } },
@@ -94,34 +89,52 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const status = computeCheckOutStatus(now, schedule);
+    // Find the latest attendance record today (any — open or already closed)
+    const latestRecord = await db.hrAttendance.findFirst({
+      where: { staffId: staff.id, checkIn: { gte: todayBKK } },
+      orderBy: { checkIn: "desc" },
+    });
+    if (!latestRecord) {
+      return NextResponse.json({ error: "ยังไม่ได้เช็คอินวันนี้" }, { status: 404 });
+    }
+
+    const checkOutStatus = computeCheckOutStatus(now, schedule);
     const record = await db.hrAttendance.update({
-      where: { id: openRecord.id },
-      data: { checkOut: now, photoUrl: photoBase64, checkOutStatus: status },
+      where: { id: latestRecord.id },
+      data: { checkOut: now, photoUrl: photoBase64, checkOutStatus },
     });
     notifyCheckin(staffName, "checkout").catch(() => {});
     return NextResponse.json({
       action: "checkout",
       time: record.checkOut,
       staffName,
-      status,
+      status: checkOutStatus,
       similarity: result.similarity,
     });
   }
 
-  const status = computeCheckInStatus(now, schedule);
+  // ── CHECKIN ──────────────────────────────────────────────────────────────────
+  // One record per day — block if already checked in today
+  const existingRecord = await db.hrAttendance.findFirst({
+    where: { staffId: staff.id, checkIn: { gte: todayBKK } },
+  });
+  if (existingRecord) {
+    return NextResponse.json({ error: "เช็คอินวันนี้ไปแล้ว" }, { status: 409 });
+  }
+
+  const checkInStatus = computeCheckInStatus(now, schedule);
   const record = await db.hrAttendance.create({
     data: {
       staffId: staff.id,
       checkIn: now,
       photoUrl: photoBase64,
-      checkInStatus: status,
+      checkInStatus,
     },
   });
 
   // Auto-deduction for late check-in
   let lateDeductionAmount = 0;
-  if (status === "LATE") {
+  if (checkInStatus === "LATE") {
     try {
       const lateConfig = await db.hrLateConfig.findFirst();
       if (lateConfig && lateConfig.deductionAmount > 0) {
@@ -150,7 +163,7 @@ export async function POST(req: NextRequest) {
     action: "checkin",
     time: record.checkIn,
     staffName,
-    status,
+    status: checkInStatus,
     similarity: result.similarity,
     ...(lateDeductionAmount > 0 && { lateDeduction: lateDeductionAmount }),
   });
