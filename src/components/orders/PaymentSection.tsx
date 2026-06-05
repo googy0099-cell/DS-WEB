@@ -153,7 +153,10 @@ export default function PaymentSection({ orderId, totalTHB, orderName, billId }:
   if (step === "qr") {
     return (
       <div>
-        <button onClick={() => setStep("select")} className="text-xs text-gray-400 hover:text-navy mb-3">
+        <button
+          onClick={() => setStep("select")}
+          className="flex items-center gap-1.5 text-sm font-semibold text-navy/60 hover:text-navy mb-4 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+        >
           ← เปลี่ยนวิธีชำระ
         </button>
 
@@ -247,22 +250,38 @@ export default function PaymentSection({ orderId, totalTHB, orderName, billId }:
 
   if (step === "counter") {
     return (
-      <div className="text-center py-2">
-        <div className="text-5xl mb-3">💵</div>
-        <p className="font-bold text-navy text-lg mb-1">กรุณาชำระที่เคาน์เตอร์</p>
-        <p className="text-gray-400 text-sm mb-3">แจ้งชื่อ <span className="font-semibold text-navy">{orderName}</span> กับพนักงาน</p>
-        <p className="text-3xl font-bold text-orange">฿{totalTHB}</p>
+      <div>
+        <button
+          onClick={() => setStep("select")}
+          className="flex items-center gap-1.5 text-sm font-semibold text-navy/60 hover:text-navy mb-4 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+        >
+          ← เปลี่ยนวิธีชำระ
+        </button>
+        <div className="text-center py-2">
+          <div className="text-5xl mb-3">💵</div>
+          <p className="font-bold text-navy text-lg mb-1">กรุณาชำระที่เคาน์เตอร์</p>
+          <p className="text-gray-400 text-sm mb-3">แจ้งชื่อ <span className="font-semibold text-navy">{orderName}</span> กับพนักงาน</p>
+          <p className="text-3xl font-bold text-orange">฿{totalTHB}</p>
+        </div>
       </div>
     );
   }
 
   if (step === "tab") {
     return (
-      <div className="text-center py-2">
-        <div className="text-5xl mb-3">🧾</div>
-        <p className="font-bold text-navy text-lg mb-1">บันทึกในบิลแล้ว!</p>
-        <p className="text-gray-400 text-sm mb-1">รอพนักงานรับออเดอร์แล้วส่งครัว</p>
-        <p className="text-gray-400 text-sm">ชำระเงินรวมตอนเช็กเอาท์กับพนักงาน</p>
+      <div>
+        <button
+          onClick={() => setStep("select")}
+          className="flex items-center gap-1.5 text-sm font-semibold text-navy/60 hover:text-navy mb-4 px-3 py-2 rounded-xl hover:bg-gray-100 transition-colors"
+        >
+          ← เปลี่ยนวิธีชำระ
+        </button>
+        <div className="text-center py-2">
+          <div className="text-5xl mb-3">🧾</div>
+          <p className="font-bold text-navy text-lg mb-1">บันทึกในบิลแล้ว!</p>
+          <p className="text-gray-400 text-sm mb-1">รอพนักงานรับออเดอร์แล้วส่งครัว</p>
+          <p className="text-gray-400 text-sm">ชำระเงินรวมตอนเช็กเอาท์กับพนักงาน</p>
+        </div>
       </div>
     );
   }

@@ -639,6 +639,9 @@ model HrLateConfig {
   deductionType         String   @default("FIXED") @map("deduction_type")
   deductionAmount       Int      @default(0) @map("deduction_amount")
   absentDeductionAmount Int      @default(0) @map("absent_deduction_amount")
+  absentDeductionType   String   @default("FIXED") @map("absent_deduction_type")
+  taskDeductionAmount   Int      @default(0) @map("task_deduction_amount")
+  taskDeductionType     String   @default("FIXED") @map("task_deduction_type")
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
   @@map("hr_late_config")
 }

@@ -12,6 +12,16 @@ type DashboardData = {
 
 type AbsentStaff = { staffId: number; name: string; alreadyDeducted: boolean };
 
+type OverdueTask = {
+  taskId: number;
+  title: string;
+  status: string;
+  deadline: string;
+  daysOverdue: number;
+  staffId: number;
+  staffName: string;
+};
+
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 }
@@ -27,20 +37,29 @@ export default function AdminHrDashboardPage() {
   const [absentList, setAbsentList] = useState<AbsentStaff[]>([]);
   const [absentLoading, setAbsentLoading] = useState(false);
   const [absentMsg, setAbsentMsg] = useState("");
+  const [overdueTasks, setOverdueTasks] = useState<OverdueTask[]>([]);
+  const [taskDeductLoading, setTaskDeductLoading] = useState<number | null>(null);
+  const [taskDeductMsg, setTaskDeductMsg] = useState("");
 
   const fetchAbsent = useCallback(async () => {
     const res = await fetch(`/api/hr/absent?date=${todayBkkStr()}`);
     if (res.ok) setAbsentList(await res.json());
   }, []);
 
+  const fetchOverdueTasks = useCallback(async () => {
+    const res = await fetch("/api/hr/task-deduction");
+    if (res.ok) setOverdueTasks(await res.json());
+  }, []);
+
   useEffect(() => {
     fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
     fetchAbsent();
+    fetchOverdueTasks();
     const id = setInterval(() => {
       fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
     }, 60_000);
     return () => clearInterval(id);
-  }, [fetchAbsent]);
+  }, [fetchAbsent, fetchOverdueTasks]);
 
   async function syncSheets() {
     setSyncing(true);
@@ -50,6 +69,25 @@ export default function AdminHrDashboardPage() {
     setSyncing(false);
     setSyncMsg(res.ok ? `✓ ซิงค์แล้ว ${d.synced} รายการ` : `✗ ${d.error}`);
     setTimeout(() => setSyncMsg(""), 4000);
+  }
+
+  async function applyTaskDeduction(taskId: number) {
+    setTaskDeductLoading(taskId);
+    setTaskDeductMsg("");
+    const res = await fetch("/api/hr/task-deduction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId }),
+    });
+    const d = await res.json();
+    setTaskDeductLoading(null);
+    if (res.ok) {
+      setTaskDeductMsg(`✓ หักแล้ว −฿${d.amount?.toLocaleString()}`);
+      fetchOverdueTasks();
+    } else {
+      setTaskDeductMsg(`✗ ${d.error}`);
+    }
+    setTimeout(() => setTaskDeductMsg(""), 5000);
   }
 
   async function applyAbsent(staffIds: number[]) {
@@ -80,6 +118,7 @@ export default function AdminHrDashboardPage() {
   const closeChecklist = data.checklists.find((c) => c.type === "CLOSE");
   const totalTasks = Object.values(data.taskCounts).reduce((a, b) => a + b, 0);
   const pendingAbsent = absentList.filter((a) => !a.alreadyDeducted);
+  const overdueCount = overdueTasks.length;
 
   return (
     <div>
@@ -110,17 +149,17 @@ export default function AdminHrDashboardPage() {
         <div className="bg-white border border-sand/50 rounded-2xl p-4">
           <p className="text-gray-400 text-xs mb-1">ขาดงานวันนี้</p>
           <p className={`text-2xl font-bold ${pendingAbsent.length > 0 ? "text-red-500" : "text-gray-300"}`}>{pendingAbsent.length}</p>
-          <p className="text-gray-400 text-xs">มีตารางงานวันนี้</p>
+          <p className="text-gray-400 text-xs">รอหักเงิน</p>
+        </div>
+        <div className="bg-white border border-sand/50 rounded-2xl p-4">
+          <p className="text-gray-400 text-xs mb-1">งานเกินกำหนด</p>
+          <p className={`text-2xl font-bold ${overdueCount > 0 ? "text-purple-600" : "text-gray-300"}`}>{overdueCount}</p>
+          <p className="text-gray-400 text-xs">รายการ</p>
         </div>
         <div className="bg-white border border-sand/50 rounded-2xl p-4">
           <p className="text-gray-400 text-xs mb-1">งานทั้งหมด</p>
           <p className="text-2xl font-bold text-orange">{totalTasks}</p>
           <p className="text-gray-400 text-xs">เสร็จ {data.taskCounts["DONE"] ?? 0} รายการ</p>
-        </div>
-        <div className="bg-white border border-sand/50 rounded-2xl p-4">
-          <p className="text-gray-400 text-xs mb-1">กำลังทำงาน</p>
-          <p className="text-2xl font-bold text-blue-500">{data.attendances.filter((a) => !a.checkOut).length}</p>
-          <p className="text-gray-400 text-xs">ยังไม่เช็คเอาท์</p>
         </div>
       </div>
 
@@ -172,8 +211,8 @@ export default function AdminHrDashboardPage() {
         </div>
 
         {/* Checklist status */}
-        <div className="bg-white border border-sand/50 rounded-2xl p-5">
-          <h2 className="font-bold text-navy mb-3">เช็คลิสต์วันนี้</h2>
+        <div className="bg-white border border-sand/50 rounded-2xl p-5 space-y-4">
+          <h2 className="font-bold text-navy">เช็คลิสต์วันนี้</h2>
           <div className="space-y-3">
             {[
               { label: "🌅 เปิดร้าน", cl: openChecklist },
@@ -204,6 +243,40 @@ export default function AdminHrDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Overdue tasks */}
+      {overdueTasks.length > 0 && (
+        <div className="bg-white border border-sand/50 rounded-2xl p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-navy">งานเกินกำหนด</h2>
+            {taskDeductMsg && (
+              <p className={`text-xs font-semibold ${taskDeductMsg.startsWith("✓") ? "text-emerald-600" : "text-red-500"}`}>{taskDeductMsg}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            {overdueTasks.map((t) => (
+              <div key={t.taskId} className="bg-purple-50 border border-purple-200 rounded-xl px-4 py-3 flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-navy truncate">{t.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {t.staffName} · เกินกำหนด <span className="text-red-500 font-semibold">{t.daysOverdue} วัน</span>
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    สถานะ: {t.status === "TODO" ? "ยังไม่ได้เริ่ม" : "กำลังทำ"} · กำหนด {new Date(t.deadline).toLocaleDateString("th-TH")}
+                  </p>
+                </div>
+                <button
+                  onClick={() => applyTaskDeduction(t.taskId)}
+                  disabled={taskDeductLoading === t.taskId}
+                  className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-xl font-semibold disabled:opacity-50 shrink-0 whitespace-nowrap"
+                >
+                  {taskDeductLoading === t.taskId ? "..." : "หักเงิน"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Staff grid */}
       <div className="bg-white border border-sand/50 rounded-2xl p-5 mb-6">

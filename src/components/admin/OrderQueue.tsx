@@ -2319,7 +2319,7 @@ export default function OrderQueue() {
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">หรือใส่เอง</p>
                 <div className="flex gap-1.5">
-                  <div className="flex rounded-xl border border-sand overflow-hidden">
+                  <div className="flex rounded-xl border border-sand overflow-hidden shrink-0">
                     <button onClick={() => setDiscountPickType("FIXED")}
                       className={`px-4 py-2 text-sm font-bold transition-colors ${discountPickType === "FIXED" ? "bg-orange text-white" : "bg-white text-gray-400"}`}>฿</button>
                     <button onClick={() => setDiscountPickType("PERCENT")}

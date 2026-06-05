@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { computeDailyDeductionAmount } from "@/lib/hr-attendance";
 
 const BKK = 7 * 3600_000;
 
@@ -83,14 +84,34 @@ export async function POST(req: NextRequest) {
     const month = targetDate.getMonth() + 1;
     const year = targetDate.getFullYear();
 
+    // Load staff payroll info if PERCENT mode (need per-staff daily wage)
+    const isPercent = cfg.absentDeductionType === "PERCENT";
+    const staffMap = isPercent
+      ? await db.hrStaff.findMany({
+          where: { id: { in: staffIds } },
+          select: { id: true, baseSalary: true, payType: true },
+        })
+      : [];
+    const staffById = Object.fromEntries(staffMap.map((s) => [s.id, s]));
+
+    const typeLabel = isPercent ? ` (${cfg.absentDeductionAmount}% ของค่าจ้างรายวัน)` : "";
+
     let applied = 0;
     for (const staffId of staffIds) {
       try {
+        const amount = isPercent
+          ? computeDailyDeductionAmount(
+              1,
+              { deductionType: "PERCENT", deductionAmount: cfg.absentDeductionAmount },
+              { baseSalary: staffById[staffId]?.baseSalary ?? 0, payType: staffById[staffId]?.payType ?? "MONTHLY" }
+            )
+          : cfg.absentDeductionAmount;
+
         await db.hrDeduction.create({
           data: {
             staffId,
-            amount: cfg.absentDeductionAmount,
-            reason: "ขาดงาน",
+            amount,
+            reason: `ขาดงาน${typeLabel}`,
             note: `วันที่ ${date}`,
             month,
             year,
