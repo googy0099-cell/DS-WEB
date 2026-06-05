@@ -133,7 +133,7 @@ export async function PATCH(
 
   // Confirm cash payment (with or without prior payment record)
   if ("confirmCash" in body) {
-    const { receivedAmount, changeAmount } = body as { receivedAmount: number; changeAmount?: number };
+    const { receivedAmount, changeAmount, amountTHB: amountOverride } = body as { receivedAmount: number; changeAmount?: number; amountTHB?: number };
     const orderFull = await db.order.findUnique({
       where: { id: orderId },
       select: {
@@ -151,10 +151,11 @@ export async function PATCH(
       },
     });
     if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
+    const finalTHB = amountOverride != null ? Math.max(0, amountOverride) : orderFull.totalTHB;
     const confirmedAt = new Date();
     const confirmData = {
       method: "CASH" as const,
-      amountTHB: orderFull.totalTHB,
+      amountTHB: finalTHB,
       status: "CONFIRMED",
       confirmedAt,
       receivedAmount,
@@ -166,16 +167,16 @@ export async function PATCH(
       update: confirmData,
     });
     await createSessionsFromStaffNote(payment.staffNote);
-    // Award loyalty + dice points at payment time
-    const pts = Math.floor(orderFull.totalTHB / 10);
+    // Award loyalty + dice points at payment time (use finalTHB after discount)
+    const pts = Math.floor(finalTHB / 10);
     if (orderFull.userId && pts > 0) {
       await db.user.update({
         where: { id: orderFull.userId },
-        data: { points: { increment: pts }, totalSpentTHB: { increment: orderFull.totalTHB } },
+        data: { points: { increment: pts }, totalSpentTHB: { increment: finalTHB } },
       });
     }
     if (orderFull.userId) {
-      const dice = Math.floor(orderFull.totalTHB / 49);
+      const dice = Math.floor(finalTHB / 49);
       if (dice > 0) await db.user.update({ where: { id: orderFull.userId }, data: { dicePoints: { increment: dice } } });
     }
     // Only mark SERVED if kitchen has already finished; otherwise PAID (waiting kitchen)
@@ -194,7 +195,7 @@ export async function PATCH(
       where: { orderId },
       create: {
         orderId, orderName: orderFull.orderName ?? "",
-        totalTHB: orderFull.totalTHB, paymentMethod: "CASH",
+        totalTHB: finalTHB, paymentMethod: "CASH",
         locationLabel, itemsJson: JSON.stringify(orderFull.items), confirmedAt,
       },
       update: {},

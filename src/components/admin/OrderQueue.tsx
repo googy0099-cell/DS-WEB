@@ -478,9 +478,14 @@ export default function OrderQueue() {
   // Discount state shared by cash + scan bill-group modals
   const [discount, setDiscount] = useState<{ type: "PERCENT" | "FIXED"; value: string; note: string }>
     ({ type: "PERCENT", value: "", note: "" });
-  // Discount preset picker for bills
+  // Transient discount per single order (not stored in DB)
+  const [orderDiscounts, setOrderDiscounts] = useState<
+    Record<number, { type: "PERCENT" | "FIXED"; value: number; note: string; amount: number }>
+  >({});
+  // Discount preset picker for bills and single orders
   const [discountModal, setDiscountModal] = useState<{
-    billId: number; billName: string; total: number; currentAmount: number | null;
+    billId?: number; billName?: string; total: number; currentAmount: number | null;
+    orderId?: number;
   } | null>(null);
   const [discountPresets, setDiscountPresets] = useState<{ id: number; nameTh: string; type: string; value: number }[]>([]);
   const [discountPickType, setDiscountPickType] = useState<"PERCENT" | "FIXED">("FIXED");
@@ -946,14 +951,16 @@ export default function OrderQueue() {
   async function confirmCashPayment() {
     if (!cashOrder) return;
     const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
-    if (received < cashOrder.totalTHB) return;
-    const change = received - cashOrder.totalTHB;
+    const discAmt = orderDiscounts[cashOrder.id]?.amount ?? 0;
+    const finalTotal = cashOrder.totalTHB - discAmt;
+    if (received < finalTotal) return;
+    const change = received - finalTotal;
     const order = cashOrder;
     setLoading(order.id, true);
     await fetch(`/api/orders/${order.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmCash: true, receivedAmount: received, changeAmount: change }),
+      body: JSON.stringify({ confirmCash: true, receivedAmount: received, changeAmount: change, ...(discAmt > 0 ? { amountTHB: finalTotal } : {}) }),
     });
     setCashOrder(null);
     setCashInputStr("");
@@ -996,6 +1003,18 @@ export default function OrderQueue() {
     setDiscount({ type: "PERCENT", value: "", note: "" });
   }
 
+  function openOrderDiscountModal(order: OrderWithItems) {
+    const existing = orderDiscounts[order.id];
+    setDiscountPickType(existing?.type ?? "FIXED");
+    setDiscountPickValue(existing ? String(existing.value) : "");
+    setDiscountPickNote(existing?.note ?? "");
+    setDiscountModal({ orderId: order.id, total: order.totalTHB, currentAmount: existing?.amount ?? null });
+  }
+
+  function removeOrderDiscount(orderId: number) {
+    setOrderDiscounts((prev) => { const n = { ...prev }; delete n[orderId]; return n; });
+  }
+
   function openDiscountModal(orders: OrderWithItems[]) {
     const bill = orders[0].bill;
     const total = orders.reduce((s, o) => s + o.totalTHB, 0);
@@ -1015,6 +1034,22 @@ export default function OrderQueue() {
     if (!discountModal) return;
     const n = Number(discountPickValue);
     if (!n || n <= 0) return;
+
+    // Single-order mode: store in local state, no API call
+    if (discountModal.orderId != null) {
+      const rawTotal = discountModal.total;
+      const amount = discountPickType === "PERCENT"
+        ? Math.round(rawTotal * Math.min(n, 100) / 100)
+        : Math.min(n, rawTotal);
+      setOrderDiscounts((prev) => ({
+        ...prev,
+        [discountModal.orderId!]: { type: discountPickType, value: n, note: discountPickNote.trim(), amount },
+      }));
+      setDiscountModal(null);
+      return;
+    }
+
+    // Bill mode: persist to DB
     setDiscountSaving(true);
     try {
       await fetch(`/api/pos/bills/${discountModal.billId}/set-discount`, {
@@ -1129,10 +1164,11 @@ export default function OrderQueue() {
           body: JSON.stringify({ status: "CONFIRMED" }),
         });
       }
+      const discountAmount = orderDiscounts[order.id]?.amount ?? 0;
       const res = await fetch("/api/payment/qr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id }),
+        body: JSON.stringify({ orderId: order.id, ...(discountAmount > 0 ? { discountAmount } : {}) }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -1339,6 +1375,9 @@ export default function OrderQueue() {
                 kitchenItemAcked={kitchenItemAcked}
                 onAckKitchenItems={ackKitchenItems}
                 onOpenSlip={setSlipLightbox}
+                onSetOrderDiscount={openOrderDiscountModal}
+                onRemoveOrderDiscount={removeOrderDiscount}
+                orderDiscountAmount={orderDiscounts[order.id]?.amount}
               />
             ))}
           </div>
@@ -1431,6 +1470,9 @@ export default function OrderQueue() {
                   kitchenItemAcked={kitchenItemAcked}
                   onAckKitchenItems={ackKitchenItems}
                   onOpenSlip={setSlipLightbox}
+                  onSetOrderDiscount={openOrderDiscountModal}
+                  onRemoveOrderDiscount={removeOrderDiscount}
+                  orderDiscountAmount={orderDiscounts[item.order.id]?.amount}
                 />
               )
             )}
@@ -1572,8 +1614,11 @@ export default function OrderQueue() {
 
       {/* Cash payment modal */}
       {cashOrder && (() => {
+        const orderDisc = orderDiscounts[cashOrder.id];
+        const discAmt = orderDisc?.amount ?? 0;
+        const finalTotal = cashOrder.totalTHB - discAmt;
         const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
-        const change = received - cashOrder.totalTHB;
+        const change = received - finalTotal;
         function pressDigit(d: string) {
           setCashInputStr((prev) => (prev === "" || prev === "0") ? d : prev + d);
         }
@@ -1590,7 +1635,9 @@ export default function OrderQueue() {
               <p className="text-sm text-center text-gray-500">{cashOrder.orderName}</p>
               <div className="text-center">
                 <p className="text-xs text-gray-400">ยอดที่ต้องชำระ</p>
-                <p className="text-3xl font-bold text-orange">฿{cashOrder.totalTHB.toLocaleString()}</p>
+                {discAmt > 0 && <p className="text-xs text-gray-400 line-through">฿{cashOrder.totalTHB.toLocaleString()}</p>}
+                {discAmt > 0 && <p className="text-xs text-green-600 font-semibold">💸 {orderDisc!.note || "ส่วนลด"} −฿{discAmt.toLocaleString()}</p>}
+                <p className="text-3xl font-bold text-orange">฿{finalTotal.toLocaleString()}</p>
               </div>
 
               {/* Amount display */}
@@ -1600,11 +1647,11 @@ export default function OrderQueue() {
 
               {/* Change / shortfall */}
               {cashInputStr && (
-                <div className={`rounded-xl p-2.5 text-center ${received >= cashOrder.totalTHB ? "bg-green-50" : "bg-red-50"}`}>
-                  {received >= cashOrder.totalTHB ? (
+                <div className={`rounded-xl p-2.5 text-center ${received >= finalTotal ? "bg-green-50" : "bg-red-50"}`}>
+                  {received >= finalTotal ? (
                     <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
                   ) : (
-                    <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(cashOrder.totalTHB - received).toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(finalTotal - received).toLocaleString()}</p>
                   )}
                 </div>
               )}
@@ -2303,7 +2350,7 @@ export default function OrderQueue() {
                 <button onClick={() => setDiscountModal(null)}
                   className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-medium">ยกเลิก</button>
                 {discountModal.currentAmount != null && (
-                  <button onClick={async () => { await removeBillDiscount(discountModal.billId); setDiscountModal(null); }}
+                  <button onClick={async () => { if (discountModal.billId != null) await removeBillDiscount(discountModal.billId); else if (discountModal.orderId != null) removeOrderDiscount(discountModal.orderId); setDiscountModal(null); }}
                     className="px-4 py-2.5 rounded-xl bg-red-50 text-red-500 text-sm font-medium">ลบส่วนลด</button>
                 )}
                 <button onClick={applyBillDiscount} disabled={!discountPickValue || Number(discountPickValue) <= 0 || discountSaving}
@@ -2775,6 +2822,9 @@ function OrderCard({
   kitchenItemAcked,
   onAckKitchenItems,
   onOpenSlip,
+  onSetOrderDiscount,
+  onRemoveOrderDiscount,
+  orderDiscountAmount,
 }: {
   order: OrderWithItems;
   isNew: boolean;
@@ -2796,6 +2846,9 @@ function OrderCard({
   kitchenItemAcked: Set<number>;
   onAckKitchenItems: (itemIds: number[]) => void;
   onOpenSlip: (url: string) => void;
+  onSetOrderDiscount?: (order: OrderWithItems) => void;
+  onRemoveOrderDiscount?: (orderId: number) => void;
+  orderDiscountAmount?: number;
 }) {
   const badge = resolveStatusBadge(order);
   const cfg = STATUS_CONFIG[order.status as keyof typeof STATUS_CONFIG] ?? STATUS_CONFIG.PENDING;
@@ -3013,6 +3066,16 @@ function OrderCard({
         ) : isPendingCash ? (
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">รับออเดอร์ · เลือกวิธีชำระเงิน</p>
+            {orderDiscountAmount && orderDiscountAmount > 0 ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              </div>
+            ) : (
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+                💸 เพิ่มส่วนลด
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -3058,6 +3121,16 @@ function OrderCard({
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
               🧾 รอชำระตอนเช็กเอาท์ — เมื่อลูกค้าพร้อมชำระเลือกวิธีด้านล่าง
             </div>
+            {orderDiscountAmount && orderDiscountAmount > 0 ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              </div>
+            ) : (
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+                💸 เพิ่มส่วนลด
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -3082,6 +3155,16 @@ function OrderCard({
         ) : needsMethod ? (
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
+            {orderDiscountAmount && orderDiscountAmount > 0 ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              </div>
+            ) : (
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+                💸 เพิ่มส่วนลด
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -3106,6 +3189,16 @@ function OrderCard({
         ) : isCashPay ? (
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
+            {orderDiscountAmount && orderDiscountAmount > 0 ? (
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              </div>
+            ) : (
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+                💸 เพิ่มส่วนลด
+              </button>
+            )}
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
