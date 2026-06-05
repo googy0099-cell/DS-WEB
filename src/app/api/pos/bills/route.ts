@@ -77,9 +77,10 @@ export async function POST(req: NextRequest) {
   const startsAt = new Date(Date.now() + PREP_SECONDS * 1000);
   const bill = await db.bill.create({
     data: { name: name.trim(), tableId, startsAt, color: billColor },
+    select: { id: true, name: true, color: true, tableId: true, startsAt: true, status: true, createdAt: true, updatedAt: true },
   });
 
-  await db.table.update({ where: { id: tableId }, data: { isOccupied: true } });
+  await db.table.update({ where: { id: tableId }, data: { isOccupied: true }, select: { id: true } });
 
   return NextResponse.json(bill, { status: 201 });
 }

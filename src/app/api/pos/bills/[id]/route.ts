@@ -23,17 +23,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Rename bill
   if (body.name !== undefined) {
-    await db.bill.update({ where: { id: billId }, data: { name: body.name.trim() } });
+    await db.bill.update({ where: { id: billId }, data: { name: body.name.trim() }, select: { id: true } });
   }
 
   // Change bill color
   if (body.color !== undefined) {
-    await db.bill.update({ where: { id: billId }, data: { color: body.color } });
+    await db.bill.update({ where: { id: billId }, data: { color: body.color }, select: { id: true } });
   }
 
   // Change table → snapshot each session's remaining time before writing (updateMany bumps updatedAt)
   if (body.tableId !== undefined) {
-    await db.bill.update({ where: { id: billId }, data: { tableId: body.tableId } });
+    await db.bill.update({ where: { id: billId }, data: { tableId: body.tableId }, select: { id: true } });
     const now = Date.now();
     for (const s of bill.sessions) {
       const current = remainingSeconds(s.timeRemaining, bill.startsAt, s.updatedAt, now);
@@ -80,7 +80,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       }
     }
     await db.playerSession.updateMany({ where: { billId }, data: { status: "PAID" } });
-    await db.bill.update({ where: { id: billId }, data: { status: "CLOSED" } });
+    await db.bill.update({ where: { id: billId }, data: { status: "CLOSED" }, select: { id: true } });
 
     // Free the (current) table if no other active bill on it
     const others = await db.bill.count({

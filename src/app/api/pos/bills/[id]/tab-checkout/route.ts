@@ -106,6 +106,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await db.bill.update({
       where: { id: Number(id) },
       data: { discountType, discountValue, discountAmount, discountNote: discountNote ?? null },
+      select: { id: true },
     });
   }
 
