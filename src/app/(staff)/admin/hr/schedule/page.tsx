@@ -29,7 +29,7 @@ export default function AdminHrSchedulePage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/hr/schedule");
+      const res = await fetch(`/api/hr/schedule?t=${Date.now()}`);
       if (res.status === 401) { setError("ต้องเป็นเจ้าของร้านเท่านั้น"); return; }
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? `เกิดข้อผิดพลาด (${res.status})`); return; }
@@ -40,6 +40,25 @@ export default function AdminHrSchedulePage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  function applyScheduleToState(staffId: number, dayOfWeek: number, sc: Schedule) {
+    setStaff((prev) => prev.map((s) => {
+      if (s.id !== staffId) return s;
+      const exists = s.schedules.some((x) => x.dayOfWeek === dayOfWeek);
+      return {
+        ...s,
+        schedules: exists
+          ? s.schedules.map((x) => x.dayOfWeek === dayOfWeek ? sc : x)
+          : [...s.schedules, sc].sort((a, b) => a.dayOfWeek - b.dayOfWeek),
+      };
+    }));
+  }
+
+  function removeScheduleFromState(staffId: number, dayOfWeek: number) {
+    setStaff((prev) => prev.map((s) =>
+      s.id !== staffId ? s : { ...s, schedules: s.schedules.filter((x) => x.dayOfWeek !== dayOfWeek) }
+    ));
+  }
+
   async function saveDayEdit() {
     if (!dayEdit) return;
     setSaving(true);
@@ -48,8 +67,18 @@ export default function AdminHrSchedulePage() {
       body: JSON.stringify(dayEdit),
     });
     setSaving(false);
-    if (!res.ok) { const d = await res.json(); setError(d.error ?? "บันทึกไม่สำเร็จ"); return; }
-    setDayEdit(null); fetchData();
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setError((d as { error?: string }).error ?? "บันทึกไม่สำเร็จ");
+      return;
+    }
+    applyScheduleToState(dayEdit.staffId, dayEdit.dayOfWeek, {
+      dayOfWeek: dayEdit.dayOfWeek,
+      startTime: dayEdit.startTime,
+      endTime: dayEdit.endTime,
+      graceMinutes: dayEdit.graceMinutes,
+    });
+    setDayEdit(null);
   }
 
   async function deleteDay(staffId: number, dayOfWeek: number) {
@@ -58,7 +87,7 @@ export default function AdminHrSchedulePage() {
       method: "DELETE", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ staffId, dayOfWeek }),
     });
-    fetchData();
+    removeScheduleFromState(staffId, dayOfWeek);
   }
 
   async function saveBatch() {
@@ -71,8 +100,10 @@ export default function AdminHrSchedulePage() {
       })
     ));
     setSaving(false);
+    [...batch.days].forEach((day) =>
+      applyScheduleToState(batch.staffId, day, { dayOfWeek: day, startTime: batch.startTime, endTime: batch.endTime, graceMinutes: batch.graceMinutes })
+    );
     setBatch(null);
-    fetchData();
   }
 
   function toggleBatchDay(day: number) {
