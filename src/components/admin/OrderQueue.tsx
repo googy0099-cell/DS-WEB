@@ -3067,16 +3067,16 @@ function OrderCard({
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">รับออเดอร์ · เลือกวิธีชำระเงิน</p>
             {orderDiscountAmount && orderDiscountAmount > 0 ? (
-              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
-                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                <p className="text-sm text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">ลบ</button>
               </div>
             ) : (
-              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-orange border-2 border-dashed border-orange/40 hover:border-orange hover:bg-orange/5 rounded-xl py-2.5 transition-colors">
                 💸 เพิ่มส่วนลด
               </button>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
                 disabled={isLoading}
@@ -3091,11 +3091,11 @@ function OrderCard({
               >
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
               </button>
+              <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors">
+                <span className="text-xl">✂️</span>แบ่งจ่าย
+              </button>
             </div>
-            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
-              💵📷 แบ่งจ่าย
-            </button>
           </div>
         ) : isPendingQrNoSlip ? (
           <div className="mb-2 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center text-sm text-blue-600">
@@ -3122,16 +3122,16 @@ function OrderCard({
               🧾 รอชำระตอนเช็กเอาท์ — เมื่อลูกค้าพร้อมชำระเลือกวิธีด้านล่าง
             </div>
             {orderDiscountAmount && orderDiscountAmount > 0 ? (
-              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
-                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                <p className="text-sm text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">ลบ</button>
               </div>
             ) : (
-              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-orange border-2 border-dashed border-orange/40 hover:border-orange hover:bg-orange/5 rounded-xl py-2.5 transition-colors">
                 💸 เพิ่มส่วนลด
               </button>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
                 disabled={isLoading}
@@ -3144,28 +3144,28 @@ function OrderCard({
                 disabled={isLoading}
                 className="flex flex-col items-center gap-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
               >
-                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
+              </button>
+              <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors">
+                <span className="text-xl">✂️</span>แบ่งจ่าย
               </button>
             </div>
-            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
-              💵📷 แบ่งจ่าย
-            </button>
           </div>
         ) : needsMethod ? (
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
             {orderDiscountAmount && orderDiscountAmount > 0 ? (
-              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
-                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                <p className="text-sm text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">ลบ</button>
               </div>
             ) : (
-              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-orange border-2 border-dashed border-orange/40 hover:border-orange hover:bg-orange/5 rounded-xl py-2.5 transition-colors">
                 💸 เพิ่มส่วนลด
               </button>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
                 disabled={isLoading}
@@ -3178,28 +3178,28 @@ function OrderCard({
                 disabled={isLoading}
                 className="flex flex-col items-center gap-1 bg-blue-600 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60"
               >
-                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
+                <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
+              </button>
+              <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors">
+                <span className="text-xl">✂️</span>แบ่งจ่าย
               </button>
             </div>
-            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
-              💵📷 แบ่งจ่าย
-            </button>
           </div>
         ) : isCashPay ? (
           <div className="mb-2 space-y-2">
             <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
             {orderDiscountAmount && orderDiscountAmount > 0 ? (
-              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                <p className="text-xs text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
-                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600">ลบ</button>
+              <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                <p className="text-sm text-green-700 font-semibold">💸 ส่วนลด −฿{orderDiscountAmount.toLocaleString()}</p>
+                <button onClick={() => onRemoveOrderDiscount?.(order.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">ลบ</button>
               </div>
             ) : (
-              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full text-xs text-gray-500 hover:text-orange border border-dashed border-gray-300 hover:border-orange rounded-xl py-1.5 transition-colors">
+              <button onClick={() => onSetOrderDiscount?.(order)} className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-orange border-2 border-dashed border-orange/40 hover:border-orange hover:bg-orange/5 rounded-xl py-2.5 transition-colors">
                 💸 เพิ่มส่วนลด
               </button>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
                 disabled={isLoading}
@@ -3214,11 +3214,11 @@ function OrderCard({
               >
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
               </button>
+              <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+                className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors">
+                <span className="text-xl">✂️</span>แบ่งจ่าย
+              </button>
             </div>
-            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
-              💵📷 แบ่งจ่าย
-            </button>
           </div>
         ) : isQrNoSlip ? (
           <div className="mb-2 space-y-2">
