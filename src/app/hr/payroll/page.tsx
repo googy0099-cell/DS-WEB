@@ -13,7 +13,10 @@ type Deduction = {
 type StaffPayroll = {
   id: number;
   name: string;
+  payType: string;
+  payRate: number;
   baseSalary: number;
+  gross: number;
   summary: {
     daysWorked: number;
     onTimeCount: number;
@@ -38,6 +41,60 @@ function hoursLabel(min: number) {
   const h = Math.floor(min / 60);
   const m = min % 60;
   return `${h}ชม. ${m}น.`;
+}
+
+const PAY_TYPE_LABEL: Record<string, string> = {
+  DAILY: "รายวัน",
+  HOURLY: "รายชั่วโมง",
+  MONTHLY: "รายเดือน",
+};
+
+function downloadSlip(s: StaffPayroll, month: number, year: number) {
+  const monthLabel = `${MONTH_LABELS[month - 1]} ${year + 543}`;
+  const line = "═".repeat(36);
+  const thin = "─".repeat(36);
+
+  const rows: string[] = [
+    line,
+    "   สลิปเงินเดือน  (Dice Shop)",
+    `   เดือน: ${monthLabel}`,
+    line,
+    `พนักงาน : ${s.name}`,
+    `ประเภทจ้าง: ${PAY_TYPE_LABEL[s.payType] ?? s.payType}  |  อัตรา: ฿${thb(s.payRate)}`,
+    thin,
+    "การทำงาน",
+    `  วันทำงาน       : ${s.summary.daysWorked} วัน`,
+    `  ตรงเวลา        : ${s.summary.onTimeCount} ครั้ง`,
+    `  มาสาย          : ${s.summary.lateCount} ครั้ง`,
+    `  ออกก่อนเวลา    : ${s.summary.earlyLeaveCount} ครั้ง`,
+    `  ชั่วโมงทำงานรวม: ${hoursLabel(s.summary.workMinutes)}`,
+    thin,
+    "รายได้",
+    `  รายได้รวม      : ฿${thb(s.gross)}`,
+    thin,
+    "รายการหักเงิน",
+  ];
+
+  if (s.deductions.length === 0) {
+    rows.push("  ไม่มี");
+  } else {
+    for (const d of s.deductions) {
+      rows.push(`  ${d.reason} : −฿${thb(d.amount)}${d.note ? `  (${d.note})` : ""}`);
+    }
+  }
+  rows.push(`  รวมหักทั้งหมด  : −฿${thb(s.totalDeductions)}`);
+  rows.push(thin);
+  rows.push(`รายได้สุทธิ      : ฿${thb(s.netPay)}`);
+  rows.push(line);
+
+  const content = rows.join("\n");
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `payslip-${s.name.replace(/\s+/g, "_")}-${year}-${String(month).padStart(2, "0")}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function HrPayrollPage() {
@@ -182,8 +239,19 @@ export default function HrPayrollPage() {
 
       {/* Grand total */}
       <div className="bg-[#fb8500]/10 border border-[#fb8500]/30 rounded-2xl p-4 mb-4 flex items-center justify-between">
-        <span className="font-bold text-sm">รวมจ่ายเดือนนี้</span>
-        <span className="font-bold text-2xl text-[#fb8500]">฿{thb(grandNet)}</span>
+        <div>
+          <p className="font-bold text-sm">รวมจ่ายเดือนนี้</p>
+          <p className="text-[#f8f1e5]/50 text-xs">สุทธิทั้งทีม</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <a
+            href={`/api/hr/payroll/export?year=${year}&month=${month}`}
+            className="text-xs px-3 py-1.5 bg-white/10 rounded-xl text-[#f8f1e5]/70 hover:bg-white/20"
+          >
+            ↓ CSV
+          </a>
+          <span className="font-bold text-2xl text-[#fb8500]">฿{thb(grandNet)}</span>
+        </div>
       </div>
 
       {/* Per-staff cards */}
@@ -192,9 +260,18 @@ export default function HrPayrollPage() {
           <div key={s.id} className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold">{s.name}</h2>
-              <span className={`font-bold ${s.netPay < 0 ? "text-red-400" : "text-emerald-400"}`}>
-                ฿{thb(s.netPay)}
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadSlip(s, month, year)}
+                  className="text-xs px-2.5 py-1 bg-white/10 rounded-lg text-[#f8f1e5]/70 hover:bg-white/20"
+                  title="ดาวน์โหลดสลิป"
+                >
+                  ↓ สลิป
+                </button>
+                <span className={`font-bold ${s.netPay < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                  ฿{thb(s.netPay)}
+                </span>
+              </div>
             </div>
 
             {/* Salary + deductions row */}

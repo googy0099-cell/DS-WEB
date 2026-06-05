@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import Link from "next/link";
 import StaffNav from "@/components/hr/StaffNav";
 
 type DashboardData = {
-  staff: { id: number; name: string; avatarUrl: string | null; isCheckedIn: boolean }[];
-  attendances: { id: number; staffName: string; checkIn: string; checkOut: string | null; photoUrl: string | null }[];
+  staff: { id: number; name: string; avatarUrl: string | null; isCheckedIn: boolean; attendedToday: boolean }[];
+  attendances: { id: number; staffName: string; checkIn: string; checkOut: string | null; checkInStatus: string | null; photoUrl: string | null }[];
   checklists: { id: number; type: string; staffName: string; totalItems: number; doneItems: number }[];
   taskCounts: Record<string, number>;
+  lateToday: number;
+  overdueCount: number;
 };
 
 function fmt(dateStr: string) {
@@ -54,9 +56,10 @@ export default function HrDashboardPage() {
   }
 
   const checkedIn = data.staff.filter((s) => s.isCheckedIn).length;
+  const attendedCount = data.staff.filter((s) => s.attendedToday).length;
   const openChecklist = data.checklists.find((c) => c.type === "OPEN");
   const closeChecklist = data.checklists.find((c) => c.type === "CLOSE");
-  const totalTasks = Object.values(data.taskCounts).reduce((a, b) => a + b, 0);
+  const pendingTasks = (data.taskCounts["TODO"] ?? 0) + (data.taskCounts["IN_PROGRESS"] ?? 0);
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-6">
@@ -73,18 +76,38 @@ export default function HrDashboardPage() {
         {new Date().toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
       </p>
 
-      {/* Summary cards */}
+      {/* Summary stats grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <p className="text-[#f8f1e5]/50 text-xs mb-1">มาวันนี้</p>
+          <p className="text-2xl font-bold text-emerald-400">{checkedIn}<span className="text-base font-normal text-[#f8f1e5]/40"> คน</span></p>
+          <p className="text-[#f8f1e5]/40 text-xs">เข้าแล้ว {attendedCount} / {data.staff.length} คน</p>
+        </div>
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+          <p className="text-[#f8f1e5]/50 text-xs mb-1">สาย / เกินกำหนด</p>
+          <p className="text-2xl font-bold">
+            <span className={data.lateToday > 0 ? "text-yellow-400" : "text-[#f8f1e5]/40"}>{data.lateToday}</span>
+            <span className="text-base font-normal text-[#f8f1e5]/40"> / </span>
+            <span className={data.overdueCount > 0 ? "text-red-400" : "text-[#f8f1e5]/40"}>{data.overdueCount}</span>
+          </p>
+          <p className="text-[#f8f1e5]/40 text-xs">มาสายวันนี้ / งานค้างเกินกำหนด</p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 gap-3 mb-6">
         <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <p className="text-[#f8f1e5]/50 text-xs mb-1">พนักงานวันนี้</p>
-          <p className="text-2xl font-bold text-emerald-400">{checkedIn}</p>
-          <p className="text-[#f8f1e5]/40 text-xs">จาก {data.staff.length} คน</p>
+          <p className="text-[#f8f1e5]/50 text-xs mb-1">งานคงค้าง</p>
+          <p className="text-2xl font-bold text-[#fb8500]">{pendingTasks}</p>
+          <p className="text-[#f8f1e5]/40 text-xs">เสร็จแล้ว {data.taskCounts["DONE"] ?? 0} รายการ</p>
         </div>
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-          <p className="text-[#f8f1e5]/50 text-xs mb-1">งานทั้งหมด</p>
-          <p className="text-2xl font-bold text-[#fb8500]">{totalTasks}</p>
-          <p className="text-[#f8f1e5]/40 text-xs">เสร็จ {data.taskCounts["DONE"] ?? 0} รายการ</p>
-        </div>
+        <Link
+          href="/hr/payroll"
+          className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col justify-between active:scale-[0.97] transition-transform"
+        >
+          <p className="text-[#f8f1e5]/50 text-xs mb-1">เงินเดือน</p>
+          <p className="text-xl font-bold text-[#fb8500]">ดูสรุป →</p>
+          <p className="text-[#f8f1e5]/40 text-xs">ดาวน์โหลดสลิปได้</p>
+        </Link>
       </div>
 
       {/* Checklist status */}
@@ -92,9 +115,9 @@ export default function HrDashboardPage() {
         <p className="text-sm font-semibold mb-3">เช็คลิสต์วันนี้</p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: "🌅 เปิดร้าน", data: openChecklist },
-            { label: "🌙 ปิดร้าน", data: closeChecklist },
-          ].map(({ label, data: cl }) => (
+            { label: "🌅 เปิดร้าน", cl: openChecklist },
+            { label: "🌙 ปิดร้าน", cl: closeChecklist },
+          ].map(({ label, cl }) => (
             <div key={label} className="bg-white/5 border border-white/10 rounded-2xl p-4">
               <p className="text-sm font-semibold mb-2">{label}</p>
               {cl ? (
@@ -118,23 +141,27 @@ export default function HrDashboardPage() {
         </div>
       </div>
 
-      {/* Staff attendance grid */}
+      {/* Staff status grid */}
       <div className="mb-6">
-        <p className="text-sm font-semibold mb-3">สถานะพนักงาน</p>
+        <p className="text-sm font-semibold mb-3">สถานะพนักงานวันนี้</p>
         <div className="grid grid-cols-3 gap-2">
           {data.staff.map((s) => (
-            <div key={s.id} className="bg-white/5 rounded-xl p-3 flex flex-col items-center gap-2">
+            <div key={s.id} className={`rounded-xl p-3 flex flex-col items-center gap-2 ${s.attendedToday ? "bg-white/5" : "bg-white/[0.02] opacity-50"}`}>
               <div className="relative">
                 {s.avatarUrl ? (
-                  <Image src={s.avatarUrl} alt={s.name} width={40} height={40} className="w-10 h-10 rounded-full object-cover" />
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={s.avatarUrl} alt={s.name} className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-sm font-bold text-[#fb8500]">
                     {s.name.charAt(0)}
                   </div>
                 )}
-                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#182a47] ${s.isCheckedIn ? "bg-emerald-400" : "bg-white/20"}`} />
+                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#182a47] ${s.isCheckedIn ? "bg-emerald-400" : s.attendedToday ? "bg-blue-400" : "bg-white/20"}`} />
               </div>
               <p className="text-[10px] text-center text-[#f8f1e5]/70 leading-tight">{s.name.split(" ")[0]}</p>
+              <p className="text-[9px] text-center text-[#f8f1e5]/30">
+                {s.isCheckedIn ? "กำลังทำงาน" : s.attendedToday ? "เช็คเอาท์แล้ว" : "ยังไม่เข้า"}
+              </p>
             </div>
           ))}
         </div>
@@ -145,14 +172,19 @@ export default function HrDashboardPage() {
         <div>
           <p className="text-sm font-semibold mb-3">การเข้า-ออกวันนี้</p>
           <div className="flex flex-col gap-2">
-            {data.attendances.slice(0, 8).map((a) => (
+            {data.attendances.slice(0, 10).map((a) => (
               <div key={a.id} className="bg-white/5 rounded-xl px-4 py-3 flex items-center gap-3">
                 {a.photoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={a.photoUrl} alt="" className="w-10 h-10 rounded-lg object-cover shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{a.staffName}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-medium truncate">{a.staffName}</p>
+                    {a.checkInStatus === "LATE" && (
+                      <span className="text-[9px] bg-yellow-400/20 text-yellow-400 px-1.5 py-0.5 rounded-full font-bold shrink-0">สาย</span>
+                    )}
+                  </div>
                   <p className="text-[#f8f1e5]/40 text-xs">
                     เข้า {fmt(a.checkIn)}{a.checkOut ? ` · ออก ${fmt(a.checkOut)}` : " · กำลังทำงาน"}
                   </p>

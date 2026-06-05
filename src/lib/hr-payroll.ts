@@ -35,19 +35,32 @@ export async function getMonthlySummary(
     },
   });
 
+  // Group by BKK date — one work-day per calendar day, use first check-in + last check-out
+  const byDate = new Map<string, { firstIn: (typeof rows)[0]; lastOut: Date | null }>();
+  for (const r of rows) {
+    const key = new Date(r.checkIn.getTime() + BKK_OFFSET_MS).toISOString().slice(0, 10);
+    const entry = byDate.get(key);
+    if (!entry) {
+      byDate.set(key, { firstIn: r, lastOut: r.checkOut });
+    } else {
+      if (r.checkIn < entry.firstIn.checkIn) entry.firstIn = r;
+      if (r.checkOut && (!entry.lastOut || r.checkOut > entry.lastOut)) entry.lastOut = r.checkOut;
+    }
+  }
+
   let daysWorked = 0;
   let onTimeCount = 0;
   let lateCount = 0;
   let earlyLeaveCount = 0;
   let workMinutes = 0;
 
-  for (const r of rows) {
+  for (const { firstIn, lastOut } of byDate.values()) {
     daysWorked += 1;
-    if (r.checkInStatus === "ON_TIME") onTimeCount += 1;
-    if (r.checkInStatus === "LATE") lateCount += 1;
-    if (r.checkOutStatus === "EARLY") earlyLeaveCount += 1;
-    if (r.checkOut) {
-      const ms = r.checkOut.getTime() - r.checkIn.getTime();
+    if (firstIn.checkInStatus === "ON_TIME") onTimeCount += 1;
+    if (firstIn.checkInStatus === "LATE") lateCount += 1;
+    if (firstIn.checkOutStatus === "EARLY") earlyLeaveCount += 1;
+    if (lastOut) {
+      const ms = lastOut.getTime() - firstIn.checkIn.getTime();
       if (ms > 0) workMinutes += Math.floor(ms / 60000);
     }
   }
