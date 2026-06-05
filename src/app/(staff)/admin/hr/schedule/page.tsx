@@ -229,8 +229,10 @@ export default function AdminHrSchedulePage() {
               onChange={(e) => setDayEdit({ ...dayEdit, graceMinutes: Number(e.target.value) })}
               className="w-full mb-4 border border-sand rounded-xl px-3 py-2 text-sm" />
 
+            {error && <p className="text-red-500 text-xs bg-red-50 rounded-xl px-3 py-2 mb-3">{error}</p>}
+
             <div className="flex gap-2">
-              <button onClick={() => setDayEdit(null)} className="flex-1 py-2 bg-gray-100 rounded-xl text-sm font-bold">ยกเลิก</button>
+              <button onClick={() => { setDayEdit(null); setError(""); }} className="flex-1 py-2 bg-gray-100 rounded-xl text-sm font-bold">ยกเลิก</button>
               <button onClick={saveDayEdit} disabled={saving} className="flex-1 py-2 bg-orange text-white rounded-xl text-sm font-bold disabled:opacity-60">
                 {saving ? "กำลังบันทึก..." : "บันทึก"}
               </button>
