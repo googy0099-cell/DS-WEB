@@ -878,6 +878,24 @@ export default function OrderQueue() {
     });
   }
 
+  function handlePurge(orderId: number) {
+    setConfirmAction({
+      message: "⚠️ ทำลายบิลถาวร?",
+      detail: "ออเดอร์ รายการ และการชำระเงินจะถูกลบออกจากระบบถาวร ใช้สำหรับทดสอบระบบเท่านั้น",
+      confirmLabel: "ยืนยัน — ขั้นที่ 1",
+      confirmColor: "bg-red-500 text-white",
+      onConfirm: () => {
+        setConfirmAction({
+          message: "⛔ ยืนยันอีกครั้ง",
+          detail: "ข้อมูลทั้งหมดจะหายถาวร ไม่สามารถกู้คืนได้",
+          confirmLabel: "ทำลายเลย",
+          confirmColor: "bg-red-700 text-white",
+          onConfirm: () => deleteOrder(orderId),
+        });
+      },
+    });
+  }
+
   function openCashModal(order: OrderWithItems) {
     ackAlertOrders([order.id]);
     setCashOrder(order);
@@ -1208,6 +1226,7 @@ export default function OrderQueue() {
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
+                onPurge={handlePurge}
                 onPrint={(o) => printReceipt(o, receiptSettings)}
                 onKitchen={(o) => printKitchen(o, kitchenSettings)}
                 kitchenEnabled={kitchenSettings.enabled}
@@ -1273,6 +1292,7 @@ export default function OrderQueue() {
                   onUpdate={handleUpdate}
                   onEdit={openEdit}
                   onDelete={handleDelete}
+                  onPurge={handlePurge}
                   onPrint={(o) => printReceipt(o, receiptSettings)}
                   onKitchen={(o) => printKitchen(o, kitchenSettings)}
                   kitchenEnabled={kitchenSettings.enabled}
@@ -1712,8 +1732,8 @@ export default function OrderQueue() {
               </button>
               <button
                 onClick={() => {
-                  confirmAction.onConfirm();
                   setConfirmAction(null);
+                  confirmAction.onConfirm();
                 }}
                 className={`flex-1 py-3 rounded-xl font-bold text-sm ${confirmAction.confirmColor}`}
               >
@@ -2089,6 +2109,7 @@ function OrderCard({
   onUpdate,
   onEdit,
   onDelete,
+  onPurge,
   onPrint,
   onKitchen,
   kitchenEnabled,
@@ -2108,6 +2129,7 @@ function OrderCard({
   onUpdate: (id: number, status: string) => void;
   onEdit: (order: OrderWithItems) => void;
   onDelete: (id: number) => void;
+  onPurge: (id: number) => void;
   onPrint: (order: OrderWithItems) => void;
   onKitchen: (order: OrderWithItems) => void;
   kitchenEnabled: boolean;
@@ -2471,13 +2493,22 @@ function OrderCard({
         ) : order.status === "PAID" ? (
           // Payment done → close only after serve is acknowledged
           servedAcked.has(order.id) ? (
-            <button
-              onClick={() => { onPrint(order); onUpdate(order.id, "SERVED"); }}
-              disabled={isLoading}
-              className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-orange text-white hover:bg-orange/90 transition-colors disabled:opacity-60"
-            >
-              🖨️ {isLoading ? "กำลังบันทึก..." : "พิมพ์ใบเสร็จ · ปิดออเดอร์"}
-            </button>
+            <div className="flex gap-2 mb-2">
+              <button
+                onClick={() => onPrint(order)}
+                disabled={isLoading}
+                className="flex-1 text-sm font-bold py-3 rounded-xl bg-white border-2 border-orange text-orange hover:bg-orange/5 transition-colors disabled:opacity-60"
+              >
+                🖨️ พิมพ์ใบเสร็จ
+              </button>
+              <button
+                onClick={() => onUpdate(order.id, "SERVED")}
+                disabled={isLoading}
+                className="flex-1 text-sm font-bold py-3 rounded-xl bg-orange text-white hover:bg-orange/90 transition-colors disabled:opacity-60"
+              >
+                {isLoading ? "กำลังบันทึก..." : "✅ ปิดออเดอร์"}
+              </button>
+            </div>
           ) : (
             <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
               ✋ กดยืนยันการเสิร์ฟข้างบนก่อน เพื่อยืนยันว่าส่งอาหารถึงโต๊ะแล้ว
@@ -2533,8 +2564,17 @@ function OrderCard({
             onClick={() => onDelete(order.id)}
             disabled={isLoading}
             className="bg-gray-50 text-gray-400 border border-gray-100 text-sm px-3 py-2 rounded-xl disabled:opacity-40 hover:text-red-500 hover:border-red-100"
+            title="ลบออเดอร์"
           >
             🗑️
+          </button>
+          <button
+            onClick={() => onPurge(order.id)}
+            disabled={isLoading}
+            className="bg-red-50 text-red-400 border border-red-100 text-xs px-2 py-2 rounded-xl disabled:opacity-40 hover:text-red-700 hover:border-red-300"
+            title="ทำลายบิล (สำหรับทดสอบ)"
+          >
+            ⛔
           </button>
         </div>
       </div>
