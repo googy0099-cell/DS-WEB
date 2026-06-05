@@ -469,6 +469,12 @@ export default function OrderQueue() {
   const [splitCashStr, setSplitCashStr] = useState("");
   const [splitReceivedStr, setSplitReceivedStr] = useState("");
   const [splitLoading, setSplitLoading] = useState(false);
+  // Single-order split payment (no bill group)
+  const [orderSplit, setOrderSplit] = useState<{
+    order: OrderWithItems; step: "cash-portion" | "cash-received" | "scan"; cashPaid: number;
+  } | null>(null);
+  const [orderSplitCashStr, setOrderSplitCashStr] = useState("");
+  const [orderSplitReceivedStr, setOrderSplitReceivedStr] = useState("");
   // Discount state shared by cash + scan bill-group modals
   const [discount, setDiscount] = useState<{ type: "PERCENT" | "FIXED"; value: string; note: string }>
     ({ type: "PERCENT", value: "", note: "" });
@@ -1256,6 +1262,7 @@ export default function OrderQueue() {
                 onDelete={handleDelete}
                 onPurge={handlePurge}
                 onPrint={(o) => printReceipt(o, receiptSettings)}
+                onSplitOrder={(o) => { setOrderSplit({ order: o, step: "cash-portion", cashPaid: 0 }); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
                 onKitchen={(o) => printKitchen(o, kitchenSettings)}
                 kitchenEnabled={kitchenSettings.enabled}
                 onOpenCashModal={openCashModal}
@@ -1336,6 +1343,7 @@ export default function OrderQueue() {
                   onDelete={handleDelete}
                   onPurge={handlePurge}
                   onPrint={(o) => printReceipt(o, receiptSettings)}
+                  onSplitOrder={(o) => { setOrderSplit({ order: o, step: "cash-portion", cashPaid: 0 }); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
                   onKitchen={(o) => printKitchen(o, kitchenSettings)}
                   kitchenEnabled={kitchenSettings.enabled}
                   onOpenCashModal={openCashModal}
@@ -1988,6 +1996,173 @@ export default function OrderQueue() {
         );
       })()}
 
+      {/* Single-order split payment modal */}
+      {orderSplit && (() => {
+        const total = orderSplit.order.totalTHB;
+        const { step } = orderSplit;
+
+        if (step === "cash-portion") {
+          const cashAmt = parseInt(orderSplitCashStr.replace(/,/g, ""), 10) || 0;
+          const canProceed = cashAmt > 0 && cashAmt < total;
+          function pressCashD(d: string) { setOrderSplitCashStr((p) => (p === "" || p === "0") ? d : p + d); }
+          return (
+            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย</h3>
+                <p className="text-xl font-bold text-orange text-center">ยอดรวม ฿{total.toLocaleString()}</p>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">1</span>
+                  ระบุยอดที่ลูกค้าจ่ายด้วยเงินสด
+                </div>
+                <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                  {orderSplitCashStr ? `฿${cashAmt.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
+                </div>
+                {cashAmt > 0 && cashAmt < total && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-2.5 text-center">
+                    <p className="text-xs text-blue-500">ยอดที่ต้องสแกนเพิ่ม</p>
+                    <p className="text-xl font-bold text-blue-700">฿{(total - cashAmt).toLocaleString()}</p>
+                  </div>
+                )}
+                {cashAmt >= total && total > 0 && (
+                  <p className="text-xs text-red-500 text-center">ยอดเกินทั้งหมด — ใช้ปุ่มเงินสดแทน</p>
+                )}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                    <button key={d} type="button" onClick={() => pressCashD(d)}
+                      className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">{d}</button>
+                  ))}
+                  <button type="button" onClick={() => setOrderSplitCashStr((p) => p === "" ? "" : p + "00")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">00</button>
+                  <button type="button" onClick={() => pressCashD("0")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">0</button>
+                  <button type="button" onClick={() => setOrderSplitCashStr((p) => p.slice(0, -1))}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">⌫</button>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {[20, 50, 100, 500, 1000].map((amt) => (
+                    <button key={amt} type="button" onClick={() => setOrderSplitCashStr(String((parseInt(orderSplitCashStr) || 0) + amt))}
+                      className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">+{amt}</button>
+                  ))}
+                  <button type="button" onClick={() => setOrderSplitCashStr("")}
+                    className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => { setOrderSplit(null); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
+                    className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                  <button disabled={!canProceed}
+                    onClick={() => setOrderSplit((s) => s ? { ...s, step: "cash-received", cashPaid: cashAmt } : s)}
+                    className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">ถัดไป →</button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        if (step === "cash-received") {
+          const { cashPaid } = orderSplit;
+          const received = parseInt(orderSplitReceivedStr.replace(/,/g, ""), 10) || 0;
+          const change = received - cashPaid;
+          function pressRecD(d: string) { setOrderSplitReceivedStr((p) => (p === "" || p === "0") ? d : p + d); }
+          return (
+            <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย</h3>
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-green-600">ยอดเงินสด</p>
+                  <p className="text-2xl font-bold text-green-700">฿{cashPaid.toLocaleString()}</p>
+                  <p className="text-xs text-blue-500 mt-1">ยอดที่ต้องสแกนเพิ่ม ฿{(total - cashPaid).toLocaleString()}</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-400">
+                  <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">1</span>
+                  ระบุเงินที่รับมาจากลูกค้า (เงินสด)
+                </div>
+                <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
+                  {orderSplitReceivedStr ? `฿${received.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
+                </div>
+                {orderSplitReceivedStr && (
+                  <div className={`rounded-xl p-2.5 text-center ${received >= cashPaid ? "bg-green-50" : "bg-red-50"}`}>
+                    {received >= cashPaid
+                      ? <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
+                      : <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(cashPaid - received).toLocaleString()}</p>}
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                    <button key={d} type="button" onClick={() => pressRecD(d)}
+                      className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">{d}</button>
+                  ))}
+                  <button type="button" onClick={() => setOrderSplitReceivedStr((p) => p === "" ? "" : p + "00")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">00</button>
+                  <button type="button" onClick={() => pressRecD("0")}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">0</button>
+                  <button type="button" onClick={() => setOrderSplitReceivedStr((p) => p.slice(0, -1))}
+                    className="bg-gray-50 hover:bg-sand active:scale-95 border border-sand text-navy font-bold text-xl py-3.5 rounded-xl transition-transform select-none">⌫</button>
+                </div>
+                <div className="grid grid-cols-6 gap-1.5">
+                  {[20, 50, 100, 500, 1000].map((amt) => (
+                    <button key={amt} type="button" onClick={() => setOrderSplitReceivedStr(String((parseInt(orderSplitReceivedStr) || 0) + amt))}
+                      className="bg-orange/10 hover:bg-orange/20 border border-orange/20 text-orange text-xs font-semibold py-2 rounded-xl select-none">+{amt}</button>
+                  ))}
+                  <button type="button" onClick={() => setOrderSplitReceivedStr("")}
+                    className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => { setOrderSplit((s) => s ? { ...s, step: "cash-portion" } : s); setOrderSplitReceivedStr(""); }}
+                    className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">← กลับ</button>
+                  <button disabled={!orderSplitReceivedStr || received < cashPaid}
+                    onClick={() => setOrderSplit((s) => s ? { ...s, step: "scan" } : s)}
+                    className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">ยืนยันรับเงินสด →</button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // step === "scan"
+        const scanAmt = total - orderSplit.cashPaid;
+        return (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
+              <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย</h3>
+              <div className="flex gap-2">
+                <div className="flex-1 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-green-600">รับเงินสดแล้ว</p>
+                  <p className="text-xl font-bold text-green-700">฿{orderSplit.cashPaid.toLocaleString()}</p>
+                </div>
+                <div className="flex-1 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center">
+                  <p className="text-xs text-blue-600">คงเหลือ (สแกน)</p>
+                  <p className="text-xl font-bold text-blue-700">฿{scanAmt.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span className="bg-violet-600 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs">2</span>
+                ให้ลูกค้าสแกนจ่ายยอดที่เหลือ แล้วกดยืนยัน
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+                <p className="text-xs text-blue-600 mb-1">ยอดที่ต้องสแกน</p>
+                <p className="text-3xl font-black text-blue-700">฿{scanAmt.toLocaleString()}</p>
+              </div>
+              <p className="text-xs text-center text-gray-400">ยืนยันแล้วระบบจะสร้าง QR สำหรับสแกน</p>
+              <div className="flex gap-2">
+                <button onClick={() => { setOrderSplit(null); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
+                  className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
+                <button
+                  onClick={() => {
+                    const o = orderSplit.order;
+                    setOrderSplit(null);
+                    setOrderSplitCashStr("");
+                    setOrderSplitReceivedStr("");
+                    chooseScan(o);
+                  }}
+                  className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold">
+                  📷 ไปสแกน
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Confirm Modal */}
       {confirmAction && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-end md:items-center justify-center">
@@ -2394,6 +2569,7 @@ function OrderCard({
   onDelete,
   onPurge,
   onPrint,
+  onSplitOrder,
   onKitchen,
   kitchenEnabled,
   onOpenCashModal,
@@ -2414,6 +2590,7 @@ function OrderCard({
   onDelete: (id: number) => void;
   onPurge: (id: number) => void;
   onPrint: (order: OrderWithItems) => void;
+  onSplitOrder: (order: OrderWithItems) => void;
   onKitchen: (order: OrderWithItems) => void;
   kitchenEnabled: boolean;
   onOpenCashModal: (order: OrderWithItems) => void;
@@ -2640,8 +2817,8 @@ function OrderCard({
             </button>
           </div>
         ) : isPendingCash ? (
-          <div className="mb-2">
-            <p className="text-xs text-gray-400 mb-1.5 text-center">รับออเดอร์ · เลือกวิธีชำระเงิน</p>
+          <div className="mb-2 space-y-2">
+            <p className="text-xs text-gray-400 text-center">รับออเดอร์ · เลือกวิธีชำระเงิน</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -2658,6 +2835,10 @@ function OrderCard({
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
               </button>
             </div>
+            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
+              💵📷 แบ่งจ่าย
+            </button>
           </div>
         ) : isPendingQrNoSlip ? (
           <div className="mb-2 bg-blue-50 border border-blue-200 rounded-xl p-3 text-center text-sm text-blue-600">
@@ -2699,10 +2880,14 @@ function OrderCard({
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
               </button>
             </div>
+            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
+              💵📷 แบ่งจ่าย
+            </button>
           </div>
         ) : needsMethod ? (
-          <div className="mb-2">
-            <p className="text-xs text-gray-400 mb-1.5 text-center">เลือกวิธีชำระเงิน</p>
+          <div className="mb-2 space-y-2">
+            <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -2719,10 +2904,14 @@ function OrderCard({
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
               </button>
             </div>
+            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
+              💵📷 แบ่งจ่าย
+            </button>
           </div>
         ) : isCashPay ? (
-          <div className="mb-2">
-            <p className="text-xs text-gray-400 mb-1.5 text-center">เลือกวิธีชำระเงิน</p>
+          <div className="mb-2 space-y-2">
+            <p className="text-xs text-gray-400 text-center">เลือกวิธีชำระเงิน</p>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => onOpenCashModal(order)}
@@ -2739,6 +2928,10 @@ function OrderCard({
                 <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน QR"}
               </button>
             </div>
+            <button onClick={() => onSplitOrder(order)} disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2 rounded-xl text-sm disabled:opacity-60 transition-colors">
+              💵📷 แบ่งจ่าย
+            </button>
           </div>
         ) : isQrNoSlip ? (
           <div className="mb-2 space-y-2">
