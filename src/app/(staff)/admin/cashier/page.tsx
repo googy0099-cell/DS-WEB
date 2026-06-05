@@ -167,14 +167,21 @@ export default function CashierPage() {
   const loadSummary = useCallback(async () => {
     setLoadingSummary(true);
     try {
-      const data = await fetch("/api/cashier/summary").then((r) => r.json());
+      // If shift opened on a different Bangkok day (crossed midnight), query that day's data
+      let url = "/api/cashier/summary";
+      if (openedAt) {
+        const shiftDate = new Date(new Date(openedAt).getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+        const todayDate = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
+        if (shiftDate !== todayDate) url += `?date=${shiftDate}`;
+      }
+      const data = await fetch(url).then((r) => r.json());
       setSummary(data);
     } catch {
       // fail silently — summary stays null, UI shows empty values
     } finally {
       setLoadingSummary(false);
     }
-  }, []);
+  }, [openedAt]);
 
   async function handleOpenClick() {
     setStockCheckLoading(true);

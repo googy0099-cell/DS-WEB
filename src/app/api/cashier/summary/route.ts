@@ -1,29 +1,25 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 
 function getBangkokDateStr(): string {
   const now = new Date();
-  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
-  return `${bkk.getFullYear()}-${String(bkk.getMonth() + 1).padStart(2, "0")}-${String(bkk.getDate()).padStart(2, "0")}`;
+  const bkk = new Date(now.getTime() + 7 * 3600_000);
+  return bkk.toISOString().slice(0, 10);
 }
 
-function getBangkokDayBounds(): { start: Date; end: Date } {
-  const now = new Date();
-  const offsetMs = (7 * 60 + now.getTimezoneOffset()) * 60_000;
-  const bkkNow = new Date(now.getTime() + offsetMs);
-  const startBkk = new Date(bkkNow);
-  startBkk.setHours(0, 0, 0, 0);
-  const endBkk = new Date(startBkk);
-  endBkk.setDate(endBkk.getDate() + 1);
-  return {
-    start: new Date(startBkk.getTime() - offsetMs),
-    end: new Date(endBkk.getTime() - offsetMs),
-  };
+// Returns UTC bounds for a given Bangkok calendar day (YYYY-MM-DD)
+function getDayBoundsForDate(bangkokDate: string): { start: Date; end: Date } {
+  const [y, m, d] = bangkokDate.split("-").map(Number);
+  // Bangkok midnight = UTC midnight − 7 hours
+  const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 7 * 3600_000);
+  const end = new Date(start.getTime() + 24 * 3600_000);
+  return { start, end };
 }
 
-export async function GET() {
-  const date = getBangkokDateStr();
-  const { start, end } = getBangkokDayBounds();
+export async function GET(req: NextRequest) {
+  const paramDate = req.nextUrl.searchParams.get("date");
+  const date = (paramDate && /^\d{4}-\d{2}-\d{2}$/.test(paramDate)) ? paramDate : getBangkokDateStr();
+  const { start, end } = getDayBoundsForDate(date);
 
   const [payments, servedOrders, paidSessions, lastClose, pettyExpenses] = await Promise.all([
     db.payment.findMany({
