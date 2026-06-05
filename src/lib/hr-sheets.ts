@@ -33,6 +33,8 @@ export type AttendanceRow = {
   staffName: string;
   checkIn: Date;
   checkOut: Date | null;
+  checkInStatus: string | null;
+  lateDeductionApplied: boolean;
 };
 
 export async function syncAttendanceToSheets(
@@ -61,14 +63,19 @@ export async function syncAttendanceToSheets(
     }
 
     // Clear + write
+    const statusLabel = (s: string | null) =>
+      s === "LATE" ? "มาสาย" : s === "ON_TIME" ? "ตรงเวลา" : "-";
+
     const values: string[][] = [
-      ["ชื่อ", "เข้า", "ออก", "ชั่วโมง", "วันที่"],
+      ["ชื่อ", "เข้า", "ออก", "ชั่วโมง", "วันที่", "สถานะ", "หักสาย"],
       ...rows.map((r) => [
         r.staffName,
         bkkTime(r.checkIn),
         r.checkOut ? bkkTime(r.checkOut) : "-",
         duration(r.checkIn, r.checkOut),
         bkkDate(r.checkIn),
+        statusLabel(r.checkInStatus),
+        r.lateDeductionApplied ? "✓" : "-",
       ]),
     ];
 

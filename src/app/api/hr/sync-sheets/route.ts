@@ -33,6 +33,8 @@ export async function POST(req: NextRequest) {
         staffName: `${a.staff.user.firstName} ${a.staff.user.lastName}`.trim(),
         checkIn: a.checkIn,
         checkOut: a.checkOut,
+        checkInStatus: a.checkInStatus,
+        lateDeductionApplied: a.lateDeductionApplied,
       }));
 
       const monthLabel = `${MONTHS_TH[month - 1]} ${year + 543}`;
@@ -61,6 +63,8 @@ export async function POST(req: NextRequest) {
       staffName: `${a.staff.user.firstName} ${a.staff.user.lastName}`.trim(),
       checkIn: a.checkIn,
       checkOut: a.checkOut,
+      checkInStatus: a.checkInStatus,
+      lateDeductionApplied: a.lateDeductionApplied,
     }));
 
     const d = new Date(dateStr);
