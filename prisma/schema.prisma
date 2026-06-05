@@ -66,10 +66,10 @@ model Bill {
   startsAt       DateTime
   sessions       PlayerSession[]
   orders         Order[]         @relation("BillOrders")
-  discountType   String?
-  discountValue  Int?
-  discountAmount Int?
-  discountNote   String?
+  discountType   String?  @map("discount_type")
+  discountValue  Int?     @map("discount_value")
+  discountAmount Int?     @map("discount_amount")
+  discountNote   String?  @map("discount_note")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
