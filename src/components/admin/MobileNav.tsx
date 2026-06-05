@@ -9,7 +9,7 @@ import {
   Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
   KeyRound, BarChart3, ScrollText, QrCode, Settings2,
   CalendarDays, Wallet, CalendarCheck, ClipboardList, ClipboardCheck, Target,
-  Tag,
+  Tag, LayoutGrid, Settings2 as SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -40,12 +40,14 @@ const ICON_MAP: Record<string, LucideIcon> = {
   audit: ScrollText,
   tables: QrCode,
   settings: Settings2,
+  "hr-dashboard": LayoutGrid,
   "hr-schedule": CalendarDays,
   "hr-payroll": Wallet,
   "hr-calendar": CalendarCheck,
   "hr-checklist": ClipboardList,
   "hr-tasks": ClipboardCheck,
   "hr-kpi": Target,
+  "hr-settings": SettingsIcon,
 };
 
 export default function MobileNav({

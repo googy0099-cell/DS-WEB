@@ -84,12 +84,14 @@ const GROUP_SYSTEM: NavGroup = {
 const GROUP_HR: NavGroup = {
   label: "HR",
   items: [
+    { href: "/admin/hr/dashboard", label: "ภาพรวม HR", icon: "hr-dashboard" },
     { href: "/admin/hr/schedule", label: "ตารางพนักงาน", icon: "hr-schedule" },
     { href: "/admin/hr/payroll", label: "เงินเดือน", icon: "hr-payroll" },
     { href: "/admin/hr/payment-calendar", label: "ปฏิทินจ่ายเงิน", icon: "hr-calendar" },
     { href: "/admin/hr/checklist", label: "เช็คลิสต์", icon: "hr-checklist" },
     { href: "/admin/hr/tasks", label: "มอบหมายงาน", icon: "hr-tasks" },
     { href: "/admin/hr/kpi", label: "ตั้ง KPI", icon: "hr-kpi" },
+    { href: "/admin/hr/settings", label: "ตั้งค่า HR", icon: "hr-settings" },
   ],
 };
 
