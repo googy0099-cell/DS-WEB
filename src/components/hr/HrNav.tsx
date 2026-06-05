@@ -9,6 +9,7 @@ const NAV = [
   { href: "/hr/tasks", label: "งาน", icon: "📋" },
   { href: "/hr/kpi", label: "KPI", icon: "🎯" },
   { href: "/hr/dashboard", label: "ภาพรวม", icon: "📊", ownerOnly: true },
+  { href: "/hr/settings", label: "ตั้งค่า", icon: "⚙️", ownerOnly: true },
 ];
 
 export default function HrNav() {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { notifyCheckin } from "@/lib/hr-notify";
+import { computeCheckInStatus, getTodaySchedule } from "@/lib/hr-attendance";
 
 const BKK = 7 * 3600_000;
 
@@ -31,11 +32,14 @@ export async function POST(req: NextRequest) {
     if (!valid) return NextResponse.json({ error: "PIN ไม่ถูกต้อง" }, { status: 401 });
   }
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const bkkNow = new Date(Date.now() + BKK);
+  const dateStr = bkkNow.toISOString().slice(0, 10);
+  const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
+  const tomorrowBKK = new Date(todayBKK.getTime() + 86400_000);
 
   const openRecord = await db.hrAttendance.findFirst({
-    where: { staffId, checkIn: { gte: today }, checkOut: null },
+    where: { staffId, checkIn: { gte: todayBKK }, checkOut: null },
     orderBy: { checkIn: "desc" },
   });
 
@@ -45,11 +49,6 @@ export async function POST(req: NextRequest) {
   if (openRecord) {
     // Checkout — check if CLOSE checklist is complete
     if (!force) {
-      const bkkNow = new Date(Date.now() + BKK);
-      const dateStr = bkkNow.toISOString().slice(0, 10);
-      const todayBKK = new Date(`${dateStr}T00:00:00+07:00`);
-      const tomorrowBKK = new Date(todayBKK.getTime() + 86400_000);
-
       const closeChecklist = await db.hrChecklist.findFirst({
         where: { type: "CLOSE", date: { gte: todayBKK, lt: tomorrowBKK } },
         include: { items: { select: { done: true } } },
@@ -77,10 +76,45 @@ export async function POST(req: NextRequest) {
     notifyCheckin(fullName, "checkout").catch(() => {});
     return NextResponse.json({ action: "checkout", time: record.checkOut });
   } else {
+    // Check-in — detect late status and auto-deduct
+    const schedule = await getTodaySchedule(staff.id, now);
+    const checkInStatus = computeCheckInStatus(now, schedule);
+
     const record = await db.hrAttendance.create({
-      data: { staffId, checkIn: new Date(), photoUrl: photoBase64 ?? null },
+      data: { staffId, checkIn: now, photoUrl: photoBase64 ?? null, checkInStatus },
     });
+
+    let lateDeductionAmount = 0;
+    if (checkInStatus === "LATE") {
+      try {
+        const lateConfig = await db.hrLateConfig.findFirst();
+        if (lateConfig && lateConfig.deductionAmount > 0) {
+          await db.hrDeduction.create({
+            data: {
+              staffId,
+              amount: lateConfig.deductionAmount,
+              reason: "เข้างานสาย",
+              month: now.getMonth() + 1,
+              year: now.getFullYear(),
+            },
+          });
+          await db.hrAttendance.update({
+            where: { id: record.id },
+            data: { lateDeductionApplied: true },
+          });
+          lateDeductionAmount = lateConfig.deductionAmount;
+        }
+      } catch {
+        // deduction failed — don't block check-in
+      }
+    }
+
     notifyCheckin(fullName, "checkin").catch(() => {});
-    return NextResponse.json({ action: "checkin", time: record.checkIn });
+    return NextResponse.json({
+      action: "checkin",
+      time: record.checkIn,
+      status: checkInStatus,
+      ...(lateDeductionAmount > 0 && { lateDeduction: lateDeductionAmount }),
+    });
   }
 }

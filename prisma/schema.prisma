@@ -635,9 +635,10 @@ model HrAttendance {
 }
 
 model HrLateConfig {
-  id               Int      @id @default(autoincrement())
-  deductionAmount  Int      @default(0) @map("deduction_amount")
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  id                    Int      @id @default(autoincrement())
+  deductionAmount       Int      @default(0) @map("deduction_amount")
+  absentDeductionAmount Int      @default(0) @map("absent_deduction_amount")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
   @@map("hr_late_config")
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -13,8 +13,14 @@ type DashboardData = {
   taskCounts: Record<string, number>;
 };
 
+type AbsentStaff = { staffId: number; name: string; alreadyDeducted: boolean };
+
 function fmt(dateStr: string) {
   return new Date(dateStr).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+}
+
+function todayBkkStr() {
+  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 }
 
 export default function HrDashboardPage() {
@@ -25,19 +31,29 @@ export default function HrDashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
+  const [absentList, setAbsentList] = useState<AbsentStaff[]>([]);
+  const [absentLoading, setAbsentLoading] = useState(false);
+  const [absentMsg, setAbsentMsg] = useState("");
+
   useEffect(() => {
     if (status === "unauthenticated") { router.replace("/api/auth/signin"); return; }
     if (status === "authenticated" && role !== "OWNER") { router.replace("/hr/checklist"); return; }
   }, [status, role, router]);
 
+  const fetchAbsent = useCallback(async () => {
+    const res = await fetch(`/api/hr/absent?date=${todayBkkStr()}`);
+    if (res.ok) setAbsentList(await res.json());
+  }, []);
+
   useEffect(() => {
     if (role !== "OWNER") return;
     fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
+    fetchAbsent();
     const id = setInterval(() => {
       fetch("/api/hr/dashboard").then((r) => r.json()).then(setData).catch(() => {});
     }, 60_000);
     return () => clearInterval(id);
-  }, [role]);
+  }, [role, fetchAbsent]);
 
   async function syncSheets() {
     setSyncing(true);
@@ -49,6 +65,25 @@ export default function HrDashboardPage() {
     setTimeout(() => setSyncMsg(""), 4000);
   }
 
+  async function applyAbsent(staffIds: number[]) {
+    setAbsentLoading(true);
+    setAbsentMsg("");
+    const res = await fetch("/api/hr/absent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ staffIds, date: todayBkkStr() }),
+    });
+    const d = await res.json();
+    setAbsentLoading(false);
+    if (res.ok) {
+      setAbsentMsg(`✓ หักเงินแล้ว ${d.applied} คน`);
+      fetchAbsent();
+    } else {
+      setAbsentMsg(`✗ ${d.error}`);
+    }
+    setTimeout(() => setAbsentMsg(""), 4000);
+  }
+
   if (status === "loading" || !data) {
     return <div className="min-h-screen flex items-center justify-center text-[#f8f1e5]/40 text-sm">กำลังโหลด...</div>;
   }
@@ -57,6 +92,7 @@ export default function HrDashboardPage() {
   const openChecklist = data.checklists.find((c) => c.type === "OPEN");
   const closeChecklist = data.checklists.find((c) => c.type === "CLOSE");
   const totalTasks = Object.values(data.taskCounts).reduce((a, b) => a + b, 0);
+  const pendingAbsent = absentList.filter((a) => !a.alreadyDeducted);
 
   return (
     <div className="min-h-screen pb-24 px-4 pt-6">
@@ -85,6 +121,52 @@ export default function HrDashboardPage() {
           <p className="text-2xl font-bold text-[#fb8500]">{totalTasks}</p>
           <p className="text-[#f8f1e5]/40 text-xs">เสร็จ {data.taskCounts["DONE"] ?? 0} รายการ</p>
         </div>
+      </div>
+
+      {/* Absent section */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold">ขาดงานวันนี้</p>
+          {pendingAbsent.length > 1 && (
+            <button
+              onClick={() => applyAbsent(pendingAbsent.map((a) => a.staffId))}
+              disabled={absentLoading}
+              className="text-xs px-3 py-1.5 bg-red-500/20 border border-red-500/30 text-red-300 rounded-xl font-semibold disabled:opacity-50"
+            >
+              {absentLoading ? "..." : `หักทั้งหมด (${pendingAbsent.length} คน)`}
+            </button>
+          )}
+        </div>
+        {absentMsg && (
+          <p className={`text-xs mb-2 ${absentMsg.startsWith("✓") ? "text-emerald-400" : "text-red-400"}`}>{absentMsg}</p>
+        )}
+        {absentList.length === 0 ? (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3 text-sm text-emerald-400 flex items-center gap-2">
+            <span>✓</span> ทุกคนที่มีตารางงานวันนี้มาทำงานแล้ว
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {absentList.map((a) => (
+              <div key={a.staffId} className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">{a.name}</p>
+                  {a.alreadyDeducted && <p className="text-xs text-[#f8f1e5]/40">หักเงินแล้ว</p>}
+                </div>
+                {!a.alreadyDeducted ? (
+                  <button
+                    onClick={() => applyAbsent([a.staffId])}
+                    disabled={absentLoading}
+                    className="text-xs px-3 py-1.5 bg-red-500 text-white rounded-xl font-semibold disabled:opacity-50"
+                  >
+                    หักขาดงาน
+                  </button>
+                ) : (
+                  <span className="text-xs text-[#f8f1e5]/30">✓ หักแล้ว</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Checklist status */}
