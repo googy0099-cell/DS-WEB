@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const session = await db.playerSession.findUnique({
     where: { id: Number(id) },
-    include: { bill: true },
+    include: { bill: { select: { startsAt: true } } },
   });
   if (!session) return NextResponse.json({ error: "ไม่พบ Session" }, { status: 404 });
 

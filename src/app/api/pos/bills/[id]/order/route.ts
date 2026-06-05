@@ -41,7 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     pendingExtras?: PendingExtra[];
   };
 
-  const bill = await db.bill.findUnique({ where: { id: billId }, include: { table: true } });
+  const bill = await db.bill.findUnique({ where: { id: billId }, select: { id: true, status: true, name: true, tableId: true, table: { select: { number: true } } } });
   if (!bill || bill.status !== "ACTIVE") {
     return NextResponse.json({ error: "ไม่พบบิล" }, { status: 404 });
   }

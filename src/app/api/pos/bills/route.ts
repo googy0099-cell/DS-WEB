@@ -6,11 +6,18 @@ import { PREP_SECONDS, remainingSeconds, prepRemaining } from "@/lib/pos-time";
 export async function GET() {
   const bills = await db.bill.findMany({
     where: { status: "ACTIVE" },
-    include: {
+    select: {
+      id: true, name: true, color: true, status: true,
+      tableId: true, startsAt: true, createdAt: true, updatedAt: true,
       table: { select: { number: true } },
       sessions: {
         where: { status: "ACTIVE" },
-        include: { user: { select: { id: true, username: true, memberCode: true, firstName: true } } },
+        select: {
+          id: true, tableId: true, nickname: true, packageType: true,
+          packagePrice: true, timeRemaining: true, status: true,
+          userId: true, billId: true, createdAt: true, updatedAt: true,
+          user: { select: { id: true, username: true, memberCode: true, firstName: true } },
+        },
         orderBy: { createdAt: "asc" },
       },
       orders: {

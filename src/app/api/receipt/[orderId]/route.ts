@@ -18,7 +18,7 @@ export async function GET(
     include: {
       items: { include: { menuItem: { select: { nameTh: true } } } },
       payment: true,
-      bill: { include: { table: true } },
+      bill: { select: { name: true, table: { select: { number: true } } } },
     },
   });
 
