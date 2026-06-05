@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { notifyCheckin } from "@/lib/hr-notify";
-import { computeCheckInStatus, getTodaySchedule } from "@/lib/hr-attendance";
+import { computeCheckInStatus, computeLateMinutes, getTodaySchedule } from "@/lib/hr-attendance";
 
 const BKK = 7 * 3600_000;
 
@@ -89,20 +89,24 @@ export async function POST(req: NextRequest) {
       try {
         const lateConfig = await db.hrLateConfig.findFirst();
         if (lateConfig && lateConfig.deductionAmount > 0) {
-          await db.hrDeduction.create({
-            data: {
-              staffId,
-              amount: lateConfig.deductionAmount,
-              reason: "เข้างานสาย",
-              month: now.getMonth() + 1,
-              year: now.getFullYear(),
-            },
-          });
-          await db.hrAttendance.update({
-            where: { id: record.id },
-            data: { lateDeductionApplied: true },
-          });
-          lateDeductionAmount = lateConfig.deductionAmount;
+          const lateMinutes = computeLateMinutes(now, schedule);
+          const amount = lateConfig.deductionAmount * lateMinutes;
+          if (amount > 0) {
+            await db.hrDeduction.create({
+              data: {
+                staffId,
+                amount,
+                reason: `เข้างานสาย ${lateMinutes} นาที`,
+                month: now.getMonth() + 1,
+                year: now.getFullYear(),
+              },
+            });
+            await db.hrAttendance.update({
+              where: { id: record.id },
+              data: { lateDeductionApplied: true },
+            });
+            lateDeductionAmount = amount;
+          }
         }
       } catch {
         // deduction failed — don't block check-in

@@ -5,6 +5,7 @@ import { notifyCheckin } from "@/lib/hr-notify";
 import {
   computeCheckInStatus,
   computeCheckOutStatus,
+  computeLateMinutes,
   getTodaySchedule,
 } from "@/lib/hr-attendance";
 
@@ -132,26 +133,30 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Auto-deduction for late check-in
+  // Auto-deduction for late check-in (rate per minute)
   let lateDeductionAmount = 0;
   if (checkInStatus === "LATE") {
     try {
       const lateConfig = await db.hrLateConfig.findFirst();
       if (lateConfig && lateConfig.deductionAmount > 0) {
-        await db.hrDeduction.create({
-          data: {
-            staffId: staff.id,
-            amount: lateConfig.deductionAmount,
-            reason: "เข้างานสาย",
-            month: now.getMonth() + 1,
-            year: now.getFullYear(),
-          },
-        });
-        await db.hrAttendance.update({
-          where: { id: record.id },
-          data: { lateDeductionApplied: true },
-        });
-        lateDeductionAmount = lateConfig.deductionAmount;
+        const lateMinutes = computeLateMinutes(now, schedule);
+        const amount = lateConfig.deductionAmount * lateMinutes;
+        if (amount > 0) {
+          await db.hrDeduction.create({
+            data: {
+              staffId: staff.id,
+              amount,
+              reason: `เข้างานสาย ${lateMinutes} นาที`,
+              month: now.getMonth() + 1,
+              year: now.getFullYear(),
+            },
+          });
+          await db.hrAttendance.update({
+            where: { id: record.id },
+            data: { lateDeductionApplied: true },
+          });
+          lateDeductionAmount = amount;
+        }
       }
     } catch {
       // deduction failed — don't block check-in

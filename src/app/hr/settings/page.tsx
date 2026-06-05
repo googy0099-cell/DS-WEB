@@ -81,7 +81,7 @@ export default function HrSettingsPage() {
                 <span className="text-yellow-400 text-lg">⏰</span>
                 <p className="font-semibold">หักมาสาย</p>
               </div>
-              <p className="text-xs text-[#f8f1e5]/50 mb-3">หักอัตโนมัติทุกครั้งที่เช็คอินสาย (เกิน grace period ในตารางงาน)</p>
+              <p className="text-xs text-[#f8f1e5]/50 mb-3">หักตามจำนวนนาทีที่สายเกิน grace period — เช่น ฿5/นาที สาย 10 นาที = หัก ฿50</p>
               <div className="flex gap-2 items-center">
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#f8f1e5]/50">฿</span>
@@ -103,7 +103,7 @@ export default function HrSettingsPage() {
                 </button>
               </div>
               {config.deductionAmount > 0 && (
-                <p className="text-xs text-[#fb8500] mt-2">ปัจจุบัน: −฿{config.deductionAmount.toLocaleString()} / ครั้ง</p>
+                <p className="text-xs text-[#fb8500] mt-2">ปัจจุบัน: −฿{config.deductionAmount.toLocaleString()} / นาที</p>
               )}
             </div>
 

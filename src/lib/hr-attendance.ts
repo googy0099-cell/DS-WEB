@@ -34,6 +34,15 @@ export function computeCheckInStatus(
   return toMinutes(now.h, now.m) <= cutoff ? "ON_TIME" : "LATE";
 }
 
+// Returns how many minutes past the grace cutoff the check-in was (0 if on time)
+export function computeLateMinutes(checkIn: Date, schedule: Schedule | null): number {
+  if (!schedule) return 0;
+  const now = bkkHourMinute(checkIn);
+  const start = parseHHMM(schedule.startTime);
+  const cutoff = toMinutes(start.h, start.m) + schedule.graceMinutes;
+  return Math.max(0, toMinutes(now.h, now.m) - cutoff);
+}
+
 export function computeCheckOutStatus(
   checkOut: Date,
   schedule: Schedule | null
