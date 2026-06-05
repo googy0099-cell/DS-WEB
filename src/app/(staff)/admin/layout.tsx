@@ -26,6 +26,7 @@ const GROUP_SALES: NavGroup = {
   items: [
     { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "pos" },
     { href: "/admin/cashier", label: "รอบการขาย", icon: "cashier" },
+    { href: "/admin/discounts", label: "ส่วนลด", icon: "discounts" },
     { href: "/admin/kitchen", label: "คิวครัว", icon: "kitchen" },
     { href: "/admin/bar", label: "คิวบาร์", icon: "bar" },
   ],

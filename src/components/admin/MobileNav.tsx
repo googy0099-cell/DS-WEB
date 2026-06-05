@@ -9,6 +9,7 @@ import {
   Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
   KeyRound, BarChart3, ScrollText, QrCode, Settings2,
   CalendarDays, Wallet, CalendarCheck, ClipboardList, ClipboardCheck, Target,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 
@@ -19,6 +20,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   pos: Timer,
   cashier: Banknote,
+  discounts: Tag,
   menu: UtensilsCrossed,
   "addon-groups": PackagePlus,
   "option-groups": SlidersHorizontal,
