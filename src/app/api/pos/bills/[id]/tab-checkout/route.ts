@@ -32,7 +32,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { memberUserId, paymentMethod } = await req.json() as { memberUserId?: number | null; paymentMethod?: string };
+  const { memberUserId, paymentMethod, discountType, discountValue, discountNote } = await req.json() as {
+    memberUserId?: number | null;
+    paymentMethod?: string;
+    discountType?: "PERCENT" | "FIXED";
+    discountValue?: number;
+    discountNote?: string;
+  };
 
   const orders = await db.order.findMany({
     where: {
@@ -60,6 +66,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const tabTotal = orders.reduce((sum, o) => sum + o.totalTHB, 0);
+
+  // Discount calculation
+  let discountAmount = 0;
+  if (discountType && discountValue && discountValue > 0) {
+    if (discountType === "PERCENT") {
+      discountAmount = Math.round(tabTotal * Math.min(discountValue, 100) / 100);
+    } else {
+      discountAmount = Math.min(discountValue, tabTotal);
+    }
+  }
+  const finalTotal = tabTotal - discountAmount;
+
   const now = new Date();
 
   // Mark SERVED only if kitchen has finished; already-SERVED orders stay SERVED; else PAID
@@ -83,15 +101,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Fall back to userId from any order in the bill (logged-in customer who ordered via QR)
   const effectiveMemberId = memberUserId ?? orders.find((o) => o.userId != null)?.userId ?? null;
 
+  // Store discount on the bill
+  if (discountAmount > 0) {
+    await db.bill.update({
+      where: { id: Number(id) },
+      data: { discountType, discountValue, discountAmount, discountNote: discountNote ?? null },
+    });
+  }
+
   let pointsAwarded = 0;
   if (effectiveMemberId) {
-    const pts = Math.floor(tabTotal / 10);
-    const dice = Math.floor(tabTotal / 49);
+    const pts = Math.floor(finalTotal / 10);
+    const dice = Math.floor(finalTotal / 49);
     await db.user.update({
       where: { id: Number(effectiveMemberId) },
       data: {
         points: { increment: pts },
-        totalSpentTHB: { increment: tabTotal },
+        totalSpentTHB: { increment: finalTotal },
         ...(dice > 0 ? { dicePoints: { increment: dice } } : {}),
       },
     });
@@ -116,7 +142,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     create: {
       orderId: firstOrder.id,
       orderName: `ตี้ ${billName}`,
-      totalTHB: tabTotal,
+      totalTHB: finalTotal,
       paymentMethod: actualPaymentMethod,
       locationLabel,
       itemsJson: JSON.stringify(allItems),
@@ -125,5 +151,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     update: {},
   });
 
-  return NextResponse.json({ tabTotal, ordersCount: orders.length, pointsAwarded });
+  return NextResponse.json({ tabTotal, discountAmount, finalTotal, ordersCount: orders.length, pointsAwarded });
 }

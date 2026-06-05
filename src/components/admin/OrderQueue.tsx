@@ -461,6 +461,9 @@ export default function OrderQueue() {
     billId: number; billName: string; orders: OrderWithItems[]; total: number;
   } | null>(null);
   const [billScanLoading, setBillScanLoading] = useState(false);
+  // Discount state shared by cash + scan bill-group modals
+  const [discount, setDiscount] = useState<{ type: "PERCENT" | "FIXED"; value: string; note: string }>
+    ({ type: "PERCENT", value: "", note: "" });
   // QR data URLs for scan-at-counter, keyed by order id
   const [qrMap, setQrMap] = useState<Record<number, string>>({});
 
@@ -923,20 +926,43 @@ export default function OrderQueue() {
     }
   }
 
+  function calcDiscountAmount(total: number): number {
+    const n = Number(discount.value);
+    if (!n || n <= 0) return 0;
+    if (discount.type === "PERCENT") return Math.round(total * Math.min(n, 100) / 100);
+    return Math.min(n, total);
+  }
+
+  function resetDiscount() {
+    setDiscount({ type: "PERCENT", value: "", note: "" });
+  }
+
+  function discountBody() {
+    const n = Number(discount.value);
+    if (!n || n <= 0) return {};
+    return {
+      discountType: discount.type,
+      discountValue: n,
+      ...(discount.note.trim() ? { discountNote: discount.note.trim() } : {}),
+    };
+  }
+
   async function confirmBillGroupCash() {
     if (!billGroupCash) return;
+    const finalTotal = billGroupCash.total - calcDiscountAmount(billGroupCash.total);
     const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
-    if (received < billGroupCash.total) return;
+    if (received < finalTotal) return;
     const snapshot = billGroupCash;
     setBillGroupCashLoading(true);
     try {
       await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "CASH" }),
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "CASH", ...discountBody() }),
       });
       setBillGroupCash(null);
       setBillCashInputStr("");
+      resetDiscount();
       await mutate();
     } finally {
       setBillGroupCashLoading(false);
@@ -951,9 +977,10 @@ export default function OrderQueue() {
       await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY" }),
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", ...discountBody() }),
       });
       setBillGroupScan(null);
+      resetDiscount();
       await mutate();
     } finally {
       setBillScanLoading(false);
@@ -1490,27 +1517,71 @@ export default function OrderQueue() {
 
       {/* Bill group cash modal */}
       {billGroupCash && (() => {
+        const discAmt = calcDiscountAmount(billGroupCash.total);
+        const finalTotal = billGroupCash.total - discAmt;
         const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
-        const change = received - billGroupCash.total;
+        const change = received - finalTotal;
         function pressDigit(d: string) { setBillCashInputStr((prev) => (prev === "" || prev === "0") ? d : prev + d); }
         function pressBack() { setBillCashInputStr((prev) => prev.slice(0, -1)); }
         return (
-          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3">
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
               <h3 className="font-bold text-navy text-lg text-center">รับเงินสด — ตี้ {billGroupCash.billName}</h3>
               <p className="text-xs text-center text-gray-400">{billGroupCash.orders.length} ออเดอร์รวมกัน</p>
-              <div className="text-center">
-                <p className="text-xs text-gray-400">ยอดรวมที่ต้องชำระ</p>
-                <p className="text-3xl font-bold text-orange">฿{billGroupCash.total.toLocaleString()}</p>
+
+              {/* Discount section */}
+              <div className="bg-gray-50 rounded-2xl p-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-500">ส่วนลด (ถ้ามี)</p>
+                <div className="flex gap-1.5">
+                  <button type="button"
+                    onClick={() => setDiscount((d) => ({ ...d, type: "PERCENT" }))}
+                    className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "PERCENT" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                    %
+                  </button>
+                  <button type="button"
+                    onClick={() => setDiscount((d) => ({ ...d, type: "FIXED" }))}
+                    className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "FIXED" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                    ฿
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder={discount.type === "PERCENT" ? "0–100" : "0"}
+                    value={discount.value}
+                    onChange={(e) => setDiscount((d) => ({ ...d, value: e.target.value }))}
+                    className="w-24 border border-sand rounded-xl px-2 py-1.5 text-sm text-center text-navy font-bold bg-white"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="หมายเหตุ เช่น สมาชิก, นักเรียน"
+                  value={discount.note}
+                  onChange={(e) => setDiscount((d) => ({ ...d, note: e.target.value }))}
+                  className="w-full border border-sand rounded-xl px-3 py-1.5 text-xs text-gray-600 bg-white"
+                />
+                {/* Summary */}
+                <div className="text-center pt-1">
+                  {discAmt > 0 ? (
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-gray-400 line-through">฿{billGroupCash.total.toLocaleString()}</p>
+                      <p className="text-xs text-green-600">ส่วนลด −฿{discAmt.toLocaleString()}</p>
+                      <p className="text-2xl font-bold text-orange">฿{finalTotal.toLocaleString()}</p>
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-bold text-orange">฿{billGroupCash.total.toLocaleString()}</p>
+                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">ยอดที่ต้องชำระ</p>
+                </div>
               </div>
+
               <div className="w-full border-2 border-sand rounded-xl px-4 py-3 text-2xl font-bold text-navy text-center bg-gray-50 min-h-[56px]">
                 {billCashInputStr ? `฿${received.toLocaleString()}` : <span className="text-gray-300">฿0</span>}
               </div>
               {billCashInputStr && (
-                <div className={`rounded-xl p-2.5 text-center ${received >= billGroupCash.total ? "bg-green-50" : "bg-red-50"}`}>
-                  {received >= billGroupCash.total
+                <div className={`rounded-xl p-2.5 text-center ${received >= finalTotal ? "bg-green-50" : "bg-red-50"}`}>
+                  {received >= finalTotal
                     ? <><p className="text-xs text-green-600">เงินทอน</p><p className="text-2xl font-bold text-green-700">฿{change.toLocaleString()}</p></>
-                    : <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(billGroupCash.total - received).toLocaleString()}</p>}
+                    : <p className="text-sm font-semibold text-red-500">ขาดอีก ฿{(finalTotal - received).toLocaleString()}</p>}
                 </div>
               )}
               <div className="grid grid-cols-3 gap-1.5">
@@ -1534,9 +1605,9 @@ export default function OrderQueue() {
                   className="bg-sand/50 border border-sand text-gray-400 text-xs font-semibold py-2 rounded-xl select-none">ล้าง</button>
               </div>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => { setBillGroupCash(null); setBillCashInputStr(""); }}
+                <button onClick={() => { setBillGroupCash(null); setBillCashInputStr(""); resetDiscount(); }}
                   className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
-                <button onClick={confirmBillGroupCash} disabled={!billCashInputStr || received < billGroupCash.total || billGroupCashLoading}
+                <button onClick={confirmBillGroupCash} disabled={!billCashInputStr || received < finalTotal || billGroupCashLoading}
                   className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                   {billGroupCashLoading ? "กำลังบันทึก..." : "✅ ชำระแล้ว"}
                 </button>
@@ -1547,19 +1618,65 @@ export default function OrderQueue() {
       })()}
 
       {/* Bill group scan confirm modal */}
-      {billGroupScan && (
+      {billGroupScan && (() => {
+        const discAmt = calcDiscountAmount(billGroupScan.total);
+        const finalTotal = billGroupScan.total - discAmt;
+        return (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
             <h3 className="font-bold text-navy text-lg text-center">📷 ยืนยันการสแกน</h3>
             <p className="text-sm text-center text-gray-500">ตี้ {billGroupScan.billName} · {billGroupScan.orders.length} ออเดอร์</p>
+
+            {/* Discount section */}
+            <div className="bg-gray-50 rounded-2xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-500">ส่วนลด (ถ้ามี)</p>
+              <div className="flex gap-1.5">
+                <button type="button"
+                  onClick={() => setDiscount((d) => ({ ...d, type: "PERCENT" }))}
+                  className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "PERCENT" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                  %
+                </button>
+                <button type="button"
+                  onClick={() => setDiscount((d) => ({ ...d, type: "FIXED" }))}
+                  className={`flex-1 py-1.5 rounded-xl text-sm font-bold border transition-colors ${discount.type === "FIXED" ? "bg-orange text-white border-orange" : "bg-white border-sand text-gray-400"}`}>
+                  ฿
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder={discount.type === "PERCENT" ? "0–100" : "0"}
+                  value={discount.value}
+                  onChange={(e) => setDiscount((d) => ({ ...d, value: e.target.value }))}
+                  className="w-24 border border-sand rounded-xl px-2 py-1.5 text-sm text-center text-navy font-bold bg-white"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="หมายเหตุ เช่น สมาชิก, นักเรียน"
+                value={discount.note}
+                onChange={(e) => setDiscount((d) => ({ ...d, note: e.target.value }))}
+                className="w-full border border-sand rounded-xl px-3 py-1.5 text-xs text-gray-600 bg-white"
+              />
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
-              <p className="text-xs text-blue-600 mb-1">ยอดรวมที่ต้องชำระ</p>
-              <p className="text-3xl font-black text-blue-700">฿{billGroupScan.total.toLocaleString()}</p>
+              {discAmt > 0 ? (
+                <div className="space-y-0.5">
+                  <p className="text-xs text-blue-400 line-through">฿{billGroupScan.total.toLocaleString()}</p>
+                  <p className="text-xs text-green-600">ส่วนลด −฿{discAmt.toLocaleString()}</p>
+                  <p className="text-3xl font-black text-blue-700">฿{finalTotal.toLocaleString()}</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-xs text-blue-600 mb-1">ยอดรวมที่ต้องชำระ</p>
+                  <p className="text-3xl font-black text-blue-700">฿{billGroupScan.total.toLocaleString()}</p>
+                </>
+              )}
             </div>
             <p className="text-xs text-center text-gray-400">ยืนยันว่าลูกค้าโอนเงินครบถ้วนแล้ว</p>
             <div className="flex gap-2">
               <button
-                onClick={() => setBillGroupScan(null)}
+                onClick={() => { setBillGroupScan(null); resetDiscount(); }}
                 disabled={billScanLoading}
                 className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold"
               >
@@ -1575,7 +1692,8 @@ export default function OrderQueue() {
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Confirm Modal */}
       {confirmAction && (
