@@ -139,10 +139,11 @@ export default function TasksPage() {
                 {/* Status cycle button */}
                 <button
                   onClick={() => {
-                    const next = STATUS_ORDER[(STATUS_ORDER.indexOf(task.status) + 1) % STATUS_ORDER.length];
+                    if (task.status === "DONE") return;
+                    const next = STATUS_ORDER[STATUS_ORDER.indexOf(task.status) + 1];
                     updateStatus(task, next);
                   }}
-                  className={`text-xs px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 ${STATUS_LABELS[task.status].color}`}
+                  className={`text-xs px-2.5 py-1 rounded-lg bg-white/5 border border-white/10 ${STATUS_LABELS[task.status].color} ${task.status === "DONE" ? "opacity-60 cursor-default" : ""}`}
                 >
                   {STATUS_LABELS[task.status].label}
                 </button>

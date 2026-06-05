@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
         id: e.id,
         staffId: e.staffId,
         staffName: e.staff ? `${e.staff.user.firstName} ${e.staff.user.lastName}`.trim() : null,
-        date: overrideDate ?? e.date.toISOString().slice(0, 10),
+        date: overrideDate ?? new Date(e.date.getTime() + BKK).toISOString().slice(0, 10),
         amount: e.amount,
         description: e.description,
         type: e.type,
