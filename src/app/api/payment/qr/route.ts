@@ -9,7 +9,11 @@ export async function POST(req: NextRequest) {
   const order = await db.order.findUnique({ where: { id: Number(orderId) } });
   if (!order) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
 
-  const finalAmount = Math.max(0, order.totalTHB - Math.min(discountAmount ?? 0, order.totalTHB));
+  const disc = Math.min(discountAmount ?? 0, order.totalTHB);
+  const finalAmount = Math.max(0, order.totalTHB - disc);
+
+  // Persist the discount on the order so receipts/queue can show it consistently
+  await db.order.update({ where: { id: order.id }, data: { discountAmount: disc > 0 ? disc : null } });
 
   // Create or update pending payment — lock method to PROMPTPAY and apply discount
   const existing = await db.payment.findUnique({ where: { orderId: order.id } });

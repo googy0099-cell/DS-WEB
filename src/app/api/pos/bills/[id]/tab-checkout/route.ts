@@ -161,6 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       orderId: firstOrder.id,
       orderName: `ตี้ ${billName}`,
       totalTHB: finalTotal,
+      discountAmount: discountAmount > 0 ? discountAmount : null,
       paymentMethod: actualPaymentMethod,
       locationLabel,
       itemsJson: JSON.stringify(allItems),

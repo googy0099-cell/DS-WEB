@@ -104,10 +104,13 @@ th{font-size:12px;color:#666;padding:4px;border-bottom:1px solid #eee}
   <thead><tr><th style="text-align:left">รายการ</th><th>จำนวน</th><th style="text-align:right">ราคา</th></tr></thead>
   <tbody>${itemsHtml}</tbody>
   <tfoot>
-    <tr class="total-row">
-      <td colspan="2">รวมทั้งหมด</td>
-      <td style="text-align:right">฿${order.totalTHB.toLocaleString()}</td>
-    </tr>
+    ${(order.discountAmount ?? 0) > 0 ? `
+    <tr><td colspan="2" style="padding-top:6px">ยอดรวม</td><td style="text-align:right;padding-top:6px">฿${order.totalTHB.toLocaleString()}</td></tr>
+    <tr><td colspan="2">ส่วนลด</td><td style="text-align:right">−฿${(order.discountAmount ?? 0).toLocaleString()}</td></tr>
+    <tr class="total-row"><td colspan="2">รวมทั้งหมด</td><td style="text-align:right">฿${(order.totalTHB - (order.discountAmount ?? 0)).toLocaleString()}</td></tr>
+    ` : `
+    <tr class="total-row"><td colspan="2">รวมทั้งหมด</td><td style="text-align:right">฿${order.totalTHB.toLocaleString()}</td></tr>
+    `}
   </tfoot>
 </table>
 <hr class="divider"/>

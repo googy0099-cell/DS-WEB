@@ -187,6 +187,7 @@ export async function PATCH(
     });
     if (!orderFull) return NextResponse.json({ error: "ไม่พบออเดอร์" }, { status: 404 });
     const finalTHB = amountOverride != null ? Math.max(0, amountOverride) : orderFull.totalTHB;
+    const discountTHB = Math.max(0, orderFull.totalTHB - finalTHB);
     const confirmedAt = new Date();
     const confirmData = {
       method: "CASH" as const,
@@ -218,7 +219,7 @@ export async function PATCH(
     const newStatus = orderFull.kitchenServedAt ? "SERVED" : "PAID";
     const updated = await db.order.update({
       where: { id: orderId },
-      data: { status: newStatus, ...(handledById ? { handledById } : {}) },
+      data: { status: newStatus, discountAmount: discountTHB > 0 ? discountTHB : null, ...(handledById ? { handledById } : {}) },
       select: { id: true, orderName: true, status: true },
     });
     if (newStatus === "SERVED" && handledById) await deductStockForOrder(orderId, handledById);
@@ -230,7 +231,7 @@ export async function PATCH(
       where: { orderId },
       create: {
         orderId, orderName: orderFull.orderName ?? "",
-        totalTHB: finalTHB, paymentMethod: "CASH",
+        totalTHB: finalTHB, discountAmount: discountTHB > 0 ? discountTHB : null, paymentMethod: "CASH",
         locationLabel, itemsJson: JSON.stringify(orderFull.items), confirmedAt,
       },
       update: {},

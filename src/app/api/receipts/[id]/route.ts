@@ -52,6 +52,7 @@ export async function GET(
       orderId: receipt.orderId,
       orderName: receipt.orderName,
       totalTHB: receipt.totalTHB,
+      discountAmount: receipt.discountAmount ?? undefined,
       dateStr: formatThaiDateTime(receipt.confirmedAt),
       items: stored.map((i) => ({ ...i, nameTh: i.menuItem.nameTh })),
       receiptNumber,

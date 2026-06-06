@@ -59,6 +59,8 @@ function openPrintWindow(html: string) {
 }
 
 async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
+  const discountAmount = order.discountAmount ?? 0;
+  const netTotal = order.totalTHB - discountAmount;
   // Try silent serial print first
   const hasPrinter = await getGrantedPrinter();
   if (hasPrinter) {
@@ -66,7 +68,8 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
       {
         id: order.id,
         orderName: order.orderName,
-        totalTHB: order.totalTHB,
+        totalTHB: netTotal,
+        discountAmount,
         note: order.note,
         createdAt: order.createdAt,
         tableId: order.tableId,
@@ -102,7 +105,8 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
     {
       orderId: order.id,
       orderName: order.orderName,
-      totalTHB: order.totalTHB,
+      totalTHB: netTotal,
+      discountAmount,
       note: order.note,
       dateStr: formatThaiDateTime(order.createdAt),
       items: order.items.map((i) => ({ ...i, nameTh: i.menuItem.nameTh })),
@@ -1604,10 +1608,26 @@ export default function OrderQueue() {
                           <span>฿{item.unitPriceTHB * item.quantity}</span>
                         </div>
                       ))}
-                      <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
-                        <span>รวม</span>
-                        <span>฿{order.totalTHB}</span>
-                      </div>
+                      {(() => {
+                        const disc = order.discountAmount ?? orderDiscounts[order.id]?.amount ?? 0;
+                        return disc > 0 ? (
+                          <>
+                            <div className="border-t border-gray-200 pt-1 flex justify-between text-xs text-gray-500">
+                              <span>ยอดรวม</span><span>฿{order.totalTHB}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-emerald-600">
+                              <span>ส่วนลด</span><span>−฿{disc}</span>
+                            </div>
+                            <div className="flex justify-between text-sm font-bold text-navy">
+                              <span>สุทธิ</span><span>฿{order.totalTHB - disc}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
+                            <span>รวม</span><span>฿{order.totalTHB}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="mt-2 flex gap-3">
                       <button onClick={() => printReceipt(order, receiptSettings)} className="text-xs text-gray-500 hover:text-gray-700">

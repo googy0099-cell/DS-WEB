@@ -202,6 +202,7 @@ model Order {
   playerSession   PlayerSession? @relation(fields: [playerSessionId], references: [id])
   status          String         @default("PENDING")
   totalTHB        Int
+  discountAmount  Int?           // single-order discount (net = totalTHB − discountAmount)
   note            String?
   kitchenServedAt DateTime?
   items           OrderItem[]
@@ -529,7 +530,8 @@ model Receipt {
   id            Int      @id @default(autoincrement())
   orderId       Int      @unique
   orderName     String   @default("")
-  totalTHB      Int
+  totalTHB      Int                  // NET total actually paid (after discount)
+  discountAmount Int?                // discount applied (subtotal = totalTHB + discountAmount)
   paymentMethod String
   locationLabel String   @default("")
   itemsJson     String
