@@ -54,7 +54,8 @@ export interface KitchenEscPosSettings {
 export interface EscPosOrder {
   id: number;
   orderName: string;
-  totalTHB: number;
+  totalTHB: number;          // NET total actually paid (after discount)
+  discountAmount?: number;   // if > 0, print subtotal + discount + net
   note?: string | null;
   createdAt: string | Date;
   tableId?: number | null;
@@ -109,7 +110,13 @@ export function buildReceiptEscPos(order: EscPosOrder, s: ReceiptEscPosSettings)
     if (s.showItemPrice) push(RIGHT, ln(`฿${item.unitPriceTHB * item.quantity}`), LEFT);
   }
 
-  if (s.showTotal) push(SEP, BOLD_ON, RIGHT, ln(`รวม ฿${order.totalTHB}`), LEFT, BOLD_OFF);
+  if (s.showTotal) {
+    push(SEP, RIGHT);
+    if (order.discountAmount && order.discountAmount > 0) {
+      push(ln(`ยอดรวม ฿${order.totalTHB + order.discountAmount}`), ln(`ส่วนลด -฿${order.discountAmount}`));
+    }
+    push(BOLD_ON, ln(`รวม ฿${order.totalTHB}`), BOLD_OFF, LEFT);
+  }
   if (s.showNote && order.note) push(SEP, ln(`หมายเหตุ: ${order.note}`));
   push(SEP, hAlign, ln(s.footer), feed, CUT);
 

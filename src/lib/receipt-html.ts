@@ -29,7 +29,8 @@ export interface ReceiptHtmlItem {
 export interface ReceiptHtmlData {
   orderId: number;
   orderName: string | null;
-  totalTHB: number;
+  totalTHB: number;          // NET total actually paid (after discount)
+  discountAmount?: number;   // if > 0, show subtotal + discount + net lines
   note?: string | null;
   dateStr: string;
   items: ReceiptHtmlItem[];
@@ -89,7 +90,13 @@ ${extraRows}
 </div>
 <hr class="divider"/>
 <table><tbody>${itemsHtml}</tbody>
-${settings.showTotal ? `<tfoot><tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${data.totalTHB}</td></tr></tfoot>` : ""}
+${settings.showTotal ? `<tfoot>${
+  data.discountAmount && data.discountAmount > 0
+    ? `<tr><td style="padding-top:4px;border-top:1px dashed #aaa">ยอดรวม</td><td style="text-align:right;padding-top:4px;border-top:1px dashed #aaa">฿${data.totalTHB + data.discountAmount}</td></tr>`
+      + `<tr><td>ส่วนลด</td><td style="text-align:right">−฿${data.discountAmount}</td></tr>`
+      + `<tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${data.totalTHB}</td></tr>`
+    : `<tr class="total-row"><td>รวมทั้งหมด</td><td style="text-align:right">฿${data.totalTHB}</td></tr>`
+}</tfoot>` : ""}
 </table>
 ${settings.showNote && data.note ? `<div class="note">📝 หมายเหตุ: ${data.note}</div>` : ""}
 <div class="footer">${settings.footer}</div>

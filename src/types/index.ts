@@ -83,6 +83,7 @@ export interface OrderWithItems {
   handledById: number | null;
   status: OrderStatus;
   totalTHB: number;
+  discountAmount: number | null;
   note: string | null;
   createdAt: string;
   kitchenServedAt: string | null;
