@@ -96,8 +96,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       select: {
         name: true,
         table: { select: { number: true } },
-        sessions: { where: { status: "PAID" }, select: { packageType: true, packagePrice: true, status: true } },
-        orders: { where: { status: "SERVED" }, select: { totalTHB: true, payment: { select: { method: true } } } },
+        sessions: { where: { status: "PAID" }, select: { packageType: true, status: true } },
+        orders: {
+          where: { status: "SERVED" },
+          select: {
+            payment: { select: { method: true } },
+            items: {
+              where: { cancelledAt: null },
+              select: { quantity: true, unitPriceTHB: true, menuItem: { select: { category: true } } },
+            },
+          },
+        },
       },
     }).then((b) => {
       if (!b) return;
@@ -105,8 +114,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const pkgMap: Record<string, number> = {};
       for (const s of activeSessions) pkgMap[s.packageType] = (pkgMap[s.packageType] ?? 0) + 1;
       const packages = Object.entries(pkgMap).map(([k, n]) => `${k}×${n}`).join(", ") || "—";
-      const gameRevenue = activeSessions.reduce((sum, s) => sum + s.packagePrice, 0);
-      const foodRevenue = b.orders.reduce((sum, o) => sum + o.totalTHB, 0);
+      // Split by order-item category — no double count with session.packagePrice
+      let gameRevenue = 0;
+      let foodRevenue = 0;
+      for (const o of b.orders) {
+        for (const it of o.items) {
+          const amt = it.quantity * it.unitPriceTHB;
+          if (it.menuItem.category === "gametime") gameRevenue += amt;
+          else foodRevenue += amt;
+        }
+      }
       const methods = [...new Set(b.orders.flatMap((o) => o.payment ? [o.payment.method] : []))];
       const paymentMethod = methods[0] ?? "—";
       notifyBillClosed({

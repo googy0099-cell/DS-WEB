@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
+import { computeRevenue } from "@/lib/revenue";
 
 export async function GET() {
   const session = await auth();
@@ -14,13 +15,13 @@ export async function GET() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  const [todayOrders, monthRevenue, totalMembers, newMembersMonth, topMenu] =
+  // Net revenue (confirmed payments + paid sessions) from 1st of month → today, BKK days
+  const bkk = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+
+  const [todayOrders, monthRev, totalMembers, newMembersMonth, topMenu] =
     await Promise.all([
       db.order.count({ where: { createdAt: { gte: today, lt: tomorrow } } }),
-      db.order.aggregate({
-        where: { status: "SERVED", createdAt: { gte: monthStart } },
-        _sum: { totalTHB: true },
-      }),
+      computeRevenue(bkk(monthStart), bkk(today)),
       db.user.count({ where: { role: "USER" } }),
       db.user.count({
         where: { role: "USER", createdAt: { gte: monthStart } },
@@ -44,7 +45,7 @@ export async function GET() {
 
   return NextResponse.json({
     todayOrders,
-    monthRevenue: monthRevenue._sum.totalTHB ?? 0,
+    monthRevenue: monthRev.totalRevenue,
     totalMembers,
     newMembersMonth,
     topMenu: topMenuWithNames,

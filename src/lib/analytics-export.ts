@@ -1,5 +1,6 @@
 import { createSign } from "crypto";
 import db from "@/lib/db";
+import { computeRevenue } from "@/lib/revenue";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -17,13 +18,6 @@ function parseDateRange(from: string, to: string) {
     end: new Date(Date.UTC(ty, tm - 1, td + 1, -7, 0, 0)),
   };
 }
-function fillDates(from: string, to: string) {
-  const dates: string[] = [];
-  const cur = new Date(from + "T00:00:00Z");
-  const end = new Date(to + "T00:00:00Z");
-  while (cur <= end) { dates.push(cur.toISOString().slice(0, 10)); cur.setUTCDate(cur.getUTCDate() + 1); }
-  return dates;
-}
 
 export function csvEscape(v: string | number | null | undefined) {
   const s = String(v ?? "");
@@ -36,19 +30,10 @@ export function buildCsv(rows: (string | number | null | undefined)[][]) {
 // ─── data fetchers ──────────────────────────────────────────────────────────
 
 export async function fetchSalesRows(from: string, to: string) {
-  const { start, end } = parseDateRange(from, to);
-  const orders = await db.order.findMany({
-    where: { status: "SERVED", createdAt: { gte: start, lt: end } },
-    select: { totalTHB: true, createdAt: true },
-  });
-  const map: Record<string, { revenue: number; count: number }> = {};
-  for (const d of fillDates(from, to)) map[d] = { revenue: 0, count: 0 };
-  for (const o of orders) {
-    const k = bkkDate(o.createdAt);
-    if (map[k]) { map[k].revenue += o.totalTHB; map[k].count++; }
-  }
+  // Net revenue actually collected (confirmed payments + paid sessions)
+  const { chart } = await computeRevenue(from, to);
   const header = ["วันที่", "รายได้ (บาท)", "จำนวนบิล"];
-  const rows = Object.entries(map).map(([date, v]) => [date, v.revenue, v.count]);
+  const rows = chart.map((d) => [d.date, d.revenue, d.count]);
   return { header, rows, sheetName: "ยอดขายรายวัน" };
 }
 
@@ -92,8 +77,16 @@ export async function fetchPartiesRows(from: string, to: string) {
     where: { createdAt: { gte: start, lt: end } },
     include: {
       table: { select: { number: true } },
-      sessions: { select: { nickname: true, packageType: true, packagePrice: true, status: true } },
-      orders: { where: { status: "SERVED" }, select: { totalTHB: true } },
+      sessions: { select: { packageType: true, status: true } },
+      orders: {
+        where: { status: "SERVED" },
+        select: {
+          items: {
+            where: { cancelledAt: null },
+            select: { quantity: true, unitPriceTHB: true, menuItem: { select: { category: true } } },
+          },
+        },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -103,8 +96,16 @@ export async function fetchPartiesRows(from: string, to: string) {
     const pkgMap: Record<string, number> = {};
     for (const s of active) pkgMap[s.packageType] = (pkgMap[s.packageType] ?? 0) + 1;
     const pkgSummary = Object.entries(pkgMap).sort(([a], [b]) => a.localeCompare(b)).map(([k, n]) => `${k}×${n}`).join(", ");
-    const gameRev = active.reduce((s, p) => s + p.packagePrice, 0);
-    const foodRev = b.orders.reduce((s, o) => s + o.totalTHB, 0);
+    // Split by order-item category — no double count with session.packagePrice
+    let gameRev = 0;
+    let foodRev = 0;
+    for (const o of b.orders) {
+      for (const it of o.items) {
+        const amt = it.quantity * it.unitPriceTHB;
+        if (it.menuItem.category === "gametime") gameRev += amt;
+        else foodRev += amt;
+      }
+    }
     return [bkkDate(b.createdAt), bkkDateTime(b.createdAt), b.name, b.table.number, b.status, active.length, pkgSummary, gameRev, foodRev, gameRev + foodRev];
   });
   return { header, rows, sheetName: "ปาร์ตี้" };

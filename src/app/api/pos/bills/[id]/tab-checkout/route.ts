@@ -79,13 +79,31 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const finalTotal = tabTotal - discountAmount;
 
   const now = new Date();
+  const actualPaymentMethod = paymentMethod === "CASH" ? "CASH" : "PROMPTPAY";
+
+  // Allocate the discount across orders proportionally so that the sum of each
+  // payment's net amount equals finalTotal exactly (remainder lands on the last
+  // order). This makes Payment.amountTHB the actual money received — so revenue
+  // reporting (Σ confirmed payments) and the cash drawer reconcile.
+  let allocated = 0;
+  const netByOrder = orders.map((o, idx) => {
+    if (idx === orders.length - 1) return finalTotal - allocated;
+    const share = tabTotal > 0 ? Math.round((o.totalTHB / tabTotal) * finalTotal) : 0;
+    allocated += share;
+    return share;
+  });
 
   // Mark SERVED only if kitchen has finished; already-SERVED orders stay SERVED; else PAID
   await db.$transaction([
-    ...orders.map((o) =>
+    ...orders.map((o, idx) =>
       db.payment.update({
         where: { id: o.payment!.id },
-        data: { status: "CONFIRMED", confirmedAt: now },
+        data: {
+          status: "CONFIRMED",
+          confirmedAt: now,
+          method: actualPaymentMethod,
+          amountTHB: netByOrder[idx],
+        },
       })
     ),
     ...orders
@@ -137,7 +155,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     : "-";
   const billName = firstOrder.bill?.name ?? `บิล ${id}`;
   const allItems = orders.flatMap((o) => o.items);
-  const actualPaymentMethod = paymentMethod === "CASH" ? "CASH" : "PROMPTPAY";
   await db.receipt.upsert({
     where: { orderId: firstOrder.id },
     create: {

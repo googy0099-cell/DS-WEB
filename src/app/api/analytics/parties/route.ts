@@ -38,7 +38,12 @@ export async function GET(req: NextRequest) {
       },
       orders: {
         where: { status: "SERVED" },
-        select: { totalTHB: true },
+        select: {
+          items: {
+            where: { cancelledAt: null },
+            select: { quantity: true, unitPriceTHB: true, menuItem: { select: { category: true } } },
+          },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -57,8 +62,17 @@ export async function GET(req: NextRequest) {
       .map(([k, n]) => `${PKG_LABEL[k] ?? k}×${n}`)
       .join(", ");
 
-    const gameRevenue = activeSessions.reduce((s, p) => s + p.packagePrice, 0);
-    const foodRevenue = b.orders.reduce((s, o) => s + o.totalTHB, 0);
+    // Split by order-item category (game-time packages are gametime line items).
+    // Avoids double-counting session.packagePrice against the gametime order items.
+    let gameRevenue = 0;
+    let foodRevenue = 0;
+    for (const o of b.orders) {
+      for (const it of o.items) {
+        const amt = it.quantity * it.unitPriceTHB;
+        if (it.menuItem.category === "gametime") gameRevenue += amt;
+        else foodRevenue += amt;
+      }
+    }
     const totalRevenue = gameRevenue + foodRevenue;
 
     const players = activeSessions.map((s) => ({

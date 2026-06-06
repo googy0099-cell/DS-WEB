@@ -36,15 +36,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
     });
 
-    // When linking a member for the first time, retroactively award dice for past SERVED orders
-    // that had no userId (cashier confirmed but member wasn't linked yet)
+    // When linking a member for the first time, retroactively award dice for past
+    // paid orders that had no userId (confirmed but member wasn't linked yet).
+    // Base it on the net amount actually received (payment.amountTHB), not gross.
     if (body.userId && !session.userId) {
       const unlinkedOrders = await db.order.findMany({
-        where: { playerSessionId: Number(id), status: "SERVED", userId: null },
-        select: { id: true, totalTHB: true },
+        where: {
+          playerSessionId: Number(id),
+          status: "SERVED",
+          userId: null,
+          payment: { status: "CONFIRMED" },
+        },
+        select: { id: true, payment: { select: { amountTHB: true } } },
       });
       if (unlinkedOrders.length > 0) {
-        const totalSpend = unlinkedOrders.reduce((s, o) => s + o.totalTHB, 0);
+        const totalSpend = unlinkedOrders.reduce((s, o) => s + (o.payment?.amountTHB ?? 0), 0);
         const diceEarned = Math.floor(totalSpend / 49);
         await Promise.all([
           diceEarned > 0
@@ -79,17 +85,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   });
 
   if (body.status === "PAID" || body.status === "LEFT") {
-    // Credit played time (purchased - remaining) to linked member
+    // Credit played time (purchased - remaining) to linked member.
+    // NOTE: dice points are NOT awarded here — the package/extra fees are order
+    // line items that already award dice at payment-confirm time. Awarding from
+    // session.packagePrice would double-count (and a PAID flip has no payment gate).
     if (session.userId && body.status === "PAID") {
       const usedSeconds = session.timeRemaining - current;
-      const diceEarned = Math.floor(session.packagePrice / 49);
-      await db.user.update({
-        where: { id: session.userId },
-        data: {
-          ...(usedSeconds > 0 ? { playMinutes: { increment: Math.round(usedSeconds / 60) } } : {}),
-          ...(diceEarned > 0 ? { dicePoints: { increment: diceEarned } } : {}),
-        },
-      });
+      if (usedSeconds > 0) {
+        await db.user.update({
+          where: { id: session.userId },
+          data: { playMinutes: { increment: Math.round(usedSeconds / 60) } },
+        });
+      }
     }
 
     // Free table if no other active session/bill on it

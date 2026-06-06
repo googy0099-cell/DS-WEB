@@ -61,7 +61,7 @@ export async function PATCH(req: NextRequest) {
     });
   }
   if (existingOrder?.userId) {
-    const dice = Math.floor((existingOrder.totalTHB ?? 0) / 49);
+    const dice = Math.floor(payment.amountTHB / 49);
     if (dice > 0) {
       await db.user.update({ where: { id: existingOrder.userId }, data: { dicePoints: { increment: dice } } });
     }
@@ -80,7 +80,7 @@ export async function PATCH(req: NextRequest) {
       create: {
         orderId: payment.orderId,
         orderName: existingOrder.orderName ?? "",
-        totalTHB: existingOrder.totalTHB,
+        totalTHB: payment.amountTHB,
         paymentMethod: payment.method,
         locationLabel,
         itemsJson: JSON.stringify(existingOrder.items),
