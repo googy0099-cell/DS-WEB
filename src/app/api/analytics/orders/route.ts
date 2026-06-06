@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
       skip: (page - 1) * pageSize,
       take: pageSize,
       select: {
-        id: true, orderName: true, status: true, totalTHB: true,
+        id: true, orderName: true, status: true, totalTHB: true, discountAmount: true,
         createdAt: true, billId: true,
         payment: { select: { method: true } },
         _count: { select: { items: true } },

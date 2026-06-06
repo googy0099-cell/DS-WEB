@@ -39,6 +39,7 @@ type Order = {
   orderName: string | null;
   status: string;
   totalTHB: number;
+  discountAmount: number | null;
   createdAt: string;
   billId: number | null;
   payment: { method: string } | null;
@@ -141,7 +142,8 @@ export default function OrderHistoryPage() {
                 </div>
               </div>
               <div className="text-right shrink-0">
-                <p className="font-bold text-navy text-sm">฿{o.totalTHB.toLocaleString()}</p>
+                <p className="font-bold text-navy text-sm">฿{(o.totalTHB - (o.discountAmount ?? 0)).toLocaleString()}</p>
+                {(o.discountAmount ?? 0) > 0 && <p className="text-[10px] text-green-600">−฿{(o.discountAmount ?? 0).toLocaleString()} ส่วนลด</p>}
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-500"}`}>
                   {STATUS_LABELS[o.status] ?? o.status}
                 </span>

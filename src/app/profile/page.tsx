@@ -38,6 +38,7 @@ interface UserProfile {
     id: number;
     status: string;
     totalTHB: number;
+    discountAmount: number | null;
     createdAt: string;
     note: string | null;
     payment: { method: string; status: string } | null;
@@ -405,9 +406,15 @@ export default function ProfilePage() {
                         {order.items.length > 3 && (
                           <p className="text-xs text-gray-400">+{order.items.length - 3} รายการอื่น</p>
                         )}
+                        {(order.discountAmount ?? 0) > 0 && (
+                          <div className="flex justify-between text-xs text-green-600 mt-1">
+                            <span>ส่วนลด</span>
+                            <span>−฿{(order.discountAmount ?? 0).toLocaleString()}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between font-bold text-sm text-navy border-t border-sand pt-1 mt-1">
                           <span>รวม</span>
-                          <span className="text-orange">฿{order.totalTHB.toLocaleString()}</span>
+                          <span className="text-orange">฿{(order.totalTHB - (order.discountAmount ?? 0)).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
