@@ -22,6 +22,8 @@ const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 type SalesData = {
   totalSales: number;
+  foodRevenue: number;
+  gametimeRevenue: number;
   totalBills: number;
   avgBasket: number;
   voidAmount: number;
@@ -85,6 +87,12 @@ export default function SalesReportPage() {
               <div key={c.label} className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-400 mb-1">{c.label}</p>
                 <p className="text-xl font-bold text-navy">{c.value}</p>
+                {c.label === "ยอดรวม" && data && (
+                  <p className="text-[11px] text-gray-400 mt-1 leading-tight">
+                    🍽️ อาหาร ฿{data.foodRevenue.toLocaleString()}<br />
+                    🎲 ค่าเล่นเกม ฿{data.gametimeRevenue.toLocaleString()}
+                  </p>
+                )}
               </div>
             ))}
           </div>

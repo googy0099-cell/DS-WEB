@@ -17,6 +17,30 @@ const AUDIT_ACTIONS: Record<string, string> = {
   CANCELLED: "ORDER_CANCELLED",
 };
 
+/**
+ * Reverse the loyalty/dice points awarded for an order whose paid amount dropped
+ * from `oldAmt` to `newAmt` (full refund = newAmt 0). Mirrors the award formula
+ * (floor/10 points, floor/49 dice) and clamps so balances never go negative.
+ */
+async function adjustPointsForRefund(userId: number, oldAmt: number, newAmt: number) {
+  if (oldAmt <= newAmt) return;
+  const u = await db.user.findUnique({
+    where: { id: userId },
+    select: { points: true, dicePoints: true, totalSpentTHB: true },
+  });
+  if (!u) return;
+  const dPoints = Math.floor(oldAmt / 10) - Math.floor(newAmt / 10);
+  const dDice = Math.floor(oldAmt / 49) - Math.floor(newAmt / 49);
+  await db.user.update({
+    where: { id: userId },
+    data: {
+      points: Math.max(0, u.points - dPoints),
+      dicePoints: Math.max(0, u.dicePoints - dDice),
+      totalSpentTHB: Math.max(0, u.totalSpentTHB - (oldAmt - newAmt)),
+    },
+  });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -104,11 +128,22 @@ export async function PATCH(
       }
     }
 
-    // Also update PENDING payment amount to reflect new total
-    await db.payment.updateMany({
-      where: { orderId, status: "PENDING" },
-      data: { amountTHB: totalTHB },
+    // Sync the payment to the new total.
+    // - PENDING (not yet paid): just update the amount due.
+    // - CONFIRMED (already paid) and total dropped: treat as a partial refund —
+    //   reduce the recorded amount and reverse the excess loyalty/dice points so
+    //   revenue (Σ confirmed payments) reflects what the customer actually keeps.
+    const existingPay = await db.payment.findUnique({
+      where: { orderId },
+      select: { id: true, status: true, amountTHB: true },
     });
+    if (existingPay?.status === "PENDING") {
+      await db.payment.update({ where: { id: existingPay.id }, data: { amountTHB: totalTHB } });
+    } else if (existingPay?.status === "CONFIRMED" && totalTHB < existingPay.amountTHB) {
+      const ord = await db.order.findUnique({ where: { id: orderId }, select: { userId: true } });
+      await db.payment.update({ where: { id: existingPay.id }, data: { amountTHB: totalTHB } });
+      if (ord?.userId) await adjustPointsForRefund(ord.userId, existingPay.amountTHB, totalTHB);
+    }
 
     const order = await db.order.update({
       where: { id: orderId },
@@ -244,6 +279,18 @@ export async function PATCH(
 
   // Status update mode
   const { status } = body as { status: string };
+
+  // Cancelling an already-paid order: reverse the points it awarded. Revenue
+  // already excludes CANCELLED orders' payments, so this just undoes the perks.
+  if (status === "CANCELLED") {
+    const [pay, ord] = await Promise.all([
+      db.payment.findUnique({ where: { orderId }, select: { status: true, amountTHB: true } }),
+      db.order.findUnique({ where: { id: orderId }, select: { userId: true } }),
+    ]);
+    if (pay?.status === "CONFIRMED" && ord?.userId) {
+      await adjustPointsForRefund(ord.userId, pay.amountTHB, 0);
+    }
+  }
 
   const order = await db.order.update({
     where: { id: orderId },

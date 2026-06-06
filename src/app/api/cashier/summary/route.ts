@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
+import { computeRevenue } from "@/lib/revenue";
 
 function getBangkokDateStr(): string {
   const now = new Date();
@@ -21,20 +22,16 @@ export async function GET(req: NextRequest) {
   const date = (paramDate && /^\d{4}-\d{2}-\d{2}$/.test(paramDate)) ? paramDate : getBangkokDateStr();
   const { start, end } = getDayBoundsForDate(date);
 
-  const [payments, servedOrders, paidSessions, lastClose, pettyExpenses] = await Promise.all([
+  const [rev, payments, paidSessionsCount, lastClose, pettyExpenses] = await Promise.all([
+    // Net revenue (confirmed payments; food/game split by item category — no double count)
+    computeRevenue(date, date),
+    // Payment detail lists for the drawer breakdown
     db.payment.findMany({
       where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } },
-      include: { order: { select: { id: true, orderName: true, totalTHB: true } } },
+      include: { order: { select: { id: true, orderName: true, status: true } } },
       orderBy: { confirmedAt: "asc" },
     }),
-    db.order.findMany({
-      where: { status: "SERVED", createdAt: { gte: start, lt: end } },
-      select: { id: true, totalTHB: true, orderName: true, createdAt: true },
-    }),
-    db.playerSession.findMany({
-      where: { status: "PAID", updatedAt: { gte: start, lt: end } },
-      select: { id: true, packageType: true, packagePrice: true, nickname: true },
-    }),
+    db.playerSession.count({ where: { status: "PAID", updatedAt: { gte: start, lt: end } } }),
     db.cashDrawerSession.findFirst({
       where: { date },
       orderBy: { createdAt: "desc" },
@@ -45,28 +42,25 @@ export async function GET(req: NextRequest) {
     }).catch(() => []),  // graceful fallback if table not migrated yet
   ]);
 
-  const cashPayments = payments.filter((p) => p.method === "CASH");
-  const transferPayments = payments.filter((p) => p.method !== "CASH");
-  const cashTotal = cashPayments.reduce((s, p) => s + p.amountTHB, 0);
-  const transferTotal = transferPayments.reduce((s, p) => s + p.amountTHB, 0);
-
-  const ordersTotal = servedOrders.reduce((s, o) => s + o.totalTHB, 0);
-  const gametimeTotal = paidSessions.reduce((s, s2) => s + s2.packagePrice, 0);
+  // Exclude payments tied to cancelled orders from the detail lists too
+  const validPayments = payments.filter((p) => p.order?.status !== "CANCELLED");
+  const cashPayments = validPayments.filter((p) => p.method === "CASH");
+  const transferPayments = validPayments.filter((p) => p.method !== "CASH");
 
   const pettyTotal = pettyExpenses.filter((e) => e.type === "PETTY_CASH").reduce((s, e) => s + e.amount, 0);
   const advanceTotal = pettyExpenses.filter((e) => e.type === "STAFF_ADVANCE").reduce((s, e) => s + e.amount, 0);
 
   return NextResponse.json({
     date,
-    cashTotal,
-    transferTotal,
-    grandTotal: cashTotal + transferTotal,
+    cashTotal: rev.cashTotal,
+    transferTotal: rev.transferTotal,
+    grandTotal: rev.totalRevenue,
     cashPayments,
     transferPayments,
-    ordersTotal,
-    ordersCount: servedOrders.length,
-    gametimeTotal,
-    gametimeCount: paidSessions.length,
+    ordersTotal: rev.foodRevenue,
+    ordersCount: validPayments.length,
+    gametimeTotal: rev.gametimeRevenue,
+    gametimeCount: paidSessionsCount,
     lastClose,
     pettyExpenses,
     pettyTotal,

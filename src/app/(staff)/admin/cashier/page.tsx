@@ -17,7 +17,7 @@ interface Payment {
   receivedAmount: number | null;
   changeAmount: number | null;
   confirmedAt: string;
-  order: { id: number; orderName: string; totalTHB: number };
+  order: { id: number; orderName: string; status: string };
 }
 
 interface Summary {
