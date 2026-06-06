@@ -1153,6 +1153,17 @@ export default function OrderQueue() {
   }
 
   // Cashier picked "สแกน": confirm order (if still PENDING), then generate QR and lock method to PROMPTPAY
+  async function resetPaymentMethod(order: OrderWithItems) {
+    setLoading(order.id, true);
+    try {
+      await fetch(`/api/payment?orderId=${order.id}`, { method: "DELETE" });
+      setQrMap((prev) => { const next = { ...prev }; delete next[order.id]; return next; });
+      await mutate();
+    } finally {
+      setLoading(order.id, false);
+    }
+  }
+
   async function chooseScan(order: OrderWithItems) {
     setLoading(order.id, true);
     try {
@@ -1369,6 +1380,7 @@ export default function OrderQueue() {
                 onOpenCashModal={openCashModal}
                 onConfirmQr={confirmQrPayment}
                 onChooseScan={chooseScan}
+                onResetPayment={resetPaymentMethod}
                 qrUrl={qrMap[order.id]}
                 servedAcked={servedAcked}
                 onServeAck={markServedAck}
@@ -1464,6 +1476,7 @@ export default function OrderQueue() {
                   onOpenCashModal={openCashModal}
                   onConfirmQr={confirmQrPayment}
                   onChooseScan={chooseScan}
+                  onResetPayment={resetPaymentMethod}
                   qrUrl={qrMap[item.order.id]}
                   servedAcked={servedAcked}
                   onServeAck={markServedAck}
@@ -2816,6 +2829,7 @@ function OrderCard({
   onOpenCashModal,
   onConfirmQr,
   onChooseScan,
+  onResetPayment,
   qrUrl,
   servedAcked,
   onServeAck,
@@ -2840,6 +2854,7 @@ function OrderCard({
   onOpenCashModal: (order: OrderWithItems) => void;
   onConfirmQr: (order: OrderWithItems) => void;
   onChooseScan: (order: OrderWithItems) => void;
+  onResetPayment: (order: OrderWithItems) => void;
   qrUrl?: string;
   servedAcked: Set<number>;
   onServeAck: (id: number) => void;
@@ -3222,6 +3237,13 @@ function OrderCard({
           </div>
         ) : isQrNoSlip ? (
           <div className="mb-2 space-y-2">
+            <button
+              onClick={() => onResetPayment(order)}
+              disabled={isLoading}
+              className="flex items-center gap-1.5 text-sm font-semibold text-gray-500 hover:text-navy px-2 py-1.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-50"
+            >
+              ← เปลี่ยนวิธีชำระ
+            </button>
             {qrUrl ? (
               <div className="text-center bg-blue-50 border border-blue-200 rounded-xl p-3">
                 <p className="text-xs text-blue-600 mb-2">ให้ลูกค้าสแกนเพื่อจ่าย ฿{order.totalTHB.toLocaleString()}</p>
