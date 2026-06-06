@@ -5,9 +5,7 @@ import Image from "next/image";
 import {
   loadModels,
   detectMetrics,
-  updateBlinkState,
   type LivenessMetrics,
-  type BlinkState,
 } from "@/lib/hr-face";
 
 type StaffMember = {
@@ -22,14 +20,13 @@ type StaffMember = {
 type CheckinStep = "idle" | "camera" | "identifying" | "success";
 type CheckinMode = "checkin" | "checkout";
 
-type ChallengeType = "blink" | "mouth" | "left" | "right";
+type ChallengeType = "mouth" | "left" | "right";
 const CHALLENGE_LABEL: Record<ChallengeType, string> = {
-  blink: "กระพริบตาแรงๆ 1 ครั้ง",
   mouth: "อ้าปากกว้างค้างไว้",
   left: "หันหน้าไปทางซ้าย",
   right: "หันหน้าไปทางขวา",
 };
-const CHALLENGES: ChallengeType[] = ["blink", "mouth", "left", "right"];
+const CHALLENGES: ChallengeType[] = ["mouth", "left", "right"];
 
 const CHALLENGES_PER_SCAN = 3;
 const PER_CHALLENGE_TIMEOUT_MS = 10000;
@@ -91,7 +88,6 @@ export default function HrCheckinPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const livenessLoopRef = useRef<number | null>(null);
   const livenessStartRef = useRef<number>(0);
-  const blinkStateRef = useRef<BlinkState>({ eyesOpen: true, blinkCount: 0 });
   const holdStartRef = useRef<number | null>(null);
   const modeRef = useRef<CheckinMode | null>(null);
 
@@ -160,14 +156,6 @@ export default function HrCheckinPage() {
 
   function checkChallengeMet(m: LivenessMetrics, ch: ChallengeType, now: number): boolean {
     switch (ch) {
-      case "blink": {
-        blinkStateRef.current = updateBlinkState(blinkStateRef.current, m.ear);
-        const state = blinkStateRef.current.eyesOpen ? "ตาเปิด" : "ตาปิด";
-        setChallengeProgress(
-          `${state} (EAR ${m.ear.toFixed(2)}) — กระพริบ ${blinkStateRef.current.blinkCount}/1`
-        );
-        return blinkStateRef.current.blinkCount >= 1;
-      }
       case "mouth": {
         const open = m.mouthOpen > 0.35;
         if (open) {
@@ -205,7 +193,6 @@ export default function HrCheckinPage() {
   }
 
   function resetChallengeState() {
-    blinkStateRef.current = { eyesOpen: true, blinkCount: 0 };
     holdStartRef.current = null;
     setChallengeProgress("");
   }
