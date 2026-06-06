@@ -9,6 +9,8 @@ const MENU = [
   { href: "/staff/checklist", icon: "✅", label: "เช็คลิสต์", desc: "เปิด-ปิดร้าน" },
   { href: "/staff/tasks", icon: "📋", label: "งาน", desc: "ดูและอัพเดตงานที่ได้รับมอบหมาย" },
   { href: "/staff/kpi", icon: "🎯", label: "KPI", desc: "เป้าหมายและผลงานรายเดือน" },
+  { href: "/staff/kitchen", icon: "🍳", label: "คิวครัว", desc: "ออเดอร์อาหารที่ต้องเตรียม" },
+  { href: "/staff/bar", icon: "🥤", label: "คิวบาร์", desc: "ออเดอร์เครื่องดื่มที่ต้องเตรียม" },
 ];
 
 const OWNER_MENU = [

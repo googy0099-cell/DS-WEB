@@ -1711,7 +1711,7 @@ export default function OrderQueue() {
                 <button onClick={() => { setCashOrder(null); setCashInputStr(""); }}
                   className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
                 <button onClick={confirmCashPayment}
-                  disabled={!cashInputStr || received < cashOrder.totalTHB}
+                  disabled={!cashInputStr || received < finalTotal}
                   className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                   ✅ ลูกค้าชำระแล้ว
                 </button>
@@ -3123,7 +3123,7 @@ function OrderCard({
             disabled={isLoading}
             className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-teal-600 text-white transition-opacity disabled:opacity-60"
           >
-            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${order.totalTHB.toLocaleString()}`}
+            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${(order.payment?.amountTHB ?? order.totalTHB).toLocaleString()}`}
           </button>
         ) : isBillTab ? (
           // TAB order linked to a bill — payment happens at bill checkout, not here
