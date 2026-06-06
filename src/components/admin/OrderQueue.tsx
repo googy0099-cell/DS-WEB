@@ -3289,7 +3289,7 @@ function OrderCard({
             </button>
             {qrUrl ? (
               <div className="text-center bg-blue-50 border border-blue-200 rounded-xl p-3">
-                <p className="text-xs text-blue-600 mb-2">ให้ลูกค้าสแกนเพื่อจ่าย ฿{order.totalTHB.toLocaleString()}</p>
+                <p className="text-xs text-blue-600 mb-2">ให้ลูกค้าสแกนเพื่อจ่าย ฿{(order.totalTHB - discAmount).toLocaleString()}</p>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={qrUrl} alt="QR" className="w-44 h-44 mx-auto rounded-lg object-contain bg-white" />
               </div>
@@ -3307,7 +3307,7 @@ function OrderCard({
               disabled={isLoading}
               className="w-full text-sm font-bold py-3 rounded-xl bg-sage text-white transition-opacity disabled:opacity-60"
             >
-              {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
+              {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${(order.totalTHB - discAmount).toLocaleString()}`}
             </button>
           </div>
         ) : isQrSlip ? (
@@ -3316,7 +3316,7 @@ function OrderCard({
             disabled={isLoading}
             className="w-full text-sm font-bold py-3 rounded-xl mb-2 bg-sage text-white transition-opacity disabled:opacity-60"
           >
-            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${order.totalTHB.toLocaleString()}`}
+            {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันการชำระ ฿${(order.totalTHB - discAmount).toLocaleString()}`}
           </button>
         ) : order.status === "PAID" ? (
           // Payment done → close only after serve is acknowledged
