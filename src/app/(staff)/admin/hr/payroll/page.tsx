@@ -127,12 +127,18 @@ export default function AdminHrPayrollPage() {
           {[year - 1, year, year + 1].map((y) => <option key={y} value={y}>{y + 543}</option>)}
         </select>
       </div>
-      <div className="flex gap-2 mb-4">
+      <div className="flex gap-2 mb-2">
         <button onClick={downloadCSV} className="flex-1 py-2 bg-navy text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5">
-          ↓ ดาวน์โหลด CSV
+          ↓ CSV รวม
+        </button>
+        <button
+          onClick={() => window.open(`/api/hr/payroll/slip?year=${year}&month=${month}`, "_blank")}
+          className="flex-1 py-2 bg-orange text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5"
+        >
+          📄 สลิปทุกคน
         </button>
         <button onClick={syncSheets} disabled={syncing} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl disabled:opacity-60">
-          {syncing ? "กำลังซิงค์..." : "↑ ซิงค์ Google Sheets"}
+          {syncing ? "ซิงค์..." : "↑ Sheets"}
         </button>
       </div>
       {syncMsg && <p className={`text-xs mb-3 px-3 py-2 rounded-xl ${syncMsg.startsWith("ไม่") || syncMsg.startsWith("เกิด") ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600"}`}>{syncMsg}</p>}
@@ -158,9 +164,18 @@ export default function AdminHrPayrollPage() {
                       {PAY_TYPE_LABEL[s.payType] ?? s.payType}
                     </span>
                   </div>
-                  <span className={`font-bold text-lg shrink-0 ml-2 ${s.netPay < 0 ? "text-red-500" : "text-emerald-600"}`}>
-                    ฿{thb(s.netPay)}
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <button
+                      onClick={() => window.open(`/api/hr/payroll/slip?staffId=${s.id}&year=${year}&month=${month}`, "_blank")}
+                      className="text-xs px-2 py-1 bg-orange/10 text-orange border border-orange/30 rounded-lg font-semibold hover:bg-orange/20 transition-colors"
+                      title="เปิดสลิปเงินเดือน"
+                    >
+                      📄 สลิป
+                    </button>
+                    <span className={`font-bold text-lg ${s.netPay < 0 ? "text-red-500" : "text-emerald-600"}`}>
+                      ฿{thb(s.netPay)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Gross breakdown */}
