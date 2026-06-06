@@ -953,7 +953,7 @@ export default function OrderQueue() {
     const received = parseInt(cashInputStr.replace(/,/g, ""), 10) || 0;
     const discAmt = orderDiscounts[cashOrder.id]?.amount ?? 0;
     const finalTotal = cashOrder.totalTHB - discAmt;
-    if (received < finalTotal) return;
+    if (finalTotal > 0 && received < finalTotal) return;
     const change = received - finalTotal;
     const order = cashOrder;
     setLoading(order.id, true);
@@ -1083,7 +1083,7 @@ export default function OrderQueue() {
     if (!billGroupCash) return;
     const finalTotal = billGroupCash.total - calcDiscountAmount(billGroupCash.total);
     const received = parseInt(billCashInputStr.replace(/,/g, ""), 10) || 0;
-    if (received < finalTotal) return;
+    if (finalTotal > 0 && received < finalTotal) return;
     const snapshot = billGroupCash;
     setBillGroupCashLoading(true);
     try {
@@ -1711,7 +1711,7 @@ export default function OrderQueue() {
                 <button onClick={() => { setCashOrder(null); setCashInputStr(""); }}
                   className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
                 <button onClick={confirmCashPayment}
-                  disabled={!cashInputStr || received < finalTotal}
+                  disabled={finalTotal > 0 && (!cashInputStr || received < finalTotal)}
                   className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                   ✅ ลูกค้าชำระแล้ว
                 </button>
@@ -1813,7 +1813,7 @@ export default function OrderQueue() {
               <div className="flex gap-2 pt-1">
                 <button onClick={() => { setBillGroupCash(null); setBillCashInputStr(""); resetDiscount(); }}
                   className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm font-semibold">ยกเลิก</button>
-                <button onClick={confirmBillGroupCash} disabled={!billCashInputStr || received < finalTotal || billGroupCashLoading}
+                <button onClick={confirmBillGroupCash} disabled={(finalTotal > 0 && (!billCashInputStr || received < finalTotal)) || billGroupCashLoading}
                   className="flex-1 bg-green-600 text-white py-3 rounded-2xl text-sm font-bold disabled:opacity-40">
                   {billGroupCashLoading ? "กำลังบันทึก..." : "✅ ชำระแล้ว"}
                 </button>
@@ -2351,13 +2351,20 @@ export default function OrderQueue() {
               </div>
 
               {/* Preview */}
-              {previewAmt > 0 && (
-                <div className="bg-green-50 rounded-xl p-3 text-center space-y-0.5">
-                  <p className="text-xs text-gray-400 line-through">฿{discountModal.total.toLocaleString()}</p>
-                  <p className="text-sm text-green-600 font-semibold">− ฿{previewAmt.toLocaleString()}</p>
-                  <p className="text-xl font-black text-navy">฿{(discountModal.total - previewAmt).toLocaleString()}</p>
-                </div>
-              )}
+              <div className="bg-green-50 rounded-xl p-3 text-center space-y-0.5">
+                {previewAmt > 0 ? (
+                  <>
+                    <p className="text-xs text-gray-400 line-through">฿{discountModal.total.toLocaleString()}</p>
+                    <p className="text-sm text-green-600 font-semibold">− ฿{previewAmt.toLocaleString()}</p>
+                    <p className="text-xl font-black text-navy">฿{(discountModal.total - previewAmt).toLocaleString()}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500">ยอดรวม</p>
+                    <p className="text-xl font-black text-navy">฿{discountModal.total.toLocaleString()}</p>
+                  </>
+                )}
+              </div>
 
               <div className="flex gap-2">
                 <button onClick={() => setDiscountModal(null)}
