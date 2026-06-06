@@ -352,6 +352,34 @@ export default function AdminGamesPage() {
   const [editing, setEditing] = useState<Partial<GameGuide> | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+
+  function insertFormat(type: "h2" | "h3" | "bold" | "list") {
+    const el = summaryRef.current;
+    if (!el || !editing) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const val = editing.summaryTh ?? "";
+    const selected = val.slice(start, end);
+    let newVal = val;
+    let newStart = start;
+    let newEnd = end;
+
+    if (type === "bold") {
+      const inner = selected || "ข้อความ";
+      newVal = val.slice(0, start) + `**${inner}**` + val.slice(end);
+      newStart = start + 2;
+      newEnd = newStart + inner.length;
+    } else {
+      const prefix = type === "h2" ? "## " : type === "h3" ? "### " : "- ";
+      const lineStart = val.lastIndexOf("\n", start - 1) + 1;
+      newVal = val.slice(0, lineStart) + prefix + val.slice(lineStart);
+      newStart = newEnd = start + prefix.length;
+    }
+
+    setEditing({ ...editing, summaryTh: newVal });
+    setTimeout(() => { el.focus(); el.setSelectionRange(newStart, newEnd); }, 0);
+  }
 
   const [search, setSearch] = useState("");
 
@@ -642,13 +670,29 @@ export default function AdminGamesPage() {
 
               <div>
                 <label className="text-xs font-medium text-navy block mb-1">วิธีเล่น / รายละเอียด</label>
-                <textarea
-                  value={editing.summaryTh ?? ""}
-                  onChange={(e) => setEditing({ ...editing, summaryTh: e.target.value })}
-                  rows={4}
-                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none resize-none"
-                  placeholder="อธิบายวิธีเล่นโดยย่อ..."
-                />
+                <div className="border border-sand rounded-xl overflow-hidden focus-within:border-orange transition-colors">
+                  <div className="flex gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-sand">
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h2"); }}
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่ (## )">H2</button>
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h3"); }}
+                      className="px-2 py-1 rounded text-xs font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก (### )">H3</button>
+                    <div className="w-px bg-sand mx-0.5" />
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("bold"); }}
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="ตัวหนา (**ข้อความ**)"><span className="font-black">B</span></button>
+                    <div className="w-px bg-sand mx-0.5" />
+                    <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("list"); }}
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="รายการ (- )">— รายการ</button>
+                  </div>
+                  <textarea
+                    ref={summaryRef}
+                    value={editing.summaryTh ?? ""}
+                    onChange={(e) => setEditing({ ...editing, summaryTh: e.target.value })}
+                    rows={6}
+                    className="w-full px-3 py-2 text-sm focus:outline-none resize-none bg-white font-mono"
+                    placeholder={"## หัวข้อหลัก\n### หัวข้อย่อย\n**ตัวหนา** หรือข้อความปกติ\n- รายการ 1\n- รายการ 2"}
+                  />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">## หัวข้อ · ### หัวข้อเล็ก · **ตัวหนา** · - รายการ</p>
               </div>
 
               <div className="flex items-center justify-between">
