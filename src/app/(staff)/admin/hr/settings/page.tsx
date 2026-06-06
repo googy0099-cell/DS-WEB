@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 type Config = {
   deductionType: string;
   deductionAmount: number;
+  lateDeductionMax: number;
   absentDeductionAmount: number;
   absentDeductionType: string;
   taskDeductionAmount: number;
@@ -13,12 +14,13 @@ type Config = {
 
 export default function AdminHrSettingsPage() {
   const [config, setConfig] = useState<Config>({
-    deductionType: "FIXED", deductionAmount: 0,
+    deductionType: "FIXED", deductionAmount: 0, lateDeductionMax: 0,
     absentDeductionAmount: 0, absentDeductionType: "FIXED",
     taskDeductionAmount: 0, taskDeductionType: "FIXED",
   });
   const [lateType, setLateType] = useState<"FIXED" | "PERCENT">("FIXED");
   const [lateStr, setLateStr] = useState("0");
+  const [lateMaxStr, setLateMaxStr] = useState("0");
   const [absentType, setAbsentType] = useState<"FIXED" | "PERCENT">("FIXED");
   const [absentStr, setAbsentStr] = useState("0");
   const [taskType, setTaskType] = useState<"FIXED" | "PERCENT">("FIXED");
@@ -33,6 +35,7 @@ export default function AdminHrSettingsPage() {
     setConfig(data);
     setLateType(data.deductionType === "PERCENT" ? "PERCENT" : "FIXED");
     setLateStr(String(data.deductionAmount));
+    setLateMaxStr(String(data.lateDeductionMax ?? 0));
     setAbsentType(data.absentDeductionType === "PERCENT" ? "PERCENT" : "FIXED");
     setAbsentStr(String(data.absentDeductionAmount));
     setTaskType(data.taskDeductionType === "PERCENT" ? "PERCENT" : "FIXED");
@@ -46,7 +49,7 @@ export default function AdminHrSettingsPage() {
     setMsg("");
     const body =
       field === "late"
-        ? { deductionType: lateType, deductionAmount: Math.max(0, Number(lateStr) || 0) }
+        ? { deductionType: lateType, deductionAmount: Math.max(0, Number(lateStr) || 0), lateDeductionMax: Math.max(0, Number(lateMaxStr) || 0) }
         : field === "absent"
         ? { absentDeductionType: absentType, absentDeductionAmount: Math.max(0, Number(absentStr) || 0) }
         : { taskDeductionType: taskType, taskDeductionAmount: Math.max(0, Number(taskStr) || 0) };
@@ -137,7 +140,7 @@ export default function AdminHrSettingsPage() {
               ? "จำนวนบาทที่หักต่อนาทีที่สาย เช่น 5 = หัก ฿5 ต่อนาที"
               : "% ของค่าจ้างรายวันต่อนาทีที่สาย เช่น 1 = หัก 1% ต่อนาที"}
           </p>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center mb-3">
             <div className="relative flex-1">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">{lateType === "FIXED" ? "฿" : "%"}</span>
               <input type="number" min={0} value={lateStr} onChange={(e) => setLateStr(e.target.value)}
@@ -146,7 +149,23 @@ export default function AdminHrSettingsPage() {
             <button onClick={() => save("late")} disabled={saving}
               className="px-4 py-2.5 bg-orange text-white rounded-xl font-bold text-sm disabled:opacity-50 shrink-0">บันทึก</button>
           </div>
-          {latePreviewText() && <p className="text-xs text-orange mt-2 font-medium">ปัจจุบัน: {latePreviewText()}</p>}
+          <div className="bg-white border border-yellow-200 rounded-xl p-3 flex items-center gap-3">
+            <div className="flex-1">
+              <p className="text-xs font-semibold text-gray-600 mb-1">ยอดหักสูงสุด / ครั้ง</p>
+              <p className="text-xs text-gray-400">0 = ไม่จำกัด</p>
+            </div>
+            <div className="relative w-28">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">฿</span>
+              <input type="number" min={0} value={lateMaxStr} onChange={(e) => setLateMaxStr(e.target.value)}
+                className="w-full border border-sand rounded-xl pl-7 pr-2 py-2 text-sm focus:outline-none focus:border-orange" placeholder="0" />
+            </div>
+          </div>
+          {latePreviewText() && (
+            <p className="text-xs text-orange mt-2 font-medium">
+              ปัจจุบัน: {latePreviewText()}
+              {config.lateDeductionMax > 0 && ` · สูงสุด ฿${config.lateDeductionMax.toLocaleString()}`}
+            </p>
+          )}
         </div>
 
         {/* Absent */}

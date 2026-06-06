@@ -48,19 +48,23 @@ export function computeLateMinutes(checkIn: Date, schedule: Schedule | null): nu
 // PERCENT: (deductionAmount% of daily wage) × lateMinutes
 export function computeLateDeductionAmount(
   lateMinutes: number,
-  config: { deductionType: string; deductionAmount: number },
+  config: { deductionType: string; deductionAmount: number; lateDeductionMax?: number },
   staff: { baseSalary: number; payType: string }
 ): number {
   if (lateMinutes <= 0 || config.deductionAmount <= 0) return 0;
+  let raw: number;
   if (config.deductionType === "PERCENT") {
     const dailyWage =
       staff.payType === "DAILY" ? staff.baseSalary
       : staff.payType === "HOURLY" ? staff.baseSalary * 8
-      : staff.baseSalary / 30; // MONTHLY
-    const ratePerMin = (config.deductionAmount / 100) * dailyWage;
-    return Math.max(1, Math.round(ratePerMin * lateMinutes));
+      : staff.baseSalary / 30;
+    raw = (config.deductionAmount / 100) * dailyWage * lateMinutes;
+  } else {
+    raw = config.deductionAmount * lateMinutes;
   }
-  return config.deductionAmount * lateMinutes;
+  const max = config.lateDeductionMax ?? 0;
+  const capped = max > 0 ? Math.min(raw, max) : raw;
+  return Math.max(1, Math.round(capped));
 }
 
 // Per-day deduction (absent / task overdue) — same logic as late but unit is "days" not "minutes"
