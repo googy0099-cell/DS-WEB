@@ -2903,6 +2903,8 @@ function OrderCard({
   const hasSlip = !!order.payment?.slipUrl;
   const activeItems = order.items.filter((i) => !i.cancelledAt);
   const kitchenDone = isKitchenDone(order.items);
+  // Discount to show: live preview (just entered, not yet paid) OR persisted (after payment)
+  const discAmount = orderDiscountAmount ?? order.discountAmount ?? 0;
 
   // PENDING payment cases (customer already selected method)
   const isPendingCash = isPending && method === "CASH";
@@ -3025,10 +3027,24 @@ function OrderCard({
               ❌ {order.items.filter((i) => i.cancelledAt).length} รายการถูกยกเลิก
             </p>
           )}
-          <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold text-navy">
-            <span>รวม</span>
-            <span>฿{order.totalTHB}</span>
-          </div>
+          {discAmount > 0 ? (
+            <div className="border-t border-gray-200 pt-1.5 space-y-0.5">
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>ยอดรวม</span><span>฿{order.totalTHB}</span>
+              </div>
+              <div className="flex justify-between text-xs text-green-600 font-semibold">
+                <span>ส่วนลด</span><span>−฿{discAmount}</span>
+              </div>
+              <div className="flex justify-between font-bold text-navy">
+                <span>สุทธิ</span><span>฿{order.totalTHB - discAmount}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="border-t border-gray-200 pt-1.5 flex justify-between font-bold text-navy">
+              <span>รวม</span>
+              <span>฿{order.totalTHB}</span>
+            </div>
+          )}
         </div>
 
         {/* Note */}
