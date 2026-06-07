@@ -11,7 +11,7 @@
     "db:studio": "prisma studio",
     "db:verify": "ts-node --esm scripts/verify-revenue.ts",
     "test:db:setup": "ts-node --esm scripts/test-db-setup.ts",
-    "test:unit": "node --import ts-node/esm --test tests/",
+    "test:unit": "node --import ts-node/esm --test \"tests/**/*.test.ts\"",
     "test:e2e": "playwright test"
   },
   "prisma": {

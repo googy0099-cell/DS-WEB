@@ -2771,33 +2771,30 @@ function BillOrderGroupCard({
         )}
       </div>
 
-      {/* Payment */}
-      <div className="grid grid-cols-2 gap-2">
+      {/* Payment — 3 buttons in one row, consistent with the single-order card */}
+      <div className="grid grid-cols-3 gap-2">
         <button
           onClick={() => onOpenCashModal(orders)}
           disabled={isLoading}
           className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
         >
-          <span className="text-xl">💵</span>
-          {isLoading ? "..." : "เงินสด"}
+          <span className="text-xl">💵</span>เงินสด
         </button>
         <button
           onClick={() => onScanCheckout(orders)}
           disabled={isLoading}
           className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
         >
-          <span className="text-xl">📷</span>
-          {isLoading ? "..." : "สแกน"}
+          <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
+        </button>
+        <button
+          onClick={() => onSplitCheckout(orders)}
+          disabled={isLoading}
+          className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
+        >
+          <span className="text-xl">✂️</span>แบ่งจ่าย
         </button>
       </div>
-      <button
-        onClick={() => onSplitCheckout(orders)}
-        disabled={isLoading}
-        className="w-full flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl text-sm disabled:opacity-60 transition-colors"
-      >
-        <span>💵📷</span>
-        {isLoading ? "..." : "แบ่งจ่าย (เงินสด + สแกน)"}
-      </button>
 
       {/* Print receipt */}
       <button
