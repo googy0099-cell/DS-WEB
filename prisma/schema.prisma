@@ -597,15 +597,18 @@ model HrStaff {
 }
 
 model HrDeduction {
-  id        Int      @id @default(autoincrement())
-  staffId   Int      @map("staff_id")
-  amount    Int
-  reason    String
-  note      String?
-  month     Int
-  year      Int
-  createdAt DateTime @default(now()) @map("created_at")
-  staff     HrStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  id         Int      @id @default(autoincrement())
+  staffId    Int      @map("staff_id")
+  amount     Int
+  reason     String
+  note       String?
+  month      Int
+  year       Int
+  sourceType String?  @map("source_type") // LATE | ABSENT | TASK | CHECKLIST | null (manual)
+  sourceId   String?  @map("source_id")   // stable idempotency key per source
+  createdAt  DateTime @default(now()) @map("created_at")
+  staff      HrStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  @@unique([sourceType, sourceId])
   @@index([staffId, year, month])
   @@map("hr_deduction")
 }

@@ -96,13 +96,18 @@ export async function POST(req: NextRequest) {
           });
           if (amount > 0) {
             const typeLabel = lateConfig.deductionType === "PERCENT" ? ` (${lateConfig.deductionAmount}%/นาที)` : "";
+            const [dy, dm] = dateStr.split("-").map(Number); // BKK date of this check-in
+            // sourceId is per staff per BKK day → only one late deduction per day,
+            // even if the PIN flow allows multiple check-in records same day.
             await db.hrDeduction.create({
               data: {
                 staffId,
                 amount,
                 reason: `เข้างานสาย ${lateMinutes} นาที${typeLabel}`,
-                month: now.getMonth() + 1,
-                year: now.getFullYear(),
+                month: dm,
+                year: dy,
+                sourceType: "LATE",
+                sourceId: `${staffId}:${dateStr}`,
               },
             });
             await db.hrAttendance.update({
@@ -113,7 +118,7 @@ export async function POST(req: NextRequest) {
           }
         }
       } catch {
-        // deduction failed — don't block check-in
+        // already deducted today (unique source) or transient error — don't block check-in
       }
     }
 

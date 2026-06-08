@@ -24,6 +24,8 @@ type CalEvent = {
   note: string | null;
 };
 
+type CalcDeduction = { id: number; amount: number; reason: string; note: string | null };
+
 type StaffCalc = {
   staffId: number;
   name: string;
@@ -33,6 +35,9 @@ type StaffCalc = {
   daysWorked: number;
   workMinutes: number;
   gross: number;
+  deductions: CalcDeduction[];
+  totalDeductions: number;
+  net: number;
   checked: boolean;
   customAmount: string;
   loading: boolean;
@@ -150,6 +155,7 @@ export default function PaymentCalendarPage() {
     setStaffCalcs(staffOptions.map(s => ({
       staffId: s.id, name: s.name, payType: "", payRate: 0,
       fromDate: "", daysWorked: 0, workMinutes: 0, gross: 0,
+      deductions: [], totalDeductions: 0, net: 0,
       checked: false, customAmount: "", loading: false,
     })));
   }
@@ -165,7 +171,9 @@ export default function PaymentCalendarPage() {
           payType: data.payType, payRate: data.payRate,
           fromDate: data.fromDate, daysWorked: data.daysWorked,
           workMinutes: data.workMinutes, gross: data.gross,
-          customAmount: String(data.gross),
+          deductions: data.deductions ?? [], totalDeductions: data.totalDeductions ?? 0,
+          net: data.net ?? data.gross,
+          customAmount: String(data.net ?? data.gross), // pay NET by default
         } : s));
       } else {
         setStaffCalcs(prev => prev.map((s, i) => i === idx ? { ...s, loading: false } : s));
@@ -192,7 +200,7 @@ export default function PaymentCalendarPage() {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           staffId: s.staffId, date: modal.date,
-          amount: Number(s.customAmount) || s.gross,
+          amount: Number(s.customAmount) || s.net,
           description: `${EVENT_LABEL[payType]} ${MONTH_TH[month - 1]}`,
           type: payType,
           recurrence: recurrence ? "MONTHLY" : null,
@@ -420,6 +428,22 @@ export default function PaymentCalendarPage() {
                                 {s.payType === "HOURLY" && ` · ${Math.round(s.workMinutes / 60 * 10) / 10} ชม.`}
                                 {" "}· ฿{thb(s.payRate)}{PAY_TYPE_UNIT[s.payType] ?? ""}
                               </p>
+                            )}
+                            {s.fromDate && s.totalDeductions > 0 && (
+                              <div className="mb-1.5 rounded-lg bg-red-50 border border-red-100 px-2 py-1.5 text-[10px]">
+                                <div className="flex justify-between text-gray-500">
+                                  <span>รายได้รวม</span><span>฿{thb(s.gross)}</span>
+                                </div>
+                                {s.deductions.map(d => (
+                                  <div key={d.id} className="flex justify-between text-red-500">
+                                    <span className="truncate pr-2">− {d.reason}</span>
+                                    <span className="shrink-0">−฿{thb(d.amount)}</span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between font-bold text-navy border-t border-red-100 mt-1 pt-1">
+                                  <span>ยอดสุทธิ</span><span>฿{thb(s.net)}</span>
+                                </div>
+                              </div>
                             )}
                             <div className="flex items-center gap-2">
                               <span className="text-xs text-gray-500">จำนวน (฿)</span>

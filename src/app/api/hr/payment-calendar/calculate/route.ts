@@ -74,6 +74,17 @@ export async function GET(req: NextRequest) {
     else if (staff.payType === "HOURLY") gross = Math.round(staff.baseSalary * workMinutes / 60);
     else gross = staff.baseSalary; // MONTHLY
 
+    // Deductions incurred during this pay period (late / absent / task / checklist /
+    // manual). Period starts the day after the last payment, so these are never
+    // double-counted across periods. The actual payout must be net of these.
+    const periodDeductions = await db.hrDeduction.findMany({
+      where: { staffId, createdAt: { gte: fromDate, lte: toEnd } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, amount: true, reason: true, note: true, createdAt: true },
+    });
+    const totalDeductions = periodDeductions.reduce((sum, d) => sum + d.amount, 0);
+    const net = Math.max(0, gross - totalDeductions);
+
     const fromDateStr = new Date(fromDate.getTime() + BKK).toISOString().slice(0, 10);
 
     return NextResponse.json({
@@ -86,6 +97,9 @@ export async function GET(req: NextRequest) {
       daysWorked,
       workMinutes,
       gross,
+      deductions: periodDeductions,
+      totalDeductions,
+      net,
     });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });

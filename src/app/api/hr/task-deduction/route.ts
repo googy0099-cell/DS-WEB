@@ -76,21 +76,35 @@ export async function POST(req: NextRequest) {
     const daysOverdue = Math.ceil((nowMs - new Date(task.deadline).getTime()) / 86400_000);
     if (daysOverdue <= 0) return NextResponse.json({ error: "งานนี้ยังไม่เกินกำหนด" }, { status: 422 });
 
+    // Idempotent: one deduction per task ever
+    const existing = await db.hrDeduction.findUnique({
+      where: { sourceType_sourceId: { sourceType: "TASK", sourceId: String(taskId) } },
+    });
+    if (existing) {
+      return NextResponse.json(
+        { error: "งานนี้ถูกหักเงินไปแล้ว", alreadyApplied: true, amount: existing.amount },
+        { status: 409 }
+      );
+    }
+
     const amount = computeDailyDeductionAmount(
       daysOverdue,
       { deductionType: cfg.taskDeductionType, deductionAmount: cfg.taskDeductionAmount },
       { baseSalary: task.assignee.baseSalary ?? 0, payType: task.assignee.payType ?? "MONTHLY" }
     );
 
-    const now = new Date();
+    // Deduction is booked to the BKK month the overdue penalty is applied in.
+    const bkkNow = new Date(Date.now() + BKK);
     const typeLabel = cfg.taskDeductionType === "PERCENT" ? ` (${cfg.taskDeductionAmount}%/วัน)` : "";
     await db.hrDeduction.create({
       data: {
         staffId: task.assignedTo,
         amount,
         reason: `งานเกินกำหนด: ${task.title} (${daysOverdue} วัน)${typeLabel}`,
-        month: now.getMonth() + 1,
-        year: now.getFullYear(),
+        month: bkkNow.getUTCMonth() + 1,
+        year: bkkNow.getUTCFullYear(),
+        sourceType: "TASK",
+        sourceId: String(taskId),
       },
     });
 

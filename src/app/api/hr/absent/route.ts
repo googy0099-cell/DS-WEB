@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { computeDailyDeductionAmount } from "@/lib/hr-attendance";
+import { computeDailyDeductionAmount, bkkDayOfWeek } from "@/lib/hr-attendance";
 
 const BKK = 7 * 3600_000;
 
@@ -18,9 +18,8 @@ export async function GET(req: NextRequest) {
 
     const targetDate = new Date(`${dateStr}T00:00:00+07:00`);
     const nextDate = new Date(targetDate.getTime() + 86400_000);
-    const dayOfWeek = targetDate.getDay(); // 0=Sun … 6=Sat
-    const month = targetDate.getMonth() + 1;
-    const year = targetDate.getFullYear();
+    // BKK-correct: derive the weekday from the BKK calendar date, not server-local time.
+    const dayOfWeek = bkkDayOfWeek(targetDate); // 0=Sun … 6=Sat, in Bangkok time
 
     // Staff who have a schedule on this day of week
     const scheduledStaff = await db.hrSchedule.findMany({
@@ -39,18 +38,16 @@ export async function GET(req: NextRequest) {
     });
     const checkedInIds = new Set(checkedIn.map((a) => a.staffId));
 
-    // Who already has an absent deduction this month
+    // Who already has an absent deduction for THIS date (keyed by source, not by
+    // reason text or createdAt — works for past dates and PERCENT-mode reasons too).
     const alreadyDeducted = await db.hrDeduction.findMany({
       where: {
-        staffId: { in: scheduledIds },
-        reason: "ขาดงาน",
-        month,
-        year,
-        createdAt: { gte: targetDate, lt: nextDate },
+        sourceType: "ABSENT",
+        sourceId: { in: scheduledIds.map((id) => `${id}:${dateStr}`) },
       },
-      select: { staffId: true },
+      select: { sourceId: true },
     });
-    const deductedIds = new Set(alreadyDeducted.map((d) => d.staffId));
+    const deductedIds = new Set(alreadyDeducted.map((d) => Number(d.sourceId!.split(":")[0])));
 
     const absent = scheduledStaff
       .filter((s) => !checkedInIds.has(s.staffId))
@@ -80,9 +77,8 @@ export async function POST(req: NextRequest) {
     if (!cfg || cfg.absentDeductionAmount <= 0)
       return NextResponse.json({ error: "ยังไม่ได้ตั้งค่าจำนวนเงินหักขาดงาน — ไปตั้งค่าที่หน้า 'ตั้งค่า HR' ก่อน" }, { status: 422 });
 
-    const targetDate = new Date(`${date}T00:00:00+07:00`);
-    const month = targetDate.getMonth() + 1;
-    const year = targetDate.getFullYear();
+    // BKK-correct: month/year come straight from the BKK calendar date string.
+    const [year, month] = date.split("-").map(Number);
 
     // Load staff payroll info if PERCENT mode (need per-staff daily wage)
     const isPercent = cfg.absentDeductionType === "PERCENT";
@@ -115,11 +111,13 @@ export async function POST(req: NextRequest) {
             note: `วันที่ ${date}`,
             month,
             year,
+            sourceType: "ABSENT",
+            sourceId: `${staffId}:${date}`,
           },
         });
         applied++;
       } catch {
-        // skip duplicate
+        // unique (sourceType, sourceId) violation = already deducted for this date → skip
       }
     }
 

@@ -147,13 +147,16 @@ export async function POST(req: NextRequest) {
         });
         if (amount > 0) {
           const typeLabel = lateConfig.deductionType === "PERCENT" ? ` (${lateConfig.deductionAmount}%/นาที)` : "";
+          const [dy, dm] = dateStr.split("-").map(Number); // BKK date of this check-in
           await db.hrDeduction.create({
             data: {
               staffId: staff.id,
               amount,
               reason: `เข้างานสาย ${lateMinutes} นาที${typeLabel}`,
-              month: now.getMonth() + 1,
-              year: now.getFullYear(),
+              month: dm,
+              year: dy,
+              sourceType: "LATE",
+              sourceId: `${staff.id}:${dateStr}`,
             },
           });
           await db.hrAttendance.update({

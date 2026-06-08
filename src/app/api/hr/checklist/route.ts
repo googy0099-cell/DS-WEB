@@ -91,14 +91,16 @@ export async function GET(req: NextRequest) {
         const elapsed = (Date.now() - new Date(existing.startedAt ?? existing.createdAt).getTime()) / 60_000;
         const allDone = existing.items.every((i) => i.done);
         if (elapsed > config.timeLimitMinutes && !allDone) {
-          const now = new Date();
+          const bkkNow = new Date(Date.now() + 7 * 3600_000);
           await db.hrDeduction.create({
             data: {
               staffId: existing.staffId,
               amount: config.deductionAmount,
               reason: "เช็คลิสต์เปิดร้านไม่เสร็จภายในเวลาที่กำหนด",
-              month: now.getMonth() + 1,
-              year: now.getFullYear(),
+              month: bkkNow.getUTCMonth() + 1,
+              year: bkkNow.getUTCFullYear(),
+              sourceType: "CHECKLIST",
+              sourceId: String(existing.id),
             },
           });
           await db.hrChecklist.update({
