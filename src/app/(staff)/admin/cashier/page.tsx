@@ -7,6 +7,7 @@ import NumpadInput from "@/components/admin/NumpadInput";
 type LowMenu = { id: number; nameTh: string; missing: string[] };
 type ReorderItem = { id: number; sku: string; name: string; unit: string; currentQty: number; reorderQty: number };
 type CashExpense = { id: number; type: string; amount: number; description: string; photoUrl: string | null; note: string | null; reimbursed: boolean; createdAt: string };
+type CashTopup = { id: number; amount: number; description: string; photoUrl: string | null; note: string | null; createdAt: string };
 
 const DENOMINATIONS = [1000, 500, 100, 50, 20, 10, 5, 2, 1];
 
@@ -34,6 +35,8 @@ interface Summary {
   pettyExpenses: CashExpense[];
   pettyTotal: number;
   advanceTotal: number;
+  topups?: CashTopup[];
+  topupTotal?: number;
   lastClose: {
     id: number;
     date: string;
@@ -92,6 +95,13 @@ export default function CashierPage() {
 
   // Expense detail modal
   const [detailExpense, setDetailExpense] = useState<CashExpense | null>(null);
+
+  // Cash top-up modal (เติมเงินสดเข้าเก๊ะ)
+  const [showTopupModal, setShowTopupModal] = useState(false);
+  const [topupAmount, setTopupAmount] = useState("");
+  const [topupDesc, setTopupDesc] = useState("");
+  const [topupNote, setTopupNote] = useState("");
+  const [topupSaving, setTopupSaving] = useState(false);
 
   const [closeStep, setCloseStep] = useState<CloseStep>(1);
   const [counts, setCounts] = useState<Record<number, string>>(
@@ -230,6 +240,19 @@ export default function CashierPage() {
     loadSummary();
   }
 
+  async function saveTopup() {
+    if (!topupAmount || !topupDesc.trim()) return;
+    setTopupSaving(true);
+    await fetch("/api/cash-topups", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: parseInt(topupAmount), description: topupDesc.trim(), note: topupNote || undefined }),
+    });
+    setTopupSaving(false);
+    setShowTopupModal(false);
+    setTopupAmount(""); setTopupDesc(""); setTopupNote("");
+    loadSummary();
+  }
+
   async function startClose() {
     try {
       const data = await fetch("/api/hr/checklist/today-status").then((r) => r.json());
@@ -249,7 +272,8 @@ export default function CashierPage() {
   const countedCash = DENOMINATIONS.reduce((s, d) => s + d * (parseInt(counts[d]) || 0), 0);
   const floatNum = parseInt(openingFloat) || 0;
   const pettyTotal = summary?.pettyTotal ?? 0;
-  const expectedCash = floatNum + (summary?.cashTotal ?? 0) - pettyTotal;
+  const topupTotal = summary?.topupTotal ?? 0;
+  const expectedCash = floatNum + (summary?.cashTotal ?? 0) - pettyTotal + topupTotal;
   const difference = countedCash - expectedCash;
 
   async function confirmClose() {
@@ -388,13 +412,21 @@ export default function CashierPage() {
         {/* Live summary cards */}
         <SummaryCards onRefresh={loadSummary} loading={loadingSummary} summary={summary} />
 
-        {/* Expense button */}
-        <button
-          onClick={() => setShowExpenseModal(true)}
-          className="w-full flex items-center justify-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 font-semibold py-3 rounded-2xl text-sm hover:bg-amber-100 transition-colors"
-        >
-          🛍️ บันทึกรายจ่ายจากเก๊ะ / พนักงานออกเงินเอง
-        </button>
+        {/* Expense + top-up buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setShowExpenseModal(true)}
+            className="w-full flex items-center justify-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 font-semibold py-3 rounded-2xl text-sm hover:bg-amber-100 transition-colors"
+          >
+            🛍️ บันทึกรายจ่ายจากเก๊ะ
+          </button>
+          <button
+            onClick={() => setShowTopupModal(true)}
+            className="w-full flex items-center justify-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold py-3 rounded-2xl text-sm hover:bg-emerald-100 transition-colors"
+          >
+            💵 เติมเงินสดเข้าเก๊ะ
+          </button>
+        </div>
 
         {/* Today's expenses — always visible */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-amber-100">
@@ -444,6 +476,32 @@ export default function CashierPage() {
             </div>
           )}
         </div>
+
+        {/* Today's cash top-ups — only show when there are any */}
+        {(summary?.topups?.length ?? 0) > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-emerald-100">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-sand">
+              <p className="text-sm font-bold text-navy">💵 เติมเงินเข้าเก๊ะวันนี้</p>
+              <span className="text-xs text-gray-400">{summary!.topups!.length} รายการ</span>
+            </div>
+            <div className="divide-y divide-sand/50 max-h-52 overflow-y-auto">
+              {summary!.topups!.map((t) => (
+                <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <span className="text-base shrink-0 w-9 h-9 flex items-center justify-center bg-emerald-50 rounded-lg">💵</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-navy truncate">{t.description}</p>
+                    {t.note && <p className="text-xs text-gray-400 truncate">{t.note}</p>}
+                  </div>
+                  <p className="text-sm font-bold text-emerald-600 shrink-0">+฿{t.amount.toLocaleString()}</p>
+                </div>
+              ))}
+            </div>
+            <div className="px-4 py-2.5 border-t border-sand bg-emerald-50 flex justify-between text-sm">
+              <span className="text-emerald-700 font-semibold">รวมเติมเข้าเก๊ะ</span>
+              <span className="font-bold text-emerald-600">+฿{(summary?.topupTotal ?? 0).toLocaleString()}</span>
+            </div>
+          </div>
+        )}
 
         <div className="text-center">
           <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับ Dashboard</Link>
@@ -511,6 +569,38 @@ export default function CashierPage() {
               <button onClick={() => setShowExpenseModal(false)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
               <button onClick={saveExpense} disabled={expSaving || !expAmount || !expDesc} className="flex-1 bg-orange text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
                 {expSaving ? "กำลังบันทึก..." : "✅ บันทึก"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Cash top-up modal */}
+      {showTopupModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center p-4">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-navy text-lg">💵 เติมเงินสดเข้าเก๊ะ</h3>
+              <button onClick={() => setShowTopupModal(false)} className="text-gray-400 text-xl">✕</button>
+            </div>
+            <p className="text-xs text-gray-400 -mt-2">เงินสดที่เอาใส่เก๊ะเพิ่ม (เช่น เติมแบงก์ย่อย/เหรียญทอน) — จะบวกเข้ายอดที่ควรมีในลิ้นชัก</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">รายละเอียด *</label>
+                <input value={topupDesc} onChange={(e) => setTopupDesc(e.target.value)} placeholder="เช่น เติมเหรียญทอน, เติมแบงก์ย่อย..." className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">จำนวนเงิน (฿) *</label>
+                <NumpadInput value={Number(topupAmount) || ""} onChange={(v) => setTopupAmount(String(v))} placeholder="0" label="จำนวนเงินเติมเข้าเก๊ะ" className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 block mb-1">หมายเหตุ (ถ้ามี)</label>
+                <input value={topupNote} onChange={(e) => setTopupNote(e.target.value)} placeholder="รายละเอียดเพิ่มเติม..." className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange" />
+              </div>
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setShowTopupModal(false)} className="flex-1 border border-sand text-gray-400 py-3 rounded-2xl text-sm">ยกเลิก</button>
+              <button onClick={saveTopup} disabled={topupSaving || !topupAmount || !topupDesc.trim()} className="flex-1 bg-emerald-600 text-white font-bold py-3 rounded-2xl text-sm disabled:opacity-50">
+                {topupSaving ? "กำลังบันทึก..." : "✅ บันทึก"}
               </button>
             </div>
           </div>
@@ -795,6 +885,12 @@ export default function CashierPage() {
               <div className="flex justify-between">
                 <span className="text-gray-500">หัก: รายจ่ายจากเก๊ะ</span>
                 <span className="font-semibold text-red-600">-฿{pettyTotal.toLocaleString()}</span>
+              </div>
+            )}
+            {topupTotal > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">บวก: เติมเงินเข้าเก๊ะ</span>
+                <span className="font-semibold text-emerald-600">+฿{topupTotal.toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between border-t border-sand pt-2">

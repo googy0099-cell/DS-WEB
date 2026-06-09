@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const date = (paramDate && /^\d{4}-\d{2}-\d{2}$/.test(paramDate)) ? paramDate : getBangkokDateStr();
   const { start, end } = getDayBoundsForDate(date);
 
-  const [rev, payments, paidSessionsCount, lastClose, pettyExpenses] = await Promise.all([
+  const [rev, payments, paidSessionsCount, lastClose, pettyExpenses, topups] = await Promise.all([
     // Net revenue (confirmed payments; food/game split by item category — no double count)
     computeRevenue(date, date),
     // Payment detail lists for the drawer breakdown
@@ -40,6 +40,10 @@ export async function GET(req: NextRequest) {
       where: { createdAt: { gte: start, lt: end } },
       orderBy: { createdAt: "asc" },
     }).catch(() => []),  // graceful fallback if table not migrated yet
+    db.cashTopup.findMany({
+      where: { createdAt: { gte: start, lt: end } },
+      orderBy: { createdAt: "asc" },
+    }).catch(() => []),  // graceful fallback if table not migrated yet
   ]);
 
   // Exclude payments tied to cancelled orders from the detail lists too
@@ -49,6 +53,7 @@ export async function GET(req: NextRequest) {
 
   const pettyTotal = pettyExpenses.filter((e) => e.type === "PETTY_CASH").reduce((s, e) => s + e.amount, 0);
   const advanceTotal = pettyExpenses.filter((e) => e.type === "STAFF_ADVANCE").reduce((s, e) => s + e.amount, 0);
+  const topupTotal = topups.reduce((s, t) => s + t.amount, 0);
 
   return NextResponse.json({
     date,
@@ -65,5 +70,7 @@ export async function GET(req: NextRequest) {
     pettyExpenses,
     pettyTotal,
     advanceTotal,
+    topups,
+    topupTotal,
   });
 }

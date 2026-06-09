@@ -36,22 +36,28 @@ export async function POST(req: NextRequest) {
   const date = getBangkokDateStr();
   const { start, end } = getBangkokDayBounds();
 
-  const [payments, expenses] = await Promise.all([
+  const [payments, expenses, topups] = await Promise.all([
     db.payment.findMany({ where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } } }),
     db.cashExpense.findMany({ where: { type: "PETTY_CASH", createdAt: { gte: start, lt: end } } }),
+    db.cashTopup.findMany({ where: { createdAt: { gte: start, lt: end } } }).catch(() => []),
   ]);
 
   const cashSales = payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amountTHB, 0);
   const totalTransfer = payments.filter((p) => p.method !== "CASH").reduce((s, p) => s + p.amountTHB, 0);
   const pettyTotal = expenses.reduce((s, e) => s + e.amount, 0);
-  const expectedCash = cashSales - pettyTotal;
+  const topupTotal = topups.reduce((s, t) => s + t.amount, 0);
+  // เงินที่ควรมีในเก๊ะ = ขายเงินสด − รายจ่ายเก๊ะ + เงินเติมเข้าเก๊ะ
+  const expectedCash = cashSales - pettyTotal + topupTotal;
   const difference = countedCash - (openingFloat + expectedCash);
   const grandTotal = cashSales + totalTransfer;
 
   const expenseNote = expenses.length > 0
     ? `รายจ่ายเก๊ะ: ${expenses.map((e) => `${e.description} ฿${e.amount}`).join(", ")} (รวม ฿${pettyTotal})`
     : null;
-  const fullNote = [note, expenseNote].filter(Boolean).join(" | ") || null;
+  const topupNote = topups.length > 0
+    ? `เติมเงินเข้าเก๊ะ: ${topups.map((t) => `${t.description} ฿${t.amount}`).join(", ")} (รวม ฿${topupTotal})`
+    : null;
+  const fullNote = [note, expenseNote, topupNote].filter(Boolean).join(" | ") || null;
 
   const record = await db.cashDrawerSession.create({
     data: {
@@ -68,5 +74,5 @@ export async function POST(req: NextRequest) {
 
   notifyShopClose({ cashTotal: cashSales, transferTotal: totalTransfer, grandTotal, difference, pettyExpenses: pettyTotal }).catch(() => {});
 
-  return NextResponse.json({ ...record, pettyTotal, grandTotal });
+  return NextResponse.json({ ...record, pettyTotal, topupTotal, grandTotal });
 }
