@@ -15,6 +15,7 @@ type Bill = {
   id: number; name: string; color: string; tableId: number; startsAt: string; prepRemaining: number;
   table: { number: number }; sessions: PlayerSession[];
   pendingCash: PendingCash[];
+  isPaid?: boolean; // มีการชำระยืนยันแล้วอย่างน้อย 1 ออเดอร์ → ห้ามนำไปรวมบิล
 };
 
 const BILL_COLORS: Record<string, { gradient: string; accent: string }> = {
@@ -502,6 +503,7 @@ export default function AdminTimePage() {
 
   // changeTable flow
   const [changeTableBill, setChangeTableBill] = useState<Bill | null>(null);
+  const [mergeBill, setMergeBill] = useState<Bill | null>(null);
 
   // renameBill / changeColor flow
   const [editBill, setEditBill] = useState<Bill | null>(null);
@@ -969,6 +971,21 @@ export default function AdminTimePage() {
     setChangeTableBill(null); load();
   }
 
+  // รวมบิลต้นทาง (source) เข้ามาในบิลปลายทาง (mergeBill ที่กดเลือก)
+  async function submitMerge(source: Bill) {
+    if (!mergeBill) return;
+    if (!confirm(`รวมตี้ "${source.name}" (โต๊ะ ${source.table.number}) เข้ากับ "${mergeBill.name}"?\nออเดอร์และผู้เล่นทั้งหมดจะย้ายมารวมกัน แล้วตี้ "${source.name}" จะถูกปิด`)) return;
+    const res = await fetch(`/api/pos/bills/${mergeBill.id}/merge`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sourceBillId: source.id }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({})) as { error?: string };
+      alert(d.error ?? `รวมบิลไม่สำเร็จ (${res.status})`);
+    }
+    setMergeBill(null); load();
+  }
+
   function openExtend(session: PlayerSession, bill: Bill) {
     setExtendSession(session); setExtendBill(bill);
     setExtendPkg("B"); setExtendQty(1); setExtendStep(0);
@@ -1344,6 +1361,9 @@ export default function AdminTimePage() {
                 {bill.sessions.length > 0 && (
                   <button onClick={() => openEditTimeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">⏱️ แก้ไขเวลายกตี้</button>
                 )}
+                {bills.some((b) => b.id !== bill.id && !b.isPaid) && (
+                  <button onClick={() => setMergeBill(bill)} className="bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">🔀 รวมบิล</button>
+                )}
                 <button onClick={() => closeBill(bill)} className="bg-red-500/80 hover:bg-red-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors">ปิดบิล</button>
               </div>
             </div>
@@ -1451,6 +1471,25 @@ export default function AdminTimePage() {
                 โต๊ะ {t.number}
               </button>
             ))}
+          </div>
+        </Modal>
+      )}
+
+      {/* Merge bills — choose which active bill to pull into this one */}
+      {mergeBill && (
+        <Modal onClose={() => setMergeBill(null)} title={`รวมบิลเข้า — ${mergeBill.name}`}>
+          <p className="text-sm text-gray-500 -mt-2">เลือกตี้ที่ <b>ยังไม่ได้ชำระ</b> เพื่อรวมเข้ามาในบิลนี้ (ออเดอร์ + ผู้เล่นจะย้ายมารวมกัน)</p>
+          <div className="space-y-2 max-h-[55vh] overflow-y-auto pr-1">
+            {bills.filter((b) => b.id !== mergeBill.id && !b.isPaid).map((b) => (
+              <button key={b.id} onClick={() => submitMerge(b)}
+                className="w-full flex items-center justify-between gap-3 border-2 border-sand rounded-xl px-4 py-3 text-left hover:border-orange hover:bg-orange/5 transition-all">
+                <span className="font-bold text-navy text-sm">{b.name}</span>
+                <span className="text-xs text-gray-400">โต๊ะ {b.table.number} · {b.sessions.length} คน</span>
+              </button>
+            ))}
+            {bills.filter((b) => b.id !== mergeBill.id && !b.isPaid).length === 0 && (
+              <p className="text-gray-400 text-sm text-center py-4">ไม่มีตี้ที่ยังไม่ได้ชำระให้รวม</p>
+            )}
           </div>
         </Modal>
       )}

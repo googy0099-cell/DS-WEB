@@ -32,9 +32,22 @@ export async function GET() {
     orderBy: { createdAt: "asc" },
   });
 
+  // บิลไหน "ชำระแล้ว" บ้าง = มีออเดอร์ที่ payment ยืนยันแล้ว (CONFIRMED) อย่างน้อย 1 อัน
+  // ใช้คัดว่ารวมบิลได้เฉพาะการ์ดที่ "ยังไม่ได้ชำระ"
+  const paidBillIds = new Set(
+    (
+      await db.order.findMany({
+        where: { billId: { in: bills.map((b) => b.id) }, payment: { status: "CONFIRMED" } },
+        select: { billId: true },
+        distinct: ["billId"],
+      })
+    ).map((o) => o.billId)
+  );
+
   const now = Date.now();
   const result = bills.map((b) => ({
     ...b,
+    isPaid: paidBillIds.has(b.id),
     prepRemaining: prepRemaining(b.startsAt, now),
     sessions: b.sessions.map((s) => ({
       ...s,
