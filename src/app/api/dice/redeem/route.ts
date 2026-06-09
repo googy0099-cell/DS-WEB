@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import db from "@/lib/db";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -36,10 +35,6 @@ export async function POST(req: NextRequest) {
     where: { id: member.id },
     data: { dicePoints: { decrement: reward.cost } },
   });
-
-  await sendTelegramNotify(
-    `🎲 แลกรางวัล!\n👤 ${member.firstName} (@${member.username}) รหัส ${member.memberCode}\n🎁 ${reward.nameTh}\nใช้ ${reward.cost} 🎲 | เหลือ ${member.dicePoints - reward.cost} 🎲\nยืนยันโดย: ${session.user.name ?? session.user.email}`
-  ).catch(() => {});
 
   return NextResponse.json({ ok: true, memberName: member.firstName, rewardName: reward.nameTh, cost: reward.cost, remaining: member.dicePoints - reward.cost });
 }

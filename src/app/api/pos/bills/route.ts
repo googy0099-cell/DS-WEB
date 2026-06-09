@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { PREP_SECONDS, remainingSeconds, prepRemaining } from "@/lib/pos-time";
+import { notifyPartyOpen } from "@/lib/telegram-notify";
 
 export async function GET() {
   const bills = await db.bill.findMany({
@@ -81,6 +82,8 @@ export async function POST(req: NextRequest) {
   });
 
   await db.table.update({ where: { id: tableId }, data: { isOccupied: true }, select: { id: true } });
+
+  notifyPartyOpen({ name: bill.name, tableNumber: table.number }).catch(() => {});
 
   return NextResponse.json(bill, { status: 201 });
 }

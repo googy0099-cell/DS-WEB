@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
+import { notifyOrderPaid } from "@/lib/telegram-notify";
 
 export async function PATCH(req: NextRequest) {
   const session = await auth();
@@ -90,6 +91,24 @@ export async function PATCH(req: NextRequest) {
       },
       update: {},
     });
+  }
+
+  // Notify the ORDER room — only on confirmed payment (= money actually received).
+  // TAB orders are notified once at tab-checkout instead, to avoid one msg per pending item.
+  if (existingOrder && payment.method !== "TAB") {
+    const itemLines = existingOrder.items
+      .map((i) => `  • ${i.menuItem.nameTh} x${i.quantity} = ฿${(i.unitPriceTHB * i.quantity).toLocaleString("th-TH")}`)
+      .join("\n");
+    const location = existingOrder.bill
+      ? `${existingOrder.bill.name} · โต๊ะ ${existingOrder.bill.table.number}`
+      : existingOrder.tableId ? `โต๊ะ ${existingOrder.tableId}` : "";
+    notifyOrderPaid({
+      orderLabel: existingOrder.orderName || `ออเดอร์ #${payment.orderId}`,
+      location,
+      itemLines,
+      netTotal: payment.amountTHB,
+      method: payment.method,
+    }).catch(() => {});
   }
 
   return NextResponse.json({ ...payment, orderId: payment.orderId });

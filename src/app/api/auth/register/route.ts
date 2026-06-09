@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import db from "@/lib/db";
 import { generateUniqueMemberCode } from "@/lib/member-code";
+import { notifyNewMember } from "@/lib/telegram-notify";
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,6 +48,15 @@ export async function POST(req: NextRequest) {
         role: "USER",
       },
     });
+
+    // แจ้งห้อง TASK ว่ามีสมาชิกใหม่ พร้อมยอดสมาชิกสะสมรวม
+    db.user.count({ where: { role: "USER" } }).then((totalMembers) =>
+      notifyNewMember({
+        name: `${firstName} ${lastName}`.trim(),
+        memberCode: user.memberCode!,
+        totalMembers,
+      })
+    ).catch(() => {});
 
     return NextResponse.json({
       id: user.id,

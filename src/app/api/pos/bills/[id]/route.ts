@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { remainingSeconds } from "@/lib/pos-time";
-import { notifyBillClosed } from "@/lib/telegram-notify";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -90,53 +89,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       await db.table.update({ where: { id: bill.tableId }, data: { isOccupied: false } });
     }
 
-    // Telegram notification (fire-and-forget)
-    db.bill.findUnique({
-      where: { id: billId },
-      select: {
-        name: true,
-        table: { select: { number: true } },
-        sessions: { where: { status: "PAID" }, select: { packageType: true, status: true } },
-        orders: {
-          where: { status: "SERVED" },
-          select: {
-            payment: { select: { method: true } },
-            items: {
-              where: { cancelledAt: null },
-              select: { quantity: true, unitPriceTHB: true, menuItem: { select: { category: true } } },
-            },
-          },
-        },
-      },
-    }).then((b) => {
-      if (!b) return;
-      const activeSessions = b.sessions.filter((s) => s.status === "PAID");
-      const pkgMap: Record<string, number> = {};
-      for (const s of activeSessions) pkgMap[s.packageType] = (pkgMap[s.packageType] ?? 0) + 1;
-      const packages = Object.entries(pkgMap).map(([k, n]) => `${k}×${n}`).join(", ") || "—";
-      // Split by order-item category — no double count with session.packagePrice
-      let gameRevenue = 0;
-      let foodRevenue = 0;
-      for (const o of b.orders) {
-        for (const it of o.items) {
-          const amt = it.quantity * it.unitPriceTHB;
-          if (it.menuItem.category === "gametime") gameRevenue += amt;
-          else foodRevenue += amt;
-        }
-      }
-      const methods = [...new Set(b.orders.flatMap((o) => o.payment ? [o.payment.method] : []))];
-      const paymentMethod = methods[0] ?? "—";
-      notifyBillClosed({
-        billName: b.name,
-        tableNumber: b.table.number,
-        playerCount: activeSessions.length,
-        packages,
-        gameRevenue,
-        foodRevenue,
-        total: gameRevenue + foodRevenue,
-        paymentMethod,
-      });
-    }).catch(() => {});
   }
 
   return NextResponse.json({ ok: true });

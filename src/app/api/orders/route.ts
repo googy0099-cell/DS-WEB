@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
 import { sendFcmNotify } from "@/lib/fcm-notify";
-import { formatThaiTime } from "@/lib/thai-datetime";
 import { signCheckoutToken } from "@/lib/checkout-token";
 
 export async function GET(req: NextRequest) {
@@ -166,24 +164,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const itemLines = itemsWithPrice
-    .map((i) => {
-      const sizePart = i.selectedSize ? ` (${i.selectedSize})` : "";
-      const addonPart = i.selectedAddons?.length
-        ? " + " + i.selectedAddons.map((a) => a.nameTh).join(", ")
-        : "";
-      const optionPart = i.selectedOptions?.length
-        ? " [" + i.selectedOptions.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") + "]"
-        : "";
-      return `  • ${i.nameTh}${sizePart}${addonPart}${optionPart} x${i.quantity} = ฿${i.unitPriceTHB * i.quantity}`;
-    })
-    .join("\n");
-
+  // Telegram แจ้งตอน "จ่ายแล้ว" เท่านั้น (ที่ payment/confirm) — ที่นี่แค่ปลุกครัวผ่าน push/FCM
   if (!isCashier) {
-    const billTag = billId ? ` [ตี้ ${(await db.bill.findUnique({ where: { id: billId }, select: { name: true } }))?.name ?? ""}]` : "";
-    const lineMsg = `\n🔔 ออเดอร์ใหม่! 👤 ${finalName}${billTag}\n${itemLines}\n💰 รวม ฿${totalTHB}${note ? `\n📝 หมายเหตุ: ${note}` : ""}\n🕐 ${formatThaiTime(order.createdAt)}`;
     await Promise.allSettled([
-      sendTelegramNotify(lineMsg),
       sendPushToAll("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
       sendFcmNotify("🔔 ออเดอร์ใหม่!", `${finalName} • ฿${totalTHB}`),
     ]);

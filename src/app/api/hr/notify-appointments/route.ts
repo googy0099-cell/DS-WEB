@@ -71,13 +71,52 @@ export async function POST(req: NextRequest) {
       const pushBody = `${daysLabel} · ${bkkDateStr(targetDate)}${staffName ? ` · ${staffName}` : ""}`;
 
       await Promise.all([
-        sendTelegramNotify(msg),
+        sendTelegramNotify(msg, "TASK"),
         sendPushToAll(pushTitle, pushBody),
       ]);
       notified.push(ev.id);
     }
 
-    return NextResponse.json({ ok: true, notified: notified.length, ids: notified });
+    // ── งานใกล้ครบ deadline (วันนี้/พรุ่งนี้/เลยกำหนด) ── ส่งเข้าห้อง TASK
+    const todayStart = new Date(`${todayStr}T00:00:00+07:00`);
+    const tasksDue = await db.hrTask.findMany({
+      where: { status: { not: "DONE" }, deadline: { not: null } },
+      include: { assignee: { include: { user: { select: { firstName: true, lastName: true } } } } },
+    });
+    let taskCount = 0;
+    for (const t of tasksDue) {
+      const diffDays = Math.round((t.deadline!.getTime() - todayStart.getTime()) / (24 * 3600_000));
+      if (diffDays > 1) continue; // เตือนเฉพาะเลยกำหนด / วันนี้ / พรุ่งนี้
+      const dueLabel = diffDays < 0 ? `⚠️ เลยกำหนด ${Math.abs(diffDays)} วัน` : diffDays === 0 ? "📍 ครบกำหนดวันนี้" : "⏳ ครบกำหนดพรุ่งนี้";
+      const who = t.assignee ? `\n👤 ${`${t.assignee.user.firstName} ${t.assignee.user.lastName}`.trim()}` : "";
+      await sendTelegramNotify(
+        `📋 <b>งาน: ${t.title}</b>\n${dueLabel}\n📅 ${bkkDateStr(t.deadline!)}${who}`,
+        "TASK"
+      );
+      taskCount++;
+    }
+
+    // ── KPI ไม่ถึงเป้า (เช็คช่วงปลายเดือน 5 วันสุดท้าย) ── ส่งเข้าห้อง TASK
+    let kpiCount = 0;
+    const daysInMonth = new Date(now.getUTCFullYear(), now.getUTCMonth() + 1, 0).getUTCDate();
+    if (now.getUTCDate() > daysInMonth - 5) {
+      const kpis = await db.hrKpi.findMany({
+        where: { month: now.getUTCMonth() + 1, year: now.getUTCFullYear() },
+        include: { staff: { include: { user: { select: { firstName: true, lastName: true } } } } },
+      });
+      for (const k of kpis) {
+        if (k.actual >= k.target) continue;
+        const pct = k.target > 0 ? Math.round((k.actual / k.target) * 100) : 0;
+        const who = `${k.staff.user.firstName} ${k.staff.user.lastName}`.trim();
+        await sendTelegramNotify(
+          `🎯 <b>KPI ไม่ถึงเป้า</b>\n📊 ${k.title}\n👤 ${who}\n${k.actual}/${k.target} ${k.unit} (${pct}%)`,
+          "TASK"
+        );
+        kpiCount++;
+      }
+    }
+
+    return NextResponse.json({ ok: true, notified: notified.length, ids: notified, tasks: taskCount, kpis: kpiCount });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

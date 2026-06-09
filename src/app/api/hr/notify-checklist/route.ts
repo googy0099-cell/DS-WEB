@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 import { sendPushToAll } from "@/lib/push-notify";
 
 const BKK = 7 * 3600_000;
@@ -32,8 +31,7 @@ export async function POST(req: NextRequest) {
     const total = cl ? cl.items.length : -1;
 
     if (total > 0 && done < total) {
-      const msg = `⚠️ <b>เช็คลิสต์เปิดร้านยังไม่เสร็จ!</b>\n✅ ${done}/${total} รายการ\nกรุณาทำเช็คลิสต์ให้ครบก่อนเปิดบริการ`;
-      await Promise.all([sendTelegramNotify(msg), sendPushToAll("⚠️ เช็คลิสต์เปิดร้าน", `ยังค้างอยู่ ${total - done} รายการ`)]);
+      await sendPushToAll("⚠️ เช็คลิสต์เปิดร้าน", `ยังค้างอยู่ ${total - done} รายการ`);
       notified.push("OPEN");
     }
   }
@@ -48,8 +46,7 @@ export async function POST(req: NextRequest) {
     const total = cl ? cl.items.length : -1;
 
     if (total > 0 && done < total) {
-      const msg = `🌙 <b>เช็คลิสต์ปิดร้านยังไม่เสร็จ!</b>\n✅ ${done}/${total} รายการ\nพนักงานจะออกไม่ได้จนกว่าจะทำครบ`;
-      await Promise.all([sendTelegramNotify(msg), sendPushToAll("🌙 เช็คลิสต์ปิดร้าน", `ยังค้างอยู่ ${total - done} รายการ`)]);
+      await sendPushToAll("🌙 เช็คลิสต์ปิดร้าน", `ยังค้างอยู่ ${total - done} รายการ`);
       notified.push("CLOSE");
     }
   }

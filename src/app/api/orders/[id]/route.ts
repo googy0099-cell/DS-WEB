@@ -3,7 +3,6 @@ import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { createSessionsFromStaffNote } from "@/lib/pending-sessions";
 import { deductStockForOrder } from "@/lib/stock-deduct";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 const STATUS_LABELS: Record<string, string> = {
   CONFIRMED: "✅ ยืนยันออเดอร์แล้ว",
@@ -90,11 +89,6 @@ export async function PATCH(
           where: { id: { in: inKitchen.map((i) => i.id) } },
           data: { cancelledAt: now },
         });
-        // Notify kitchen/bar via Telegram
-        const itemList = inKitchen.map((i) => `• ${i.menuItem.nameTh} ×${i.quantity}`).join("\n");
-        await sendTelegramNotify(
-          `❌ ยกเลิกรายการระหว่างทำ\nออเดอร์: ${orderStatus?.orderName ?? `#${orderId}`}\n${itemList}`
-        ).catch(() => {});
       }
 
       // Hard-delete items not being prepared

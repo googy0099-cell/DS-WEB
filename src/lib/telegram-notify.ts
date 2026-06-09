@@ -1,3 +1,9 @@
+// Telegram notifications are split into two rooms (chats):
+//   ORDER → ความเคลื่อนไหว/รายได้ของร้าน (ออเดอร์จ่ายแล้ว, เปิด-ปิดร้าน, เปิดปาร์ตี้, เช็คอิน)
+//   TASK  → ติดตามงาน (นัดหมาย/ครบกำหนดจ่าย, งานใกล้ครบ deadline/KPI, สมาชิกใหม่)
+// ORDER ใช้ TELEGRAM_CHAT_ID เดิม. TASK ใช้ TELEGRAM_CHAT_ID_TASK (ถ้าไม่ตั้ง = fallback ไปห้องเดิม).
+export type TgChannel = "ORDER" | "TASK";
+
 function bkkTime(d: Date = new Date()) {
   const bkk = new Date(d.getTime() + 7 * 3600_000);
   return bkk.toISOString().slice(11, 16);
@@ -9,9 +15,18 @@ function bkkDateLabel(d: Date = new Date()) {
 }
 function thb(n: number) { return `฿${n.toLocaleString("th-TH")}`; }
 
-async function send(message: string): Promise<void> {
+const METHOD: Record<string, string> = {
+  CASH: "💵 เงินสด", PROMPTPAY: "📲 QR PromptPay", TAB: "🏷️ แท็บ", UNSET: "💵 เงินสด",
+};
+
+function chatIdFor(channel: TgChannel): string | undefined {
+  if (channel === "TASK") return process.env.TELEGRAM_CHAT_ID_TASK ?? process.env.TELEGRAM_CHAT_ID;
+  return process.env.TELEGRAM_CHAT_ID;
+}
+
+async function send(message: string, channel: TgChannel = "ORDER"): Promise<void> {
   const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const chatId = chatIdFor(channel);
   if (!token || !chatId) return;
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
@@ -20,9 +35,11 @@ async function send(message: string): Promise<void> {
   }).catch(() => {});
 }
 
-export async function sendTelegramNotify(message: string) {
-  await send(message);
+export async function sendTelegramNotify(message: string, channel: TgChannel = "ORDER") {
+  await send(message, channel);
 }
+
+// ─── ROOM: ORDER ──────────────────────────────────────────────────────────
 
 export async function notifyShopOpen(openingFloat: number) {
   const now = new Date();
@@ -53,27 +70,39 @@ export async function notifyShopClose(opts: {
   await send(msg);
 }
 
-export async function notifyBillClosed(opts: {
-  billName: string;
-  tableNumber: number;
-  playerCount: number;
-  packages: string;
-  gameRevenue: number;
-  foodRevenue: number;
-  total: number;
-  paymentMethod: string;
+// ออเดอร์ที่ "จ่ายเงินสำเร็จแล้ว" — รวมทั้งลูกค้าสั่งเอง, แท็บ, และพนักงานคีย์เอง
+export async function notifyOrderPaid(opts: {
+  orderLabel: string;   // ชื่อออเดอร์ หรือ "ตี้ X"
+  location?: string;    // "โต๊ะ 3" / "ตี้ X · โต๊ะ 3" / ""
+  itemLines: string;    // สรุปรายการ pre-formatted
+  netTotal: number;     // ยอดสุทธิหลังหักส่วนลด
+  method: string;       // CASH/PROMPTPAY/...
 }) {
-  const { billName, tableNumber, playerCount, packages, gameRevenue, foodRevenue, total, paymentMethod } = opts;
-  const METHOD: Record<string, string> = { CASH: "💵 เงินสด", PROMPTPAY: "📲 QR PromptPay", TAB: "🏷️ แท็บ" };
+  const { orderLabel, location, itemLines, netTotal, method } = opts;
   await send(
-    `🎲 <b>ปิดตี้ — ${billName}</b>\n` +
-    `📅 ${bkkDateLabel()}  ⏰ ${bkkTime()} น.\n` +
-    `🪑 โต๊ะ ${tableNumber}   👥 ${playerCount} คน\n` +
-    `🎮 ${packages}\n` +
+    `✅ <b>รับชำระแล้ว</b>\n` +
+    `🧾 ${orderLabel}${location ? ` · ${location}` : ""}\n` +
+    `${itemLines}\n` +
     `━━━━━━━━━━━━━━━\n` +
-    `🎮 เกม:      ${thb(gameRevenue)}\n` +
-    `🍽️ อาหาร:  ${thb(foodRevenue)}\n` +
-    `💰 รวม:     ${thb(total)}\n` +
-    `${METHOD[paymentMethod] ?? paymentMethod}`
+    `💰 รวมสุทธิ ${thb(netTotal)}   ${METHOD[method] ?? method}\n` +
+    `⏰ ${bkkTime()} น.`
+  );
+}
+
+export async function notifyPartyOpen(opts: { name: string; tableNumber: number }) {
+  await send(
+    `🎉 <b>เปิดปาร์ตี้</b> — ${opts.name}\n` +
+    `🪑 โต๊ะ ${opts.tableNumber}  ⏰ ${bkkTime()} น.`
+  );
+}
+
+// ─── ROOM: TASK ───────────────────────────────────────────────────────────
+
+export async function notifyNewMember(opts: { name: string; memberCode: string; totalMembers: number }) {
+  await send(
+    `🎉 <b>สมาชิกใหม่!</b>\n` +
+    `👤 ${opts.name} (${opts.memberCode})\n` +
+    `📊 สมาชิกสะสมรวม ${opts.totalMembers.toLocaleString("th-TH")} คน`,
+    "TASK"
   );
 }

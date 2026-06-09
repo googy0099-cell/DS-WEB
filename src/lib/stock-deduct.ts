@@ -1,5 +1,4 @@
 import db from "@/lib/db";
-import { sendTelegramNotify } from "@/lib/telegram-notify";
 
 export async function deductStockForOrder(orderId: number, performedById: number): Promise<void> {
   // Skip if already deducted for this order
@@ -84,6 +83,7 @@ export async function deductStockForOrder(orderId: number, performedById: number
       ? `\n🚫 ปิดเมนูอัตโนมัติ: ${closedMenuNames.join(", ")}`
       : "";
 
+    // เก็บเป็น stockAlert ในระบบ (ไม่ส่ง Telegram ตามนโยบายห้อง ORDER)
     await db.stockAlert.create({
       data: {
         type: "low_stock",
@@ -91,8 +91,5 @@ export async function deductStockForOrder(orderId: number, performedById: number
         message: `${item.name} เหลือ ${item.currentQty} ${item.unit} (ขั้นต่ำ ${item.minQty})${closedLine}`,
       },
     });
-    await sendTelegramNotify(
-      `⚠️ สต็อกต่ำ!\n📦 ${item.name}\nเหลือ: ${item.currentQty} ${item.unit}\nขั้นต่ำ: ${item.minQty} ${item.unit}${closedLine}`
-    );
   }
 }
