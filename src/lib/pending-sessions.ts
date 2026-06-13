@@ -1,5 +1,5 @@
 import db from "@/lib/db";
-import { PACKAGES, type PackageKey } from "@/app/api/pos/sessions/route";
+import { PACKAGES, type PackageKey } from "@/lib/pos-packages";
 
 type PendingPlayer = {
   nameOrCode?: string;

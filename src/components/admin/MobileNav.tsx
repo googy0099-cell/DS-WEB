@@ -9,7 +9,7 @@ import {
   Dices, Gamepad2, Moon, Users, Sparkles, Images, Gift,
   KeyRound, BarChart3, ScrollText, QrCode, Settings2,
   CalendarDays, Wallet, CalendarCheck, ClipboardList, ClipboardCheck, Target,
-  Tag, LayoutGrid, Settings2 as SettingsIcon,
+  Tag, LayoutGrid, Settings2 as SettingsIcon, ScanLine, QrCode as QrCodeIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -20,6 +20,8 @@ const ICON_MAP: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
   pos: Timer,
   cashier: Banknote,
+  "employee-checkin": ScanLine,
+  "my-qr": QrCodeIcon,
   discounts: Tag,
   menu: UtensilsCrossed,
   "addon-groups": PackagePlus,

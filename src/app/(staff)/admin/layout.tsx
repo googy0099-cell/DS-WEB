@@ -21,11 +21,17 @@ const GROUP_DASHBOARD: NavGroup = {
   items: [{ href: "/admin", label: "Dashboard", icon: "dashboard" }],
 };
 
+const GROUP_PERSONAL: NavGroup = {
+  label: "",
+  items: [{ href: "/admin/my-qr", label: "QR เช็คอินของฉัน", icon: "my-qr" }],
+};
+
 const GROUP_SALES: NavGroup = {
   label: "การขาย",
   items: [
     { href: "/admin/pos", label: "จัดการปาร์ตี้", icon: "pos" },
     { href: "/admin/cashier", label: "รอบการขาย", icon: "cashier" },
+    { href: "/admin/employee-checkin", label: "เช็คอินพนักงาน", icon: "employee-checkin" },
     { href: "/admin/discounts", label: "ส่วนลด", icon: "discounts" },
     { href: "/admin/kitchen", label: "คิวครัว", icon: "kitchen" },
     { href: "/admin/bar", label: "คิวบาร์", icon: "bar" },
@@ -107,14 +113,16 @@ export default async function AdminLayout({
     redirect("/");
   }
 
-  const groups: NavGroup[] =
-    role === "OWNER"
+  const groups: NavGroup[] = [
+    GROUP_PERSONAL,
+    ...(role === "OWNER"
       ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_OWNER, GROUP_SYSTEM, GROUP_HR]
       : role === "MANAGER"
       ? [GROUP_HR]
       : role === "CASHIER"
       ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF]
-      : [GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF];
+      : [GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF]),
+  ];
 
   return (
     <div className="flex min-h-screen bg-gray-50">

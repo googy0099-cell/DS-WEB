@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
 import { compareFaces } from "@/lib/hr-aws-face";
+import { verifyToken } from "@/lib/hr-checkin-token";
 import { notifyCheckin } from "@/lib/hr-notify";
 import {
   computeCheckInStatus,
@@ -14,15 +15,24 @@ const BKK = 7 * 3600_000;
 
 export async function POST(req: NextRequest) {
   try {
-  const { staffId, photoBase64, force, mode } = (await req.json()) as {
-    staffId: number;
+  const { token, photoBase64, force, mode } = (await req.json()) as {
+    token: string;
     photoBase64: string;
     force?: boolean;
     mode: "checkin" | "checkout";
   };
 
-  if (!staffId || !photoBase64) {
+  if (!token || !photoBase64) {
     return NextResponse.json({ error: "ข้อมูลไม่ครบ" }, { status: 400 });
+  }
+
+  // staffId is derived from the signed QR token — clients can't pick it directly.
+  const staffId = verifyToken(token);
+  if (!staffId) {
+    return NextResponse.json(
+      { error: "QR หมดอายุหรือไม่ถูกต้อง ลองสแกนใหม่" },
+      { status: 401 }
+    );
   }
 
   const staff = await db.hrStaff.findUnique({

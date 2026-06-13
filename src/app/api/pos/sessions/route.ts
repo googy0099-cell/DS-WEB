@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-
-export const PACKAGES = {
-  A: { label: "Package A — สั่งเครื่องดื่ม", price: 0, timeSeconds: 3600, desc: "ได้เล่นฟรี 1 ชม." },
-  B: { label: "Package B — 49 บาท", price: 49, timeSeconds: 7200, desc: "เล่น 1 ชม. + ฟรี 1 ชม. = 2 ชม." },
-  C: { label: "Package C — เหมาวัน 120 บาท", price: 120, timeSeconds: 86400, desc: "ฟรีเครื่องดื่ม 1 แก้ว ไม่จำกัดเวลา" },
-  D: { label: "Package D — อัพเกรดเหมาวัน 80 บาท", price: 80, timeSeconds: 86400, desc: "อัพเกรดเป็นเหมาวัน" },
-} as const;
-
-export type PackageKey = keyof typeof PACKAGES;
+import { PACKAGES, type PackageKey } from "@/lib/pos-packages";
 
 export async function GET(req: NextRequest) {
   const tableId = Number(new URL(req.url).searchParams.get("tableId"));
