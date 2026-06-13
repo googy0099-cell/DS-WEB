@@ -4,37 +4,32 @@ import { auth } from "@/lib/auth";
 import { notifyShopClose } from "@/lib/telegram-notify";
 
 function getBangkokDateStr(): string {
-  const now = new Date();
-  const bkk = new Date(now.getTime() + (7 * 60 + now.getTimezoneOffset()) * 60_000);
-  return `${bkk.getFullYear()}-${String(bkk.getMonth() + 1).padStart(2, "0")}-${String(bkk.getDate()).padStart(2, "0")}`;
+  return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 }
 
-function getBangkokDayBounds(): { start: Date; end: Date } {
-  const now = new Date();
-  const offsetMs = (7 * 60 + now.getTimezoneOffset()) * 60_000;
-  const bkkNow = new Date(now.getTime() + offsetMs);
-  const startBkk = new Date(bkkNow);
-  startBkk.setHours(0, 0, 0, 0);
-  const endBkk = new Date(startBkk);
-  endBkk.setDate(endBkk.getDate() + 1);
-  return {
-    start: new Date(startBkk.getTime() - offsetMs),
-    end: new Date(endBkk.getTime() - offsetMs),
-  };
+// UTC bounds for a given Bangkok calendar day (YYYY-MM-DD) — matches /api/cashier/summary
+function getDayBoundsForDate(bangkokDate: string): { start: Date; end: Date } {
+  const [y, m, d] = bangkokDate.split("-").map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d, 0, 0, 0, 0) - 7 * 3600_000);
+  const end = new Date(start.getTime() + 24 * 3600_000);
+  return { start, end };
 }
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   const closedById = session?.user?.id ? Number(session.user.id) : undefined;
 
-  const { openingFloat, countedCash, note } = (await req.json()) as {
+  const { openingFloat, countedCash, note, date: bodyDate } = (await req.json()) as {
     openingFloat: number;
     countedCash: number;
     note?: string;
+    date?: string; // shift's Bangkok date — set when the shift crossed midnight
   };
 
-  const date = getBangkokDateStr();
-  const { start, end } = getBangkokDayBounds();
+  // Close against the shift's own day (not "today") so a shift opened yesterday
+  // reconciles against yesterday's sales — same date the summary screen showed.
+  const date = (bodyDate && /^\d{4}-\d{2}-\d{2}$/.test(bodyDate)) ? bodyDate : getBangkokDateStr();
+  const { start, end } = getDayBoundsForDate(date);
 
   const [payments, splits, expenses, topups] = await Promise.all([
     db.payment.findMany({ where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } } }),

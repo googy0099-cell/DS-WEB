@@ -283,10 +283,15 @@ export default function CashierPage() {
 
   async function confirmClose() {
     setSaving(true);
+    // Close against the shift's own Bangkok day (matches the summary screen) so a
+    // shift opened yesterday reconciles against yesterday's sales, not "today".
+    const shiftDate = openedAt
+      ? new Date(new Date(openedAt).getTime() + 7 * 3600_000).toISOString().slice(0, 10)
+      : undefined;
     const res = await fetch("/api/cashier/close", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openingFloat: floatNum, countedCash, note }),
+      body: JSON.stringify({ openingFloat: floatNum, countedCash, note, ...(shiftDate ? { date: shiftDate } : {}) }),
     });
     if (res.ok) {
       localStorage.removeItem(SHIFT_KEY());
