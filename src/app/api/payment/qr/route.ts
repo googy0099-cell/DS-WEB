@@ -19,24 +19,19 @@ export async function POST(req: NextRequest) {
   // Persist the discount on the order so receipts/queue can show it consistently
   await db.order.update({ where: { id: order.id }, data: { discountAmount: disc > 0 ? disc : null } });
 
-  // Create or update pending payment — lock method to PROMPTPAY, amount = transfer leg
+  // Create or update pending payment — lock method to PROMPTPAY, amount = transfer leg.
+  // The cash leg is held on the Payment and only becomes a SplitPayment (revenue) when
+  // the payment is confirmed — so an abandoned scan never counts as cash received.
+  const splitCash = cashPortion > 0 ? cashPortion : null;
   const existing = await db.payment.findUnique({ where: { orderId: order.id } });
   if (!existing) {
     await db.payment.create({
-      data: { orderId: order.id, method: "PROMPTPAY", amountTHB: transferPortion, status: "PENDING" },
+      data: { orderId: order.id, method: "PROMPTPAY", amountTHB: transferPortion, status: "PENDING", splitCashTHB: splitCash },
     });
   } else {
     await db.payment.update({
       where: { orderId: order.id },
-      data: { method: "PROMPTPAY", amountTHB: transferPortion },
-    });
-  }
-
-  // Record/refresh the cash leg (idempotent: one split row per order even if QR is regenerated)
-  await db.splitPayment.deleteMany({ where: { orderId: order.id } });
-  if (cashPortion > 0) {
-    await db.splitPayment.create({
-      data: { orderId: order.id, billId: order.billId, amountTHB: cashPortion, confirmedAt: new Date() },
+      data: { method: "PROMPTPAY", amountTHB: transferPortion, splitCashTHB: splitCash },
     });
   }
 

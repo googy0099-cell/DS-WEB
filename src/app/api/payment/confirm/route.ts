@@ -21,8 +21,18 @@ export async function PATCH(req: NextRequest) {
       confirmedAt,
       ...(receivedAmount != null ? { receivedAmount, changeAmount: changeAmount ?? 0 } : {}),
     },
-    select: { orderId: true, amountTHB: true, staffNote: true, method: true },
+    select: { orderId: true, amountTHB: true, staffNote: true, method: true, splitCashTHB: true },
   });
+
+  // แบ่งจ่าย: now that payment is confirmed, record the cash leg as revenue
+  // (idempotent — one split row per order even if confirm runs twice)
+  if (payment.splitCashTHB && payment.splitCashTHB > 0) {
+    const ord = await db.order.findUnique({ where: { id: payment.orderId }, select: { billId: true } });
+    await db.splitPayment.deleteMany({ where: { orderId: payment.orderId } });
+    await db.splitPayment.create({
+      data: { orderId: payment.orderId, billId: ord?.billId ?? null, amountTHB: payment.splitCashTHB, confirmedAt },
+    });
+  }
 
   const existingOrder = await db.order.findUnique({
     where: { id: payment.orderId },
@@ -54,16 +64,20 @@ export async function PATCH(req: NextRequest) {
     data: { status: newStatus },
   });
 
-  // Award loyalty + dice points at payment time
+  // For a split payment the money actually received = transfer leg + cash leg
+  const paidTotal = payment.amountTHB + (payment.splitCashTHB ?? 0);
+  const isSplit = (payment.splitCashTHB ?? 0) > 0;
+
+  // Award loyalty + dice points at payment time (on the full amount paid)
   if (userId) {
-    const pts = Math.floor(payment.amountTHB / 10);
+    const pts = Math.floor(paidTotal / 10);
     await db.user.update({
       where: { id: Number(userId) },
-      data: { points: { increment: pts }, totalSpentTHB: { increment: payment.amountTHB } },
+      data: { points: { increment: pts }, totalSpentTHB: { increment: paidTotal } },
     });
   }
   if (existingOrder?.userId) {
-    const dice = Math.floor(payment.amountTHB / 49);
+    const dice = Math.floor(paidTotal / 49);
     if (dice > 0) {
       await db.user.update({ where: { id: existingOrder.userId }, data: { dicePoints: { increment: dice } } });
     }
@@ -82,9 +96,9 @@ export async function PATCH(req: NextRequest) {
       create: {
         orderId: payment.orderId,
         orderName: existingOrder.orderName ?? "",
-        totalTHB: payment.amountTHB,
+        totalTHB: paidTotal,
         discountAmount: existingOrder.discountAmount ?? null,
-        paymentMethod: payment.method,
+        paymentMethod: isSplit ? "SPLIT" : payment.method,
         locationLabel,
         itemsJson: JSON.stringify(existingOrder.items),
         confirmedAt,
@@ -106,8 +120,8 @@ export async function PATCH(req: NextRequest) {
       orderLabel: existingOrder.orderName || `ออเดอร์ #${payment.orderId}`,
       location,
       itemLines,
-      netTotal: payment.amountTHB,
-      method: payment.method,
+      netTotal: paidTotal,
+      method: isSplit ? "SPLIT" : payment.method,
     }).catch(() => {});
   }
 

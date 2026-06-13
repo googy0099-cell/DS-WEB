@@ -39,6 +39,7 @@ export async function GET(
   const methodLabel: Record<string, string> = {
     PROMPTPAY: "พร้อมเพย์ / QR",
     CASH: "เงินสด",
+    SPLIT: "เงินสด + โอน",
     TAB: "เปิดแท็บ",
     UNSET: "-",
   };

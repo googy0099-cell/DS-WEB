@@ -239,6 +239,7 @@ model Payment {
   staffNote      String?
   receivedAmount Int?
   changeAmount   Int?
+  splitCashTHB   Int?      // แบ่งจ่ายออเดอร์เดี่ยว: cash portion held until payment is confirmed
   createdAt      DateTime  @default(now())
 }
 

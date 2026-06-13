@@ -31,12 +31,22 @@ export async function POST(req: NextRequest) {
   const date = (bodyDate && /^\d{4}-\d{2}-\d{2}$/.test(bodyDate)) ? bodyDate : getBangkokDateStr();
   const { start, end } = getDayBoundsForDate(date);
 
-  const [payments, splits, expenses, topups] = await Promise.all([
-    db.payment.findMany({ where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } } }),
-    db.splitPayment.findMany({ where: { confirmedAt: { gte: start, lt: end } } }).catch(() => []),
+  const [allPayments, allSplits, expenses, topups] = await Promise.all([
+    db.payment.findMany({
+      where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } },
+      select: { method: true, amountTHB: true, order: { select: { status: true } } },
+    }),
+    db.splitPayment.findMany({
+      where: { confirmedAt: { gte: start, lt: end } },
+      select: { amountTHB: true, order: { select: { status: true } } },
+    }).catch(() => []),
     db.cashExpense.findMany({ where: { type: "PETTY_CASH", createdAt: { gte: start, lt: end } } }),
     db.cashTopup.findMany({ where: { createdAt: { gte: start, lt: end } } }).catch(() => []),
   ]);
+
+  // Exclude payments tied to cancelled orders (matches /api/cashier/summary)
+  const payments = allPayments.filter((p) => p.order?.status !== "CANCELLED");
+  const splits = allSplits.filter((s) => !s.order || s.order.status !== "CANCELLED");
 
   // แบ่งจ่าย: cash legs of split payments are real cash in the drawer
   const splitCash = splits.reduce((s, x) => s + x.amountTHB, 0);
