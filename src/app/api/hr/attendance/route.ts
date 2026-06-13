@@ -7,11 +7,10 @@ import { computeCheckInStatus, computeLateMinutes, computeLateDeductionAmount, g
 const BKK = 7 * 3600_000;
 
 export async function POST(req: NextRequest) {
-  const { staffId, pin, photoBase64, faceCheckin, force } = (await req.json()) as {
+  const { staffId, pin, photoBase64, force } = (await req.json()) as {
     staffId: number;
     pin?: string;
     photoBase64?: string;
-    faceCheckin?: boolean;
     force?: boolean;
   };
 
@@ -24,13 +23,12 @@ export async function POST(req: NextRequest) {
 
   if (!staff) return NextResponse.json({ error: "ไม่พบพนักงาน" }, { status: 404 });
 
-  if (faceCheckin) {
-    if (!staff.faceData) return NextResponse.json({ error: "ยังไม่ได้ลงทะเบียนใบหน้า" }, { status: 400 });
-  } else {
-    if (!staff.pin) return NextResponse.json({ error: "ยังไม่ได้ตั้ง PIN" }, { status: 400 });
-    const valid = await bcrypt.compare(pin ?? "", staff.pin);
-    if (!valid) return NextResponse.json({ error: "PIN ไม่ถูกต้อง" }, { status: 401 });
-  }
+  // PIN-gated check-in. The face flow lives in /api/hr/face/identify (signed QR
+  // token + AWS face match + GPS). A "face" flag must never bypass verification —
+  // so this endpoint always requires a valid PIN.
+  if (!staff.pin) return NextResponse.json({ error: "ยังไม่ได้ตั้ง PIN" }, { status: 400 });
+  const valid = await bcrypt.compare(pin ?? "", staff.pin);
+  if (!valid) return NextResponse.json({ error: "PIN ไม่ถูกต้อง" }, { status: 401 });
 
   const now = new Date();
   const bkkNow = new Date(Date.now() + BKK);
