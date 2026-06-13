@@ -21,11 +21,6 @@ const GROUP_DASHBOARD: NavGroup = {
   items: [{ href: "/admin", label: "Dashboard", icon: "dashboard" }],
 };
 
-const GROUP_PERSONAL: NavGroup = {
-  label: "",
-  items: [{ href: "/admin/my-qr", label: "QR เช็คอินของฉัน", icon: "my-qr" }],
-};
-
 const GROUP_SALES: NavGroup = {
   label: "การขาย",
   items: [
@@ -114,7 +109,6 @@ export default async function AdminLayout({
   }
 
   const groups: NavGroup[] = [
-    GROUP_PERSONAL,
     ...(role === "OWNER"
       ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_OWNER, GROUP_SYSTEM, GROUP_HR]
       : role === "MANAGER"

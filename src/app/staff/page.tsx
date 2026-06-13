@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 
 const MENU = [
+  { href: "/staff/my-qr", icon: "📷", label: "QR เช็คอินของฉัน", desc: "ยื่นให้แคชเชียร์สแกนเพื่อเข้า-ออกงาน" },
   { href: "/staff/checklist", icon: "✅", label: "เช็คลิสต์", desc: "เปิด-ปิดร้าน" },
   { href: "/staff/tasks", icon: "📋", label: "งาน", desc: "ดูและอัพเดตงานที่ได้รับมอบหมาย" },
   { href: "/staff/kpi", icon: "🎯", label: "KPI", desc: "เป้าหมายและผลงานรายเดือน" },

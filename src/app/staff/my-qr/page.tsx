@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
 
 // Refresh a bit before the 30s token TTL so the displayed QR is always live.
@@ -81,10 +82,14 @@ export default function MyCheckinQrPage() {
   }, []);
 
   return (
-    <div className="max-w-md mx-auto flex flex-col items-center gap-5 py-6">
+    <div className="min-h-screen px-4 pt-8 pb-10 max-w-md mx-auto flex flex-col items-center gap-5">
+      <div className="w-full">
+        <Link href="/staff" className="text-[#f8f1e5]/50 text-sm hover:text-[#f8f1e5]/80">← กลับ</Link>
+      </div>
+
       <div className="text-center">
-        <h1 className="text-xl font-bold text-navy">QR เช็คอินของฉัน</h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <h1 className="text-xl font-bold text-[#f8f1e5]">QR เช็คอินของฉัน</h1>
+        <p className="text-sm text-[#f8f1e5]/60 mt-1">
           ยื่นจอนี้ให้เครื่องแคชเชียร์สแกน แล้วมองกล้อง
         </p>
       </div>
@@ -126,7 +131,7 @@ export default function MyCheckinQrPage() {
         )}
       </div>
 
-      <p className="text-xs text-gray-400 text-center px-6">
+      <p className="text-xs text-[#f8f1e5]/40 text-center px-6">
         ต้องอยู่ที่ร้านและอนุญาตตำแหน่ง QR จึงจะใช้งานได้
       </p>
     </div>
