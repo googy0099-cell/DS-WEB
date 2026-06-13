@@ -33,12 +33,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { memberUserId, paymentMethod, discountType, discountValue, discountNote } = await req.json() as {
+  const { memberUserId, paymentMethod, discountType, discountValue, discountNote, splitCashTHB } = await req.json() as {
     memberUserId?: number | null;
     paymentMethod?: string;
     discountType?: "PERCENT" | "FIXED";
     discountValue?: number;
     discountNote?: string;
+    splitCashTHB?: number; // แบ่งจ่าย: ส่วนเงินสด (ที่เหลือเป็นโอน)
   };
 
   const orders = await db.order.findMany({
@@ -80,16 +81,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const finalTotal = tabTotal - discountAmount;
 
   const now = new Date();
-  const actualPaymentMethod = paymentMethod === "CASH" ? "CASH" : "PROMPTPAY";
 
-  // Allocate the discount across orders proportionally so that the sum of each
-  // payment's net amount equals finalTotal exactly (remainder lands on the last
-  // order). This makes Payment.amountTHB the actual money received — so revenue
-  // reporting (Σ confirmed payments) and the cash drawer reconcile.
+  // แบ่งจ่าย (split): cash portion goes to a SplitPayment row, the rest is the
+  // transfer recorded on the orders' Payments. cashPortion is capped at finalTotal.
+  const cashPortion = Math.max(0, Math.min(Math.round(splitCashTHB ?? 0), finalTotal));
+  const transferPortion = finalTotal - cashPortion;
+  const isSplit = cashPortion > 0 && transferPortion > 0;
+  // method on the orders' Payments: split → the transfer leg (PROMPTPAY);
+  // cash-only (split UI used for full cash) → CASH; otherwise the chosen method.
+  const actualPaymentMethod = isSplit ? "PROMPTPAY"
+    : cashPortion >= finalTotal && cashPortion > 0 ? "CASH"
+    : paymentMethod === "CASH" ? "CASH" : "PROMPTPAY";
+
+  // Allocate across orders proportionally so the sum of each payment's amount
+  // equals the part recorded on Payments (transferPortion when split, else
+  // finalTotal). Remainder lands on the last order. Keeps Payment.amountTHB the
+  // actual money received per method — so revenue and the cash drawer reconcile.
+  const allocTotal = isSplit ? transferPortion : finalTotal;
   let allocated = 0;
   const netByOrder = orders.map((o, idx) => {
-    if (idx === orders.length - 1) return finalTotal - allocated;
-    const share = tabTotal > 0 ? Math.round((o.totalTHB / tabTotal) * finalTotal) : 0;
+    if (idx === orders.length - 1) return allocTotal - allocated;
+    const share = tabTotal > 0 ? Math.round((o.totalTHB / tabTotal) * allocTotal) : 0;
     allocated += share;
     return share;
   });
@@ -115,6 +127,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { status: o.kitchenServedAt ? "SERVED" : "PAID" },
         })
       ),
+    // แบ่งจ่าย: record the cash leg as a SplitPayment (transfer leg lives on the Payments above)
+    ...(isSplit
+      ? [db.splitPayment.create({
+          data: { orderId: orders[0].id, billId: Number(id), amountTHB: cashPortion, confirmedAt: now },
+        })]
+      : []),
   ]);
 
   // Fall back to userId from any order in the bill (logged-in customer who ordered via QR)

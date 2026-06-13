@@ -1131,7 +1131,7 @@ export default function OrderQueue() {
       await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", ...discountBody() }),
+        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", splitCashTHB: snapshot.cashPaid, ...discountBody() }),
       });
       setBillGroupSplit(null);
       setSplitCashStr("");
@@ -1168,7 +1168,7 @@ export default function OrderQueue() {
     }
   }
 
-  async function chooseScan(order: OrderWithItems) {
+  async function chooseScan(order: OrderWithItems, splitCashTHB?: number) {
     setLoading(order.id, true);
     try {
       // If order is still PENDING (e.g. online counter-payment order), confirm it first
@@ -1183,7 +1183,7 @@ export default function OrderQueue() {
       const res = await fetch("/api/payment/qr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.id, ...(discountAmount > 0 ? { discountAmount } : {}) }),
+        body: JSON.stringify({ orderId: order.id, ...(discountAmount > 0 ? { discountAmount } : {}), ...(splitCashTHB && splitCashTHB > 0 ? { splitCashTHB } : {}) }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -2305,10 +2305,11 @@ export default function OrderQueue() {
                 <button
                   onClick={() => {
                     const o = orderSplit.order;
+                    const cash = orderSplit.cashPaid;
                     setOrderSplit(null);
                     setOrderSplitCashStr("");
                     setOrderSplitReceivedStr("");
-                    chooseScan(o);
+                    chooseScan(o, cash);
                   }}
                   className="flex-1 bg-violet-600 text-white py-3 rounded-2xl text-sm font-bold">
                   📷 ไปสแกน

@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const date = (paramDate && /^\d{4}-\d{2}-\d{2}$/.test(paramDate)) ? paramDate : getBangkokDateStr();
   const { start, end } = getDayBoundsForDate(date);
 
-  const [rev, payments, paidSessionsCount, lastClose, pettyExpenses, topups] = await Promise.all([
+  const [rev, payments, splitPayments, paidSessionsCount, lastClose, pettyExpenses, topups] = await Promise.all([
     // Net revenue (confirmed payments; food/game split by item category — no double count)
     computeRevenue(date, date),
     // Payment detail lists for the drawer breakdown
@@ -31,6 +31,12 @@ export async function GET(req: NextRequest) {
       include: { order: { select: { id: true, orderName: true, status: true } } },
       orderBy: { confirmedAt: "asc" },
     }),
+    // แบ่งจ่าย: cash legs shown in the cash list (totals already counted via computeRevenue)
+    db.splitPayment.findMany({
+      where: { confirmedAt: { gte: start, lt: end } },
+      include: { order: { select: { id: true, orderName: true, status: true } } },
+      orderBy: { confirmedAt: "asc" },
+    }).catch(() => []),
     db.playerSession.count({ where: { status: "PAID", updatedAt: { gte: start, lt: end } } }),
     db.cashDrawerSession.findFirst({
       where: { date },
@@ -48,8 +54,25 @@ export async function GET(req: NextRequest) {
 
   // Exclude payments tied to cancelled orders from the detail lists too
   const validPayments = payments.filter((p) => p.order?.status !== "CANCELLED");
-  const cashPayments = validPayments.filter((p) => p.method === "CASH");
   const transferPayments = validPayments.filter((p) => p.method !== "CASH");
+  // Cash list = cash Payments + cash legs of split payments (shaped like a Payment for the UI)
+  const splitCashEntries = splitPayments
+    .filter((s) => s.order?.status !== "CANCELLED")
+    .map((s) => ({
+      id: -s.id, // negative id avoids clashing with real Payment ids in React keys
+      method: "CASH",
+      amountTHB: s.amountTHB,
+      receivedAmount: null,
+      changeAmount: null,
+      slipUrl: null,
+      confirmedAt: s.confirmedAt,
+      staffNote: null,
+      orderId: s.orderId,
+      createdAt: s.createdAt,
+      order: s.order ? { ...s.order, orderName: `${s.order.orderName} (แบ่งจ่าย-เงินสด)` } : s.order,
+    }));
+  const cashPayments = [...validPayments.filter((p) => p.method === "CASH"), ...splitCashEntries]
+    .sort((a, b) => new Date(a.confirmedAt!).getTime() - new Date(b.confirmedAt!).getTime());
 
   const pettyTotal = pettyExpenses.filter((e) => e.type === "PETTY_CASH").reduce((s, e) => s + e.amount, 0);
   const advanceTotal = pettyExpenses.filter((e) => e.type === "STAFF_ADVANCE").reduce((s, e) => s + e.amount, 0);

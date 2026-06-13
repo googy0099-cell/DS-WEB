@@ -62,7 +62,7 @@ export type RevenueResult = {
 export async function computeRevenue(from: string, to: string): Promise<RevenueResult> {
   const { start, end } = parseDateRange(from, to);
 
-  const [payments, items] = await Promise.all([
+  const [payments, splits, items] = await Promise.all([
     db.payment.findMany({
       where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } },
       select: {
@@ -72,6 +72,11 @@ export async function computeRevenue(from: string, to: string): Promise<RevenueR
         order: { select: { status: true, billId: true } },
       },
     }),
+    // แบ่งจ่าย: cash legs of split payments (the transfer leg is already in `payments`)
+    db.splitPayment.findMany({
+      where: { confirmedAt: { gte: start, lt: end } },
+      select: { amountTHB: true, confirmedAt: true, order: { select: { status: true } } },
+    }).catch(() => []),
     db.orderItem.findMany({
       where: {
         cancelledAt: null,
@@ -85,11 +90,14 @@ export async function computeRevenue(from: string, to: string): Promise<RevenueR
   ]);
 
   const validPayments = payments.filter((p) => p.order && p.order.status !== "CANCELLED");
+  const validSplits = splits.filter((s) => !s.order || s.order.status !== "CANCELLED");
+  const splitCashTotal = validSplits.reduce((s, x) => s + x.amountTHB, 0);
 
-  const totalRevenue = validPayments.reduce((s, p) => s + p.amountTHB, 0);
+  // split cash legs are revenue (cash), on top of confirmed Payments
+  const totalRevenue = validPayments.reduce((s, p) => s + p.amountTHB, 0) + splitCashTotal;
   const cashTotal = validPayments
     .filter((p) => p.method === "CASH")
-    .reduce((s, p) => s + p.amountTHB, 0);
+    .reduce((s, p) => s + p.amountTHB, 0) + splitCashTotal;
   const transferTotal = validPayments
     .filter((p) => p.method !== "CASH")
     .reduce((s, p) => s + p.amountTHB, 0);
@@ -125,6 +133,10 @@ export async function computeRevenue(from: string, to: string): Promise<RevenueR
       dailyMap[k].revenue += p.amountTHB;
       dailyMap[k].count++;
     }
+  }
+  for (const s of validSplits) {
+    const k = bkkDateKey(s.confirmedAt);
+    if (dailyMap[k]) dailyMap[k].revenue += s.amountTHB; // count tracks transactions (Payments), not split legs
   }
   const chart = Object.entries(dailyMap).map(([date, v]) => ({ date, ...v }));
 

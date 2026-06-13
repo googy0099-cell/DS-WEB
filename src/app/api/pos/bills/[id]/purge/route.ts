@@ -23,6 +23,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       await db.receipt.deleteMany({ where: { orderId: { in: orderIds } } });
       await db.orderItem.deleteMany({ where: { orderId: { in: orderIds } } });
       await db.payment.deleteMany({ where: { orderId: { in: orderIds } } });
+      await db.splitPayment.deleteMany({ where: { orderId: { in: orderIds } } });
       await db.order.deleteMany({ where: { billId } });
     }
     await db.playerSession.deleteMany({ where: { billId } });

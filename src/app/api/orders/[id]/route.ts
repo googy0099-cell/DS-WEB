@@ -333,6 +333,7 @@ export async function DELETE(
 
   await db.orderItem.deleteMany({ where: { orderId } });
   await db.payment.deleteMany({ where: { orderId } });
+  await db.splitPayment.deleteMany({ where: { orderId } });
   await db.order.delete({ where: { id: orderId } });
 
   if (handledById) {

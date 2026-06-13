@@ -207,6 +207,7 @@ model Order {
   kitchenServedAt DateTime?
   items           OrderItem[]
   payment         Payment?
+  splitPayments   SplitPayment[]
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 }
@@ -239,6 +240,20 @@ model Payment {
   receivedAmount Int?
   changeAmount   Int?
   createdAt      DateTime  @default(now())
+}
+
+// Cash portion of a "แบ่งจ่าย" (split: cash + transfer) payment.
+// The order's Payment row holds the TRANSFER portion (method PROMPTPAY); this
+// row holds the CASH portion so cash vs transfer totals reconcile with the drawer.
+// Counted as revenue alongside confirmed Payments, keyed by confirmedAt.
+model SplitPayment {
+  id          Int      @id @default(autoincrement())
+  orderId     Int
+  order       Order    @relation(fields: [orderId], references: [id])
+  billId      Int?
+  amountTHB   Int
+  confirmedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 }
 
 model CashDrawerSession {

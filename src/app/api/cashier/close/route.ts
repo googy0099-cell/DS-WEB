@@ -36,13 +36,16 @@ export async function POST(req: NextRequest) {
   const date = getBangkokDateStr();
   const { start, end } = getBangkokDayBounds();
 
-  const [payments, expenses, topups] = await Promise.all([
+  const [payments, splits, expenses, topups] = await Promise.all([
     db.payment.findMany({ where: { status: "CONFIRMED", confirmedAt: { gte: start, lt: end } } }),
+    db.splitPayment.findMany({ where: { confirmedAt: { gte: start, lt: end } } }).catch(() => []),
     db.cashExpense.findMany({ where: { type: "PETTY_CASH", createdAt: { gte: start, lt: end } } }),
     db.cashTopup.findMany({ where: { createdAt: { gte: start, lt: end } } }).catch(() => []),
   ]);
 
-  const cashSales = payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amountTHB, 0);
+  // แบ่งจ่าย: cash legs of split payments are real cash in the drawer
+  const splitCash = splits.reduce((s, x) => s + x.amountTHB, 0);
+  const cashSales = payments.filter((p) => p.method === "CASH").reduce((s, p) => s + p.amountTHB, 0) + splitCash;
   const totalTransfer = payments.filter((p) => p.method !== "CASH").reduce((s, p) => s + p.amountTHB, 0);
   const pettyTotal = expenses.reduce((s, e) => s + e.amount, 0);
   const topupTotal = topups.reduce((s, t) => s + t.amount, 0);
