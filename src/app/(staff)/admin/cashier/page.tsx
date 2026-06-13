@@ -121,23 +121,28 @@ export default function CashierPage() {
     const stored = localStorage.getItem(SHIFT_KEY());
     fetch("/api/shop/status")
       .then((r) => r.json())
-      .then(({ isOpen, openedAt: serverOpenedAt }: { isOpen: boolean; openedAt: string | null }) => {
+      .then(({ isOpen, openedAt: serverOpenedAt, openingFloat: serverFloat }: { isOpen: boolean; openedAt: string | null; openingFloat: number | null }) => {
         if (stored && isOpen) {
-          // Both local and server say open → restore from localStorage
+          // Both local and server say open → restore. Prefer the server's opening
+          // float (authoritative; survives midnight) and fall back to localStorage.
           const { openedAt: oa, openingFloat: of_ } = JSON.parse(stored);
+          const float = serverFloat ?? of_ ?? 0;
           setOpenedAt(oa);
-          setOpeningFloat(String(of_));
+          setOpeningFloat(String(float));
           setShiftState("OPEN");
+          localStorage.setItem(SHIFT_KEY(), JSON.stringify({ openedAt: oa, openingFloat: float }));
         } else if (stored && !isOpen) {
           // Server says closed but localStorage still has it → another device closed
           localStorage.removeItem(SHIFT_KEY());
           setShiftState("CLOSED");
         } else if (!stored && isOpen && serverOpenedAt) {
           // localStorage key missing (e.g. crossed midnight or cleared) but server still open
-          // → restore from DB and re-persist with today's key
+          // → restore from DB (incl. opening float) and re-persist with today's key
+          const float = serverFloat ?? 0;
           setOpenedAt(serverOpenedAt);
+          setOpeningFloat(String(float));
           setShiftState("OPEN");
-          localStorage.setItem(SHIFT_KEY(), JSON.stringify({ openedAt: serverOpenedAt, openingFloat: 0 }));
+          localStorage.setItem(SHIFT_KEY(), JSON.stringify({ openedAt: serverOpenedAt, openingFloat: float }));
         }
         // else: no stored, server says closed → stay CLOSED (default)
       })

@@ -585,12 +585,13 @@ model CashTopup {
 }
 
 model ShopSession {
-  id         Int       @id @default(1)
-  isOpen     Boolean   @default(false) @map("is_open")
-  openedAt   DateTime? @map("opened_at")
-  closedAt   DateTime? @map("closed_at")
-  openedById Int?      @map("opened_by")
-  openedBy   User?     @relation("ShopSessions", fields: [openedById], references: [id])
+  id           Int       @id @default(1)
+  isOpen       Boolean   @default(false) @map("is_open")
+  openedAt     DateTime? @map("opened_at")
+  closedAt     DateTime? @map("closed_at")
+  openedById   Int?      @map("opened_by")
+  openingFloat Int?      @map("opening_float") // เงินเปิดเก๊ะ — persisted so it survives midnight / device switch
+  openedBy     User?     @relation("ShopSessions", fields: [openedById], references: [id])
   @@map("shop_session")
 }
 

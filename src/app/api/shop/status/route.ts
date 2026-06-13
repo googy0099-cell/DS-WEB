@@ -6,5 +6,6 @@ export async function GET() {
   return NextResponse.json({
     isOpen: session?.isOpen ?? false,
     openedAt: session?.openedAt ?? null,
+    openingFloat: session?.openingFloat ?? null,
   });
 }
