@@ -47,12 +47,6 @@ export default function TestModeControl({ active }: { active: boolean }) {
     );
   }
 
-  // Inactive: owner-only entry button, tucked bottom-left so it doesn't clash with POS UI.
-  if (!isOwner) return null;
-  return (
-    <button onClick={() => setMode(true)} disabled={busy}
-      className="fixed bottom-3 left-3 z-50 bg-violet-100 text-violet-700 border border-violet-300 rounded-full px-3 py-1.5 text-xs font-semibold shadow hover:bg-violet-200 disabled:opacity-50">
-      🧪 โหมดทดสอบ
-    </button>
-  );
+  // Inactive: no floating button — owner turns it on from the Settings page.
+  return null;
 }

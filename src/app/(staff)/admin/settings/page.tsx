@@ -136,11 +136,22 @@ export default function AdminSettingsPage() {
   const [serialTesting, setSerialTesting] = useState(false);
   const [serialStatus, setSerialStatus] = useState<"" | "ok" | "fail">("");
 
+  // Test mode (sandbox)
+  const [testActive, setTestActive] = useState<boolean | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+
   useEffect(() => {
     setSerialSupported(isSerialSupported());
     setBaudRateState(getBaudRate());
     getGrantedPrinter().then((p) => setPrinterConnected(!!p));
+    fetch("/api/test-mode").then((r) => r.json()).then((d) => setTestActive(!!d.active)).catch(() => setTestActive(false));
   }, []);
+
+  async function enterTestMode() {
+    setTestBusy(true);
+    await fetch("/api/test-mode", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ on: true }) });
+    location.reload();
+  }
 
   if (siteSettings && !promoLoaded) {
     setPromoTitle(siteSettings.promo_title ?? "🎉 โปรโมชั่นพิเศษ!");
@@ -475,6 +486,32 @@ ${kShowNote ? `<hr class="div"/><div style="font-size:12px">📝 ไม่ใส
 
   return (
     <div className="max-w-lg space-y-8">
+
+      {/* Test mode (sandbox) */}
+      <div>
+        <h1 className="text-xl font-bold text-navy mb-4">🧪 โหมดทดสอบระบบ</h1>
+        <div className="bg-white rounded-2xl shadow-sm p-5 space-y-3">
+          <p className="text-sm text-gray-500">
+            ลองใช้งานระบบได้เต็มที่ (เปิดบิล / สั่ง / จ่าย / ปิดยอด) โดย<b className="text-navy">ข้อมูลจะไม่ถูกนับในยอดและรายงานจริง</b> และลบทิ้งได้ภายหลัง — ตอนเปิดอยู่พื้นหลังจะเป็นสีม่วง
+          </p>
+          {testActive ? (
+            <div className="bg-violet-50 border border-violet-200 rounded-xl px-4 py-3 text-sm text-violet-700 font-semibold">
+              🧪 กำลังอยู่ในโหมดทดสอบ — กด “ออกจากโหมดทดสอบ” หรือ “ล้างข้อมูลทดสอบ” ได้ที่แถบม่วงด้านบน
+            </div>
+          ) : (
+            <button
+              onClick={enterTestMode}
+              disabled={testBusy || testActive === null}
+              className="w-full bg-violet-600 text-white font-bold py-3 rounded-xl disabled:opacity-50 hover:bg-violet-700 transition-colors"
+            >
+              {testBusy ? "กำลังเปิด..." : "🧪 เปิดโหมดทดสอบ"}
+            </button>
+          )}
+          <p className="text-xs text-gray-400">
+            ใช้กับเครื่องนี้เท่านั้น — พนักงานคนอื่นยังใช้งานจริงตามปกติ · แนะนำให้ “สร้างใหม่” ตอนทดสอบ อย่าไปแก้บิลจริงที่มีอยู่
+          </p>
+        </div>
+      </div>
 
       {/* Promo Banner */}
       <div>
