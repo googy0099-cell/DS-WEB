@@ -25,6 +25,8 @@ function chatIdFor(channel: TgChannel): string | undefined {
 }
 
 async function send(message: string, channel: TgChannel = "ORDER"): Promise<void> {
+  const { isTestModeActive } = await import("./test-mode");
+  if (await isTestModeActive()) return; // test mode never pings real staff rooms
   const token = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = chatIdFor(channel);
   if (!token || !chatId) return;

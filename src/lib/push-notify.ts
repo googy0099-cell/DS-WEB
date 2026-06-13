@@ -8,6 +8,8 @@ webpush.setVapidDetails(
 );
 
 export async function sendPushToAll(title: string, body: string) {
+  const { isTestModeActive } = await import("./test-mode");
+  if (await isTestModeActive()) return; // suppress in test mode
   const subs = await db.pushSubscription.findMany();
   const payload = JSON.stringify({ title, body });
   await Promise.allSettled(

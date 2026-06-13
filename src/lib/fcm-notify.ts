@@ -29,6 +29,8 @@ async function getFcmAccessToken(sa: {
 }
 
 export async function sendFcmNotify(title: string, body: string): Promise<void> {
+  const { isTestModeActive } = await import("./test-mode");
+  if (await isTestModeActive()) return; // suppress in test mode
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return;
 

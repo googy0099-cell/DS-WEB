@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import db from "@/lib/db";
 import { auth } from "@/lib/auth";
 
@@ -41,7 +42,7 @@ export async function PUT(req: NextRequest) {
 
     let config = await db.hrLateConfig.findFirst();
     if (!config) {
-      config = await db.hrLateConfig.create({ data: data as Parameters<typeof db.hrLateConfig.create>[0]["data"] });
+      config = await db.hrLateConfig.create({ data: data as Prisma.HrLateConfigUncheckedCreateInput });
     } else {
       config = await db.hrLateConfig.update({ where: { id: config.id }, data });
     }

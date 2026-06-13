@@ -70,6 +70,7 @@ model Bill {
   discountValue  Int?     @map("discount_value")
   discountAmount Int?     @map("discount_amount")
   discountNote   String?  @map("discount_note")
+  isTest         Boolean         @default(false) @map("is_test")
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -88,6 +89,7 @@ model PlayerSession {
   billId        Int?
   bill          Bill?    @relation(fields: [billId], references: [id])
   orders        Order[]
+  isTest        Boolean  @default(false) @map("is_test")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -208,6 +210,7 @@ model Order {
   items           OrderItem[]
   payment         Payment?
   splitPayments   SplitPayment[]
+  isTest          Boolean        @default(false) @map("is_test")
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 }
@@ -240,6 +243,7 @@ model Payment {
   receivedAmount Int?
   changeAmount   Int?
   splitCashTHB   Int?      // แบ่งจ่ายออเดอร์เดี่ยว: cash portion held until payment is confirmed
+  isTest         Boolean   @default(false) @map("is_test")
   createdAt      DateTime  @default(now())
 }
 
@@ -254,6 +258,7 @@ model SplitPayment {
   billId      Int?
   amountTHB   Int
   confirmedAt DateTime @default(now())
+  isTest      Boolean  @default(false) @map("is_test")
   createdAt   DateTime @default(now())
 }
 
@@ -268,6 +273,7 @@ model CashDrawerSession {
   note          String?
   closedById    Int?
   closedBy      User?    @relation("DrawerClosedBy", fields: [closedById], references: [id])
+  isTest        Boolean  @default(false) @map("is_test")
   createdAt     DateTime @default(now())
 }
 
@@ -552,6 +558,7 @@ model Receipt {
   locationLabel String   @default("")
   itemsJson     String
   confirmedAt   DateTime
+  isTest        Boolean  @default(false) @map("is_test")
   createdAt     DateTime @default(now())
 }
 
@@ -572,6 +579,7 @@ model CashExpense {
   photoUrl    String?
   note        String?
   reimbursed  Boolean  @default(false)
+  isTest      Boolean  @default(false) @map("is_test")
   createdAt   DateTime @default(now())
 }
 
@@ -582,6 +590,7 @@ model CashTopup {
   note        String?
   photoUrl    String?
   createdById Int?
+  isTest      Boolean  @default(false) @map("is_test")
   createdAt   DateTime @default(now())
 }
 
