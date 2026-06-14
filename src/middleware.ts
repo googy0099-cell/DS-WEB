@@ -2,16 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // Force the canonical www domain. Google OAuth (authorized redirect URIs) and
 // Auth.js are configured for www.look-tao.com, so the bare apex look-tao.com
-// serves pages but breaks sign-in with a "Configuration" error (seen on mobile,
-// where users open the apex). Redirect apex → www so auth works everywhere.
+// serves pages but breaks sign-in with a "Configuration" error. Redirect the
+// apex → www so auth works everywhere.
+//
+// Behind Railway's proxy the public host arrives in x-forwarded-host, not host —
+// check both, and build an explicit absolute URL for the redirect target.
 export function middleware(req: NextRequest) {
-  const host = req.headers.get("host");
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").toLowerCase();
   if (host === "look-tao.com") {
-    const url = req.nextUrl.clone();
-    url.protocol = "https:";
-    url.host = "www.look-tao.com";
-    url.port = "";
-    return NextResponse.redirect(url, 308);
+    return NextResponse.redirect(`https://www.look-tao.com${req.nextUrl.pathname}${req.nextUrl.search}`, 308);
   }
   return NextResponse.next();
 }
