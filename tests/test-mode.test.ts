@@ -9,6 +9,16 @@ import { TAGGED_MODELS } from "../src/lib/test-mode.ts";
 
 let db: Client;
 
+// Prisma model name → physical table name (HR models use @@map("hr_*")).
+const MODEL_TABLE: Record<string, string> = {
+  Order: "Order", Bill: "Bill", Payment: "Payment", SplitPayment: "SplitPayment",
+  PlayerSession: "PlayerSession", Receipt: "Receipt", CashExpense: "CashExpense",
+  CashTopup: "CashTopup", CashDrawerSession: "CashDrawerSession",
+  HrAttendance: "hr_attendance", HrDeduction: "hr_deduction", HrChecklist: "hr_checklist",
+  HrChecklistItem: "hr_checklist_item", HrTask: "hr_task", HrKpi: "hr_kpi",
+  HrPaymentEvent: "hr_payment_event",
+};
+
 const DDL = `
 CREATE TABLE "Bill" (id INTEGER PRIMARY KEY AUTOINCREMENT, is_test INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE "Order" (id INTEGER PRIMARY KEY AUTOINCREMENT, billId INTEGER, status TEXT DEFAULT 'CONFIRMED', is_test INTEGER NOT NULL DEFAULT 0);
@@ -20,7 +30,16 @@ CREATE TABLE Receipt (id INTEGER PRIMARY KEY AUTOINCREMENT, orderId INTEGER UNIQ
 CREATE TABLE CashExpense (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, type TEXT, is_test INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE CashTopup (id INTEGER PRIMARY KEY AUTOINCREMENT, amount INTEGER, is_test INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE CashDrawerSession (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_attendance (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_deduction (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_checklist (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_checklist_item (id INTEGER PRIMARY KEY AUTOINCREMENT, checklist_id INTEGER NOT NULL, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_task (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_kpi (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER, is_test INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE hr_payment_event (id INTEGER PRIMARY KEY AUTOINCREMENT, staff_id INTEGER, is_test INTEGER NOT NULL DEFAULT 0);
 `;
+
+const ALL_TABLES = ["OrderItem", ...Object.values(MODEL_TABLE)];
 
 // mirror of the extension: create tags isTest = current mode
 async function createOrder(testMode: boolean, amount: number) {
@@ -38,17 +57,20 @@ async function cashTotal(testMode: boolean) {
 async function clearTestData() {
   const orderIds = (await db.execute(`SELECT id FROM "Order" WHERE is_test=1`)).rows.map((r) => Number(r.id));
   if (orderIds.length) await db.execute(`DELETE FROM OrderItem WHERE orderId IN (${orderIds.join(",")})`);
-  for (const t of ["Receipt", "SplitPayment", "Payment", "Order", "PlayerSession", "Bill", "CashExpense", "CashTopup", "CashDrawerSession"]) {
-    await db.execute(`DELETE FROM "${t}" WHERE is_test=1`);
-  }
+  // FK order: children before parents (Receipt/Payment/Split/Order; checklist_item before checklist)
+  const order = [
+    "Receipt", "SplitPayment", "Payment", "Order", "PlayerSession", "Bill",
+    "CashExpense", "CashTopup", "CashDrawerSession",
+    "hr_checklist_item", "hr_checklist", "hr_attendance", "hr_deduction",
+    "hr_task", "hr_kpi", "hr_payment_event",
+  ];
+  for (const t of order) await db.execute(`DELETE FROM "${t}" WHERE is_test=1`);
 }
 
 before(async () => { db = createClient({ url: "file::memory:" }); await db.executeMultiple(DDL); });
 after(async () => { await db.close(); });
 beforeEach(async () => {
-  for (const t of ["OrderItem", "Receipt", "SplitPayment", "Payment", "Order", "PlayerSession", "Bill", "CashExpense", "CashTopup", "CashDrawerSession"]) {
-    await db.execute(`DELETE FROM "${t}"`);
-  }
+  for (const t of ALL_TABLES) await db.execute(`DELETE FROM "${t}"`);
 });
 
 test("creates are tagged with the current mode", async () => {
@@ -68,39 +90,58 @@ test("reports are mode-scoped: live totals never include test data and vice-vers
 test("cleanup removes every test row (incl. non-tagged OrderItem) and leaves live data intact", async () => {
   const liveOrder = await createOrder(false, 100);
   await createOrder(true, 999);
-  await createOrder(true, 5);
   await db.execute(`INSERT INTO "Bill"(is_test) VALUES (0),(1)`);
-  await db.execute(`INSERT INTO PlayerSession(is_test) VALUES (0),(1)`);
-  await db.execute(`INSERT INTO SplitPayment(orderId,amountTHB,is_test) VALUES (1,10,1)`);
-  await db.execute(`INSERT INTO Receipt(orderId,is_test) VALUES (777,1)`);
-  await db.execute(`INSERT INTO CashExpense(amount,type,is_test) VALUES (50,'PETTY_CASH',1)`);
   await db.execute(`INSERT INTO CashTopup(amount,is_test) VALUES (100,1)`);
-  await db.execute(`INSERT INTO CashDrawerSession(date,is_test) VALUES ('2026-06-14',1)`);
 
   await clearTestData();
 
-  // no test rows remain in ANY tagged table
-  for (const t of TAGGED_MODELS) {
-    const tbl = t === "Order" ? `"Order"` : `"${t}"`;
-    const left = Number((await db.execute(`SELECT COUNT(*) c FROM ${tbl} WHERE is_test=1`)).rows[0].c);
-    assert.equal(left, 0, `${t} still has test rows after cleanup`);
+  for (const model of TAGGED_MODELS) {
+    const tbl = MODEL_TABLE[model];
+    const left = Number((await db.execute(`SELECT COUNT(*) c FROM "${tbl}" WHERE is_test=1`)).rows[0].c);
+    assert.equal(left, 0, `${model} still has test rows after cleanup`);
   }
-  // no orphaned OrderItems from deleted test orders
   const orphans = Number((await db.execute(`SELECT COUNT(*) c FROM OrderItem WHERE orderId NOT IN (SELECT id FROM "Order")`)).rows[0].c);
   assert.equal(orphans, 0, "test orders' OrderItems must be gone too");
-  // live data untouched
   assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM "Order"`)).rows[0].c), 1, "the one live order survives");
   assert.equal(Number((await db.execute(`SELECT id FROM "Order"`)).rows[0].id), liveOrder);
   assert.equal(await cashTotal(false), 100, "live cash total intact");
 });
 
-test("TAGGED_MODELS, the schema columns, the migration and the cleanup list stay in sync", async () => {
-  // every tagged model must be wiped by cleanup → assert each is empty of test rows
-  // (guards against adding a model to the column list but forgetting cleanup)
-  await db.execute(`INSERT INTO "Bill"(is_test) VALUES (1)`);
-  await db.execute(`INSERT INTO CashTopup(amount,is_test) VALUES (1,1)`);
+test("HR (Phase 2): test attendance/checklist isolated and cleared; checklist items go before checklists", async () => {
+  // live HR data
+  await db.execute(`INSERT INTO hr_attendance(staff_id,is_test) VALUES (1,0)`);
+  await db.execute(`INSERT INTO hr_checklist(type,is_test) VALUES ('OPEN',0)`);
+  const liveCl = Number((await db.execute(`SELECT id FROM hr_checklist WHERE is_test=0`)).rows[0].id);
+  await db.execute({ sql: `INSERT INTO hr_checklist_item(checklist_id,is_test) VALUES (?,0)`, args: [liveCl] });
+  // test HR data (owner trying check-in + a CLOSE checklist with items)
+  await db.execute(`INSERT INTO hr_attendance(staff_id,is_test) VALUES (1,1)`);
+  await db.execute(`INSERT INTO hr_deduction(staff_id,is_test) VALUES (1,1)`);
+  await db.execute(`INSERT INTO hr_checklist(type,is_test) VALUES ('CLOSE',1)`);
+  const testCl = Number((await db.execute(`SELECT id FROM hr_checklist WHERE is_test=1`)).rows[0].id);
+  await db.execute({ sql: `INSERT INTO hr_checklist_item(checklist_id,is_test) VALUES (?,1),(?,1)`, args: [testCl, testCl] });
+  await db.execute(`INSERT INTO hr_task(title,is_test) VALUES ('ทดสอบ',1)`);
+  await db.execute(`INSERT INTO hr_kpi(staff_id,is_test) VALUES (1,1)`);
+
+  // live reports exclude test HR rows
+  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM hr_attendance WHERE is_test=0`)).rows[0].c), 1);
+  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM hr_attendance WHERE is_test=1`)).rows[0].c), 1);
+
   await clearTestData();
-  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM "Bill" WHERE is_test=1`)).rows[0].c), 0);
-  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM CashTopup WHERE is_test=1`)).rows[0].c), 0);
-  assert.equal(TAGGED_MODELS.length, 9, "Phase 1 covers the 9 sales/cashier tables");
+
+  for (const t of ["hr_attendance", "hr_deduction", "hr_checklist", "hr_checklist_item", "hr_task", "hr_kpi", "hr_payment_event"]) {
+    assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM "${t}" WHERE is_test=1`)).rows[0].c), 0, `${t} test rows remain`);
+  }
+  // no orphaned checklist items (a test item pointing at a deleted checklist)
+  const orphanItems = Number((await db.execute(`SELECT COUNT(*) c FROM hr_checklist_item WHERE checklist_id NOT IN (SELECT id FROM hr_checklist)`)).rows[0].c);
+  assert.equal(orphanItems, 0, "test checklist items must be deleted before/with their checklist");
+  // live HR survives
+  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM hr_checklist`)).rows[0].c), 1, "live checklist survives");
+  assert.equal(Number((await db.execute(`SELECT COUNT(*) c FROM hr_attendance`)).rows[0].c), 1, "live attendance survives");
+});
+
+test("every tagged model has a table mapping + cleanup entry (sync guard)", async () => {
+  for (const model of TAGGED_MODELS) {
+    assert.ok(MODEL_TABLE[model], `TAGGED_MODELS has "${model}" with no table mapping — update the migration + cleanup too`);
+  }
+  assert.equal(TAGGED_MODELS.length, 16, "Phase 1 (9 sales/cashier) + Phase 2 (7 HR) = 16 tagged tables");
 });

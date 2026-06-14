@@ -34,6 +34,15 @@ export async function POST() {
   await del("cashTopups", db.cashTopup.deleteMany({ where: { isTest: true } }));
   await del("drawerSessions", db.cashDrawerSession.deleteMany({ where: { isTest: true } }));
 
+  // HR transactional (Phase 2). Checklist items reference checklists → delete first.
+  await del("hrChecklistItems", db.hrChecklistItem.deleteMany({ where: { isTest: true } }));
+  await del("hrChecklists", db.hrChecklist.deleteMany({ where: { isTest: true } }));
+  await del("hrAttendance", db.hrAttendance.deleteMany({ where: { isTest: true } }));
+  await del("hrDeductions", db.hrDeduction.deleteMany({ where: { isTest: true } }));
+  await del("hrTasks", db.hrTask.deleteMany({ where: { isTest: true } }));
+  await del("hrKpis", db.hrKpi.deleteMany({ where: { isTest: true } }));
+  await del("hrPaymentEvents", db.hrPaymentEvent.deleteMany({ where: { isTest: true } }));
+
   const total = Object.values(deleted).reduce((s, n) => s + n, 0);
   return NextResponse.json({ ok: true, total, deleted });
 }

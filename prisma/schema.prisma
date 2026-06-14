@@ -643,6 +643,7 @@ model HrDeduction {
   sourceType String?  @map("source_type") // LATE | ABSENT | TASK | CHECKLIST | null (manual)
   sourceId   String?  @map("source_id")   // stable idempotency key per source
   createdAt  DateTime @default(now()) @map("created_at")
+  isTest     Boolean  @default(false) @map("is_test")
   staff      HrStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
   @@unique([sourceType, sourceId])
   @@index([staffId, year, month])
@@ -671,6 +672,7 @@ model HrAttendance {
   checkOutStatus        String?   @map("check_out_status")
   lateDeductionApplied  Boolean   @default(false) @map("late_deduction_applied")
   createdAt             DateTime  @default(now()) @map("created_at")
+  isTest                Boolean   @default(false) @map("is_test")
   staff                 HrStaff   @relation(fields: [staffId], references: [id])
   @@map("hr_attendance")
 }
@@ -696,6 +698,7 @@ model HrChecklist {
   startedAt        DateTime?         @default(now()) @map("started_at")
   deductionApplied Boolean           @default(false) @map("deduction_applied")
   createdAt        DateTime          @default(now()) @map("created_at")
+  isTest           Boolean           @default(false) @map("is_test")
   staff            HrStaff           @relation(fields: [staffId], references: [id])
   items            HrChecklistItem[]
   @@map("hr_checklist")
@@ -721,6 +724,7 @@ model HrChecklistItem {
   doneAt        DateTime?            @map("done_at")
   doneBy        Int?                 @map("done_by")
   requiresPhoto Boolean              @default(false) @map("requires_photo")
+  isTest        Boolean              @default(false) @map("is_test")
   checklist     HrChecklist          @relation(fields: [checklistId], references: [id])
   template      HrChecklistTemplate? @relation(fields: [templateId], references: [id])
   doneByStaff   HrStaff?             @relation("ChecklistItemDoneBy", fields: [doneBy], references: [id])
@@ -748,6 +752,7 @@ model HrTask {
   assignedTo  Int?      @map("assigned_to")
   deadline    DateTime?
   createdAt   DateTime  @default(now()) @map("created_at")
+  isTest      Boolean   @default(false) @map("is_test")
   assignee    HrStaff?  @relation("HrTaskAssignee", fields: [assignedTo], references: [id])
   @@map("hr_task")
 }
@@ -761,6 +766,7 @@ model HrKpi {
   unit      String
   month     Int
   year      Int
+  isTest    Boolean @default(false) @map("is_test")
   staff     HrStaff @relation(fields: [staffId], references: [id])
   @@map("hr_kpi")
 }
@@ -778,6 +784,7 @@ model HrPaymentEvent {
   paidAt      DateTime? @map("paid_at")
   note        String?
   createdAt   DateTime  @default(now()) @map("created_at")
+  isTest      Boolean   @default(false) @map("is_test")
   staff       HrStaff?  @relation(fields: [staffId], references: [id], onDelete: Cascade)
   @@index([date])
   @@index([staffId])

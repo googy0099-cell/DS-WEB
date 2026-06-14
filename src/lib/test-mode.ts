@@ -11,6 +11,7 @@ export const TEST_MODE_COOKIE = "ds_test_mode";
 // cleanup endpoint wipes exactly these (plus their non-tagged children).
 // Keep this list in sync with the schema + the migration + the cleanup route.
 export const TAGGED_MODELS = [
+  // sales / cashier (Phase 1)
   "Order",
   "Bill",
   "Payment",
@@ -20,6 +21,16 @@ export const TAGGED_MODELS = [
   "CashExpense",
   "CashTopup",
   "CashDrawerSession",
+  // HR transactional (Phase 2) — reference/config tables (staff, schedule,
+  // templates, config) are intentionally NOT tagged so test mode still reads
+  // the real ones.
+  "HrAttendance",
+  "HrDeduction",
+  "HrChecklist",
+  "HrChecklistItem",
+  "HrTask",
+  "HrKpi",
+  "HrPaymentEvent",
 ] as const;
 
 const TAGGED_SET: Set<string> = new Set(TAGGED_MODELS);
