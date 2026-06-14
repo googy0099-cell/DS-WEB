@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type RefObject } from "react";
+import { renderMarkdown } from "@/lib/game-markdown";
 import useSWR from "swr";
 import ImageUpload from "@/components/admin/ImageUpload";
 import NumpadInput from "@/components/admin/NumpadInput";
@@ -353,9 +354,11 @@ export default function AdminGamesPage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const summaryFullRef = useRef<HTMLTextAreaElement>(null);
+  const [expandEditor, setExpandEditor] = useState(false);
 
-  function insertFormat(type: "h2" | "h3" | "bold" | "list") {
-    const el = summaryRef.current;
+  function insertFormat(type: "h2" | "h3" | "bold" | "list", ref: RefObject<HTMLTextAreaElement | null> = summaryRef) {
+    const el = ref.current;
     if (!el || !editing) return;
     const start = el.selectionStart;
     const end = el.selectionEnd;
@@ -406,6 +409,7 @@ export default function AdminGamesPage() {
 
   function closeModal() {
     setShowModal(false);
+    setExpandEditor(false);
     setEditing(null);
     setSelectedTags([]);
   }
@@ -682,6 +686,8 @@ export default function AdminGamesPage() {
                     <div className="w-px bg-sand mx-0.5" />
                     <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("list"); }}
                       className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="รายการ (- )">— รายการ</button>
+                    <button type="button" onClick={() => setExpandEditor(true)}
+                      className="ml-auto px-2 py-1 rounded text-xs font-bold text-orange hover:bg-orange/10 transition-colors flex items-center gap-1" title="ขยายเต็มจอ">⛶ ขยายเต็มจอ</button>
                   </div>
                   <textarea
                     ref={summaryRef}
@@ -692,8 +698,53 @@ export default function AdminGamesPage() {
                     placeholder={"## หัวข้อหลัก\n### หัวข้อย่อย\n**ตัวหนา** หรือข้อความปกติ\n- รายการ 1\n- รายการ 2"}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">## หัวข้อ · ### หัวข้อเล็ก · **ตัวหนา** · - รายการ</p>
+                <p className="text-xs text-gray-400 mt-1">## หัวข้อ · ### หัวข้อเล็ก · **ตัวหนา** · - รายการ · กด ⛶ เพื่อขยายเต็มจอ</p>
               </div>
+
+              {/* Fullscreen editor + live preview */}
+              {expandEditor && editing && (
+                <div className="fixed inset-0 z-[70] bg-black/60 flex flex-col p-2 sm:p-6">
+                  <div className="bg-white rounded-2xl shadow-2xl flex flex-col flex-1 overflow-hidden max-w-6xl w-full mx-auto">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-sand shrink-0">
+                      <h3 className="font-bold text-navy text-sm sm:text-base truncate pr-2">✏️ วิธีเล่น / รายละเอียด — {editing.nameTh || "เกม"}</h3>
+                      <button type="button" onClick={() => setExpandEditor(false)}
+                        className="shrink-0 bg-orange text-white text-sm font-bold px-5 py-2 rounded-xl hover:bg-orange/90">เสร็จ</button>
+                    </div>
+
+                    <div className="flex gap-0.5 px-3 py-2 bg-gray-50 border-b border-sand shrink-0">
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h2", summaryFullRef); }}
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่">H2</button>
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h3", summaryFullRef); }}
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก">H3</button>
+                      <div className="w-px bg-sand mx-1" />
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("bold", summaryFullRef); }}
+                        className="px-2.5 py-1.5 rounded text-sm font-black text-navy hover:bg-sand transition-colors" title="ตัวหนา">B</button>
+                      <div className="w-px bg-sand mx-1" />
+                      <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("list", summaryFullRef); }}
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="รายการ">— รายการ</button>
+                    </div>
+
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden min-h-0">
+                      <textarea
+                        ref={summaryFullRef}
+                        autoFocus
+                        value={editing.summaryTh ?? ""}
+                        onChange={(e) => setEditing({ ...editing, summaryTh: e.target.value })}
+                        className="w-full h-full px-4 py-3 text-base leading-relaxed focus:outline-none resize-none bg-white font-mono border-b md:border-b-0 md:border-r border-sand overflow-y-auto"
+                        placeholder={"## หัวข้อหลัก\n### หัวข้อย่อย\n**ตัวหนา** หรือข้อความปกติ\n- รายการ 1\n- รายการ 2"}
+                      />
+                      <div className="w-full h-full overflow-y-auto px-5 py-4 bg-cream/40">
+                        <p className="text-[11px] font-semibold text-gray-400 mb-3 uppercase tracking-wide">ตัวอย่างที่ลูกค้าเห็น</p>
+                        {editing.summaryTh?.trim()
+                          ? <div className="space-y-2">{renderMarkdown(editing.summaryTh)}</div>
+                          : <p className="text-sm text-gray-300">— ยังไม่มีข้อความ —</p>}
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-2 border-t border-sand text-xs text-gray-400 shrink-0">## หัวข้อ · ### หัวข้อเล็ก · **ตัวหนา** · - รายการ</div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
