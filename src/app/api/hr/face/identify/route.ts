@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import db from "@/lib/db";
-import { compareFaces } from "@/lib/hr-aws-face";
+import { compareFaces, compareFacesSafe, CONSISTENCY_PASS } from "@/lib/hr-aws-face";
 import { verifyToken } from "@/lib/hr-checkin-token";
 import { notifyCheckin } from "@/lib/hr-notify";
 import {
@@ -15,9 +15,10 @@ const BKK = 7 * 3600_000;
 
 export async function POST(req: NextRequest) {
   try {
-  const { token, photoBase64, force, mode } = (await req.json()) as {
+  const { token, photoBase64, earlyPhotoBase64, force, mode } = (await req.json()) as {
     token: string;
     photoBase64: string;
+    earlyPhotoBase64?: string; // covert shot taken during QR scan — must be the same person
     force?: boolean;
     mode: "checkin" | "checkout";
   };
@@ -64,6 +65,22 @@ export async function POST(req: NextRequest) {
       },
       { status: 422 }
     );
+  }
+
+  // Two-shot consistency: the face we covertly grabbed during QR scan must be the
+  // same person as the one in the face-scan step. Catches "borrowed phone + held
+  // photo" buddy-punching. Skipped when the early shot had no usable face.
+  if (earlyPhotoBase64) {
+    const consistency = await compareFacesSafe(earlyPhotoBase64, photoBase64);
+    if (consistency && consistency.similarity < CONSISTENCY_PASS) {
+      return NextResponse.json(
+        {
+          error: "ใบหน้าไม่ตรงกับตอนเริ่มสแกน — กรุณาให้ตัวจริงสแกนเอง",
+          similarity: result.similarity,
+        },
+        { status: 422 }
+      );
+    }
   }
 
   // Identity passed → record attendance

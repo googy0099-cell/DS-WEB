@@ -24,43 +24,32 @@ type ChecklistBlock = {
   photo: string;
 };
 
-// Face step (bank-app style): frame a frontal face filling the oval, then run a
-// short randomised pose challenge a flat photo/screen can't fake — turn the head,
-// look down, look up. Pose is measured with MediaPipe FaceLandmarker (see
-// lib/hr-liveness). Wrong move → the whole challenge restarts.
-const FRAME_HOLD_MS = 450;       // hold a good frontal face before the challenge starts
-const BACK_HOLD_MS = 400;        // hold frontal again at the end, right before capture
-const RECOVER_MS = 250;          // brief return-to-frontal between consecutive poses
-const NUM_CHALLENGES = 1;        // how many random poses the person must perform
-const ALIGN_TIMEOUT_MS = 30000;  // give up if the whole step isn't completed in time
+// Face step: just "look at the camera" — no pose challenge. We frame a frontal
+// face, then run PASSIVE liveness in the background (a real person blinks and/or
+// makes tiny natural head movements; a held photo/screen is rigid and never
+// blinks) before grabbing the scan shot. The strong anti-buddy-punch layer is
+// the two-shot check: a covert shot taken during QR scan must match this one.
+const SCAN_HOLD_MS = 700;        // face must stay framed this long
+const ALIGN_TIMEOUT_MS = 20000;  // give up if no live, framed face shows up in time
 
-// Pose thresholds, relative to the person's own frontal baseline (yaw0 / pitch0)
-const YAW_TURN = 0.20;           // |yaw - yaw0| that counts as "turned to the side"
-const PITCH_DOWN = 0.16;         // (pitch - pitch0) that counts as "looking down"
-const PITCH_UP = 0.16;           // (pitch0 - pitch) that counts as "looking up"
-const WRONG_FACTOR = 1.6;        // a non-requested pose this much past threshold = wrong move
-const WRONG_HOLD_MS = 350;       // …sustained this long before we restart
+// Passive liveness signals (any one within the window proves a live person)
+const BLINK_MIN = 0.45;          // eyeBlink blendshape that counts as a blink
+const LIVE_YAW_RANGE = 0.06;     // natural side-to-side head movement over the window
+const LIVE_PITCH_RANGE = 0.07;   // natural up/down head movement over the window
 
 // Framing geometry, as fractions of the camera frame (face must fill the oval)
 const FACE_MIN_H = 0.42, FACE_MAX_H = 0.97;
 const FACE_MIN_W = 0.24, FACE_MAX_W = 0.85;
 const FACE_CENTER_DX = 0.17, FACE_CENTER_DY = 0.19;
-const FRONTAL_YAW = 0.14;        // |yaw| considered frontal while framing
+const FRONTAL_YAW = 0.16;        // |yaw| considered frontal enough for a good shot
 
-// Fallback (MediaPipe unavailable, e.g. offline): stricter skin gate, no challenge.
+// Fallback (MediaPipe unavailable, e.g. offline): stricter skin gate.
 const SKIN_CENTER_MIN = 0.38, SKIN_EDGE_MAX = 0.20;
 
-// Passive liveness: a static screen barely changes frame-to-frame.
+// Frame-diff floor: rejects a fully frozen camera/image.
 const LIVENESS_MIN_MOTION = 1.2; // mean abs pixel diff (0–255)
 const LV_W = 64;
 const LV_H = 48;
-
-type PoseName = "turn" | "down" | "up";
-const POSE_TEXT: Record<PoseName, string> = {
-  turn: "หันหน้าไปด้านข้างช้า ๆ",
-  down: "ก้มหน้าลงเล็กน้อย",
-  up: "เงยหน้าขึ้นเล็กน้อย",
-};
 
 export default function EmployeeCheckinPage() {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -68,12 +57,12 @@ export default function EmployeeCheckinPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [checklistBlock, setChecklistBlock] = useState<ChecklistBlock | null>(null);
-  const [alignProgress, setAlignProgress] = useState(0); // 0–1 hold progress in step 2
-  const [facePresent, setFacePresent] = useState(false); // a valid frontal face is held
-  const [faceHint, setFaceHint] = useState("จัดใบหน้าให้เต็มวงรี"); // guidance during step 2
-  const [faceStage, setFaceStage] = useState<"frame" | PoseName>("frame"); // liveness challenge stage
+  const [alignProgress, setAlignProgress] = useState(0); // 0–1 progress in step 2
+  const [facePresent, setFacePresent] = useState(false); // a framed face is held
+  const [faceHint, setFaceHint] = useState("มองกล้องตรง ๆ"); // guidance during step 2
 
   const readerPromiseRef = useRef<Promise<PoseReader | null> | null>(null);
+  const earlyPhotoRef = useRef<string | null>(null); // covert shot grabbed at QR-scan time
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -158,13 +147,16 @@ export default function EmployeeCheckinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, mode]);
 
-  // ── on QR found → wait for a steady face → capture → submit ─────────────────
+  // ── on QR found → covertly grab an early shot → scan face → submit ──────────
   async function handleToken(token: string) {
     setError("");
     setAlignProgress(0);
     setFacePresent(false);
-    setFaceStage("frame");
-    setFaceHint("จัดใบหน้าให้เต็มวงรี");
+    setFaceHint("มองกล้องตรง ๆ");
+    // Covert "shot 1": grab the current frame the moment the QR is read. Whoever
+    // is holding the phone to scan is usually in frame here — before they'd think
+    // to raise a photo. The server checks it's the same person as the face scan.
+    earlyPhotoRef.current = capturePhoto();
     setPhase("aligning");
     // brief pause so the person can lower the phone and look up at the camera
     await new Promise((r) => setTimeout(r, 600));
@@ -178,32 +170,7 @@ export default function EmployeeCheckinPage() {
     await submit(token, cap.photo, false, modeRef.current ?? "checkin");
   }
 
-  function finishCapture(maxMotion: number): { ok: true; photo: string } | { ok: false; error: string } {
-    if (maxMotion < LIVENESS_MIN_MOTION) return { ok: false, error: "ตรวจพบภาพนิ่ง — กรุณาให้คนจริงมองกล้อง" };
-    const photo = capturePhoto();
-    if (!photo) return { ok: false, error: "จับภาพไม่สำเร็จ ลองใหม่อีกครั้ง" };
-    return { ok: true, photo };
-  }
-
   const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
-
-  // Pick NUM_CHALLENGES distinct poses in random order.
-  function randomPoses(): PoseName[] {
-    const all: PoseName[] = ["turn", "down", "up"];
-    for (let i = all.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [all[i], all[j]] = [all[j], all[i]];
-    }
-    return all.slice(0, NUM_CHALLENGES);
-  }
-
-  // How far past its threshold a pose currently is (≥1 means performed).
-  // pitch grows when looking DOWN, shrinks when looking UP (see hr-liveness).
-  function poseScore(want: PoseName, p: Pose, yaw0: number, pitch0: number): number {
-    if (want === "turn") return Math.abs(p.yaw - yaw0) / YAW_TURN;
-    if (want === "down") return (p.pitch - pitch0) / PITCH_DOWN;
-    return (pitch0 - p.pitch) / PITCH_UP; // up
-  }
 
   function isFramed(p: Pose): { ok: boolean; hint: string } {
     if (Math.abs(p.cx - 0.5) > FACE_CENTER_DX || Math.abs(p.cy - 0.5) > FACE_CENTER_DY)
@@ -214,14 +181,13 @@ export default function EmployeeCheckinPage() {
     return { ok: true, hint: "นิ่งไว้สักครู่…" };
   }
 
-  // Step 2: frame a frontal face → run a randomised pose challenge (turn / look
-  // down / look up — a flat photo/screen can't) → look straight → capture & AWS.
-  // A wrong move restarts the challenge. Liveness micro-motion runs throughout.
-  // Degrades to a stricter skin-only hold if the landmark model can't load.
+  // Step 2 "shot 2": hold a framed frontal face while PASSIVE liveness watches
+  // for a blink or natural head movement (a held photo/screen has neither), then
+  // grab the scan shot. No pose challenge. Degrades to a skin-only hold if the
+  // landmark model can't load (liveness then relies on frame-diff only).
   async function captureWhenSteady(): Promise<
     { ok: true; photo: string } | { ok: false; error: string }
   > {
-    setFaceHint("กำลังเตรียมระบบ…");
     const reader = await getReader();
     const small = document.createElement("canvas");
     small.width = LV_W;
@@ -230,18 +196,17 @@ export default function EmployeeCheckinPage() {
 
     let prev: Uint8ClampedArray | null = null;
     let maxMotion = 0;
+    let framedMs = 0;
     let last = performance.now();
     const startedAt = Date.now();
 
-    // challenge state
-    let seq = randomPoses();
-    let idx = 0;
-    let stage: "frame" | "pose" | "recover" | "back" = "frame";
-    let framedMs = 0, backMs = 0, recoverMs = 0, wrongMs = 0;
-    let yaw0 = 0, pitch0 = 0.5; // the person's frontal baseline, captured while framing
-    setFaceStage("frame");
+    // passive-liveness accumulators
+    let blinkSeen = false;
+    let yawMin = Infinity, yawMax = -Infinity, pitchMin = Infinity, pitchMax = -Infinity;
+    const alive = () =>
+      blinkSeen || (yawMax - yawMin) >= LIVE_YAW_RANGE || (pitchMax - pitchMin) >= LIVE_PITCH_RANGE;
 
-    const liveness = () => {
+    const frameDiff = () => {
       sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
       const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
       if (prev) {
@@ -255,22 +220,29 @@ export default function EmployeeCheckinPage() {
       return cur;
     };
 
+    const finish = (): { ok: true; photo: string } | { ok: false; error: string } => {
+      if (maxMotion < LIVENESS_MIN_MOTION) return { ok: false, error: "ตรวจพบภาพนิ่ง — กรุณาให้คนจริงมองกล้อง" };
+      const photo = capturePhoto();
+      if (!photo) return { ok: false, error: "จับภาพไม่สำเร็จ ลองใหม่อีกครั้ง" };
+      return { ok: true, photo };
+    };
+
     while (Date.now() - startedAt < ALIGN_TIMEOUT_MS) {
       const tMs = performance.now();
       const dt = tMs - last;
       last = tMs;
 
       if (!videoReady()) { await nextFrame(); continue; }
-      const cur = liveness();
+      const cur = frameDiff();
 
-      // ── Fallback: model unavailable → stricter skin gate, plain frontal hold ──
+      // ── Fallback: model unavailable → stricter skin gate + frame-diff only ──
       if (!reader) {
         const c = skinFallback(cur);
-        setFaceHint(c.hint);
+        setFaceHint(c.ok ? "กำลังสแกนใบหน้า…" : c.hint);
         if (c.ok) {
           framedMs += dt; setFacePresent(true);
-          setAlignProgress(Math.min(1, framedMs / (FRAME_HOLD_MS + BACK_HOLD_MS)));
-          if (framedMs >= FRAME_HOLD_MS + BACK_HOLD_MS) return finishCapture(maxMotion);
+          setAlignProgress(Math.min(1, framedMs / (SCAN_HOLD_MS + 600)));
+          if (framedMs >= SCAN_HOLD_MS + 600) return finish();
         } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
         await nextFrame();
         continue;
@@ -280,67 +252,35 @@ export default function EmployeeCheckinPage() {
       if (!pose) {
         setFacePresent(false);
         setFaceHint("ไม่พบใบหน้า — มองกล้องตรง ๆ");
-        if (stage === "frame") { framedMs = 0; setAlignProgress(0); }
+        framedMs = 0; setAlignProgress(0);
         await nextFrame();
         continue;
       }
 
-      if (stage === "frame") {
-        setFaceStage("frame");
-        const c = isFramed(pose);
-        setFaceHint(c.ok ? "จับใบหน้าได้แล้ว…" : c.hint);
-        if (c.ok) {
-          framedMs += dt; setFacePresent(true);
-          yaw0 = pose.yaw; pitch0 = pose.pitch; // keep latest frontal baseline
-          setAlignProgress(0.1 * Math.min(1, framedMs / FRAME_HOLD_MS));
-          if (framedMs >= FRAME_HOLD_MS) {
-            stage = "pose"; idx = 0; wrongMs = 0;
-            seq = randomPoses();
-            setFaceStage(seq[0]); setFaceHint(POSE_TEXT[seq[0]]);
-          }
-        } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
-      } else if (stage === "pose") {
-        const want = seq[idx];
-        setFaceStage(want); setFacePresent(true);
-        // wrong move? a *different* pose pushed clearly past its threshold
-        const others = (["turn", "down", "up"] as PoseName[]).filter((x) => x !== want);
-        const doingWrong = others.some((o) => poseScore(o, pose, yaw0, pitch0) >= WRONG_FACTOR);
-        if (doingWrong && poseScore(want, pose, yaw0, pitch0) < 1) {
-          wrongMs += dt;
-          setFaceHint("ทำผิดท่า — เริ่มใหม่");
-          if (wrongMs >= WRONG_HOLD_MS) {
-            stage = "frame"; framedMs = 0; setAlignProgress(0); setFacePresent(false);
-            setFaceStage("frame");
-          }
-        } else {
-          wrongMs = 0;
-          setFaceHint(POSE_TEXT[want]);
-          if (poseScore(want, pose, yaw0, pitch0) >= 1) {
-            idx++;
-            if (idx >= seq.length) { stage = "back"; backMs = 0; setFaceHint("เยี่ยม! มองกล้องตรง ๆ"); }
-            else { stage = "recover"; recoverMs = 0; }
-            setAlignProgress(0.1 + 0.8 * (idx / seq.length));
-          }
-        }
-      } else if (stage === "recover") {
-        setFaceStage("frame");
-        setFaceHint("กลับมามองกล้องตรง ๆ");
-        const back = isFramed(pose).ok;
-        if (back) { recoverMs += dt; if (recoverMs >= RECOVER_MS) { stage = "pose"; setFaceStage(seq[idx]); setFaceHint(POSE_TEXT[seq[idx]]); } }
-        else recoverMs = 0;
-      } else {
-        setFaceStage("frame");
-        const straight = isFramed(pose).ok;
-        setFaceHint(straight ? "มองกล้องตรง ๆ ค้างไว้…" : "มองกล้องตรง ๆ");
-        if (straight) {
-          backMs += dt; setFacePresent(true);
-          setAlignProgress(0.9 + 0.1 * Math.min(1, backMs / BACK_HOLD_MS));
-          if (backMs >= BACK_HOLD_MS) return finishCapture(maxMotion);
-        } else backMs = 0;
+      const c = isFramed(pose);
+      if (!c.ok) {
+        framedMs = 0; setFacePresent(false); setAlignProgress(0);
+        setFaceHint(c.hint);
+        await nextFrame();
+        continue;
       }
+
+      // framed → accumulate passive-liveness evidence
+      setFacePresent(true);
+      if (pose.blink >= BLINK_MIN) blinkSeen = true;
+      yawMin = Math.min(yawMin, pose.yaw); yawMax = Math.max(yawMax, pose.yaw);
+      pitchMin = Math.min(pitchMin, pose.pitch); pitchMax = Math.max(pitchMax, pose.pitch);
+      framedMs += dt;
+
+      const live = alive();
+      setFaceHint(live ? "กำลังสแกนใบหน้า…" : "มองกล้องแล้วกะพริบตาตามปกติ");
+      // progress: framing fills to 70%, the liveness check the last 30%
+      setAlignProgress(Math.min(0.7, 0.7 * (framedMs / SCAN_HOLD_MS)) + (live ? 0.3 : 0));
+      if (framedMs >= SCAN_HOLD_MS && live) return finish();
+
       await nextFrame();
     }
-    return { ok: false, error: "ยืนยันใบหน้าไม่สำเร็จ — ลองใหม่อีกครั้ง" };
+    return { ok: false, error: "ตรวจไม่พบการเคลื่อนไหวของคนจริง — ลองใหม่อีกครั้ง" };
   }
 
   // Fallback (model unavailable): centre box mostly skin, side strips mostly not.
@@ -384,7 +324,7 @@ export default function EmployeeCheckinPage() {
       const res = await fetch("/api/hr/face/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, photoBase64: photo, force, mode: submitMode }),
+        body: JSON.stringify({ token, photoBase64: photo, earlyPhotoBase64: earlyPhotoRef.current ?? undefined, force, mode: submitMode }),
       });
       const data = await res.json().catch(() => null);
       if (!data) { setError(`Server error (${res.status})`); setPhase("error"); return; }
@@ -416,8 +356,8 @@ export default function EmployeeCheckinPage() {
     setChecklistBlock(null);
     setAlignProgress(0);
     setFacePresent(false);
-    setFaceStage("frame");
-    setFaceHint("จัดใบหน้าให้เต็มวงรี");
+    setFaceHint("มองกล้องตรง ๆ");
+    earlyPhotoRef.current = null;
     busyRef.current = false;
     setPhase("scanning");
   }, []);
@@ -472,7 +412,6 @@ export default function EmployeeCheckinPage() {
 
           <div className={`relative rounded-3xl overflow-hidden border-4 bg-black w-full aspect-[4/3] transition-colors ${
             phase === "scanning" ? "border-navy"
-            : faceStage !== "frame" ? "border-sky-400"
             : facePresent ? "border-emerald-400" : "border-yellow-400"
           }`}>
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
@@ -486,19 +425,10 @@ export default function EmployeeCheckinPage() {
                   <span className="absolute -bottom-0.5 -right-0.5 w-7 h-7 border-b-4 border-r-4 border-orange rounded-br-2xl" />
                 </div>
               ) : (
-                // face oval = "วางหน้าตรงนี้" — turns green once framed; during a
-                // pose challenge it turns sky-blue and shows the move's cue.
-                <div className="relative flex items-center justify-center">
-                  <div className={`w-40 h-52 border-4 rounded-[50%] transition-colors ${
-                    faceStage !== "frame" ? "border-sky-300 animate-pulse"
-                    : facePresent ? "border-emerald-300" : "border-white/60"
-                  }`} />
-                  {faceStage !== "frame" && (
-                    <span className="absolute text-5xl text-sky-100 animate-pulse drop-shadow">
-                      {faceStage === "turn" ? "↔️" : faceStage === "down" ? "⬇️" : "⬆️"}
-                    </span>
-                  )}
-                </div>
+                // face oval = "วางหน้าตรงนี้" — turns green once a face is framed
+                <div className={`w-40 h-52 border-4 rounded-[50%] transition-colors ${
+                  facePresent ? "border-emerald-300" : "border-white/60"
+                }`} />
               )}
             </div>
           </div>
@@ -519,7 +449,6 @@ export default function EmployeeCheckinPage() {
             </p>
             <p className={`text-sm mt-1 font-medium ${
               phase !== "aligning" ? "text-gray-500"
-              : faceStage !== "frame" ? "text-sky-600"
               : facePresent ? "text-emerald-600" : "text-orange"
             }`}>
               {phase === "scanning"

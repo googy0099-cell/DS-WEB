@@ -16,6 +16,7 @@ export type Pose = {
   cx: number; cy: number; fw: number; fh: number; // face box, fractions of frame
   yaw: number;   // horizontal turn proxy: ~0 frontal, magnitude grows when turned
   pitch: number; // vertical nod proxy = (eyes→nose)/(nose→chin): grows looking DOWN, shrinks looking UP
+  blink: number; // 0..1 eye-closed amount (max of both eyes); a still photo stays ~0
 };
 
 export interface PoseReader {
@@ -34,6 +35,7 @@ function getLandmarker(): Promise<FaceLandmarker> {
         baseOptions: { modelAssetPath: MODEL, delegate: "GPU" },
         runningMode: "VIDEO",
         numFaces: 1,
+        outputFaceBlendshapes: true, // for passive blink detection
       });
     })().catch((e) => { landmarkerPromise = null; throw e; });
   }
@@ -75,7 +77,17 @@ export async function createPoseReader(): Promise<PoseReader | null> {
       // looking up does the opposite → ratio down. Far more sensitive than eyes→chin.
       const pitch = (lm[NOSE].y - eyeMidY) / noseToChin;
 
-      return { cx, cy, fw, fh, yaw, pitch };
+      let blink = 0;
+      const cats = res.faceBlendshapes?.[0]?.categories;
+      if (cats) {
+        for (const c of cats) {
+          if (c.categoryName === "eyeBlinkLeft" || c.categoryName === "eyeBlinkRight") {
+            blink = Math.max(blink, c.score);
+          }
+        }
+      }
+
+      return { cx, cy, fw, fh, yaw, pitch, blink };
     },
     close() { /* keep the singleton warm for the next check-in */ },
   };
