@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
+import { createPoseReader } from "@/lib/hr-liveness";
+import type { Pose, PoseReader } from "@/lib/hr-liveness";
 
 type Mode = "checkin" | "checkout";
 type Phase = "scanning" | "aligning" | "submitting" | "success" | "error";
@@ -22,43 +24,44 @@ type ChecklistBlock = {
   photo: string;
 };
 
-// Face step: a real, frontal face must be centred and filling the oval before
-// we capture — bank-app style, not "a cheek touched the frame". When the
-// browser exposes the native FaceDetector (Chrome on Android, the shop kiosk)
-// we check the face box geometry + eye/nose landmarks; otherwise we fall back
-// to a stricter skin heuristic.
-const FRAME_HOLD_MS = 450;      // hold a good frontal face this long before the turn challenge
-const BACK_HOLD_MS = 450;       // hold frontal again after the turn, right before capture
-const TURN_MIN = 0.22;          // |nose-offset / face width| that counts as "turned to the side"
-const FRONTAL_BACK_MAX = 0.13;  // |nose-offset| considered "looking straight again"
-const ALIGN_TIMEOUT_MS = 22000; // give up if the whole step isn't completed in time
+// Face step (bank-app style): frame a frontal face filling the oval, then run a
+// short randomised pose challenge a flat photo/screen can't fake — turn the head,
+// look down, look up. Pose is measured with MediaPipe FaceLandmarker (see
+// lib/hr-liveness). Wrong move → the whole challenge restarts.
+const FRAME_HOLD_MS = 450;       // hold a good frontal face before the challenge starts
+const BACK_HOLD_MS = 400;        // hold frontal again at the end, right before capture
+const RECOVER_MS = 250;          // brief return-to-frontal between consecutive poses
+const NUM_CHALLENGES = 2;        // how many random poses the person must perform
+const ALIGN_TIMEOUT_MS = 30000;  // give up if the whole step isn't completed in time
 
-// Face-box geometry, as fractions of the camera frame (face must fill the oval)
-const FACE_MIN_H = 0.42;        // too small → "ขยับเข้าใกล้"
-const FACE_MAX_H = 0.95;        // too big   → "ถอยห่าง"
-const FACE_MIN_W = 0.26;
-const FACE_MAX_W = 0.80;
-const FACE_CENTER_DX = 0.16;    // |centreX-0.5| allowed
-const FACE_CENTER_DY = 0.18;    // |centreY-0.5| allowed
-const EYE_SPAN_MIN = 0.26;      // eyeDist / faceWidth — lower = turned sideways
-const NOSE_OFFSET_MAX = 0.22;   // |noseX - eyeMidX| / faceWidth — higher = turned
+// Pose thresholds, relative to the person's own frontal baseline
+const YAW_TURN = 0.20;           // |yaw - yaw0| that counts as "turned to the side"
+const PITCH_DOWN = 0.10;         // (pitch0 - pitch) that counts as "looking down"
+const PITCH_UP = 0.12;           // (pitch - pitch0) that counts as "looking up"
+const WRONG_FACTOR = 1.5;        // a non-requested pose this much past threshold = wrong move
+const WRONG_HOLD_MS = 300;       // …sustained this long before we restart
 
-// Fallback heuristic (no FaceDetector): a centred face has lots of skin in the
-// middle box and little at the side strips.
-const SKIN_CENTER_MIN = 0.38;   // center box must be mostly face
-const SKIN_EDGE_MAX = 0.20;     // side strips must be mostly background
+// Framing geometry, as fractions of the camera frame (face must fill the oval)
+const FACE_MIN_H = 0.42, FACE_MAX_H = 0.97;
+const FACE_MIN_W = 0.24, FACE_MAX_W = 0.85;
+const FACE_CENTER_DX = 0.17, FACE_CENTER_DY = 0.19;
+const FRONTAL_YAW = 0.14;        // |yaw| considered frontal while framing
+const FRONTAL_PITCH_LO = 0.32, FRONTAL_PITCH_HI = 0.68; // plausible frontal pitch ratio
 
-// Passive liveness: a printed photo or a static screen barely changes
-// frame-to-frame; a real person always has micro-motion during the hold.
-const LIVENESS_MIN_MOTION = 1.2; // mean abs pixel diff (0–255) over the hold window
+// Fallback (MediaPipe unavailable, e.g. offline): stricter skin gate, no challenge.
+const SKIN_CENTER_MIN = 0.38, SKIN_EDGE_MAX = 0.20;
+
+// Passive liveness: a static screen barely changes frame-to-frame.
+const LIVENESS_MIN_MOTION = 1.2; // mean abs pixel diff (0–255)
 const LV_W = 64;
 const LV_H = 48;
 
-// Minimal typings for the Shape Detection API (not in the TS DOM lib yet).
-type FaceLandmark = { type: string; locations: { x: number; y: number }[] };
-type DetectedFace = { boundingBox: { x: number; y: number; width: number; height: number }; landmarks?: FaceLandmark[] };
-type FaceDetectorLike = { detect(src: CanvasImageSource): Promise<DetectedFace[]> };
-type FaceDetectorCtor = new (opts?: { fastMode?: boolean; maxDetectedFaces?: number }) => FaceDetectorLike;
+type PoseName = "turn" | "down" | "up";
+const POSE_TEXT: Record<PoseName, string> = {
+  turn: "หันหน้าไปด้านข้างช้า ๆ",
+  down: "ก้มหน้าลงเล็กน้อย",
+  up: "เงยหน้าขึ้นเล็กน้อย",
+};
 
 export default function EmployeeCheckinPage() {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -69,9 +72,9 @@ export default function EmployeeCheckinPage() {
   const [alignProgress, setAlignProgress] = useState(0); // 0–1 hold progress in step 2
   const [facePresent, setFacePresent] = useState(false); // a valid frontal face is held
   const [faceHint, setFaceHint] = useState("จัดใบหน้าให้เต็มวงรี"); // guidance during step 2
-  const [faceStage, setFaceStage] = useState<"frame" | "turn" | "back">("frame"); // liveness challenge stage
+  const [faceStage, setFaceStage] = useState<"frame" | PoseName>("frame"); // liveness challenge stage
 
-  const detectorRef = useRef<FaceDetectorLike | null>(null);
+  const readerPromiseRef = useRef<Promise<PoseReader | null> | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -80,6 +83,17 @@ export default function EmployeeCheckinPage() {
   const modeRef = useRef<Mode | null>(null);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
+
+  // Start loading the face-landmark model as soon as a mode is picked, so it's
+  // ready by the time the QR is scanned and we reach the face step.
+  useEffect(() => {
+    if (mode && !readerPromiseRef.current) readerPromiseRef.current = createPoseReader();
+  }, [mode]);
+
+  function getReader(): Promise<PoseReader | null> {
+    if (!readerPromiseRef.current) readerPromiseRef.current = createPoseReader();
+    return readerPromiseRef.current;
+  }
 
   const cameraOn = mode !== null && (phase === "scanning" || phase === "aligning");
 
@@ -165,51 +179,6 @@ export default function EmployeeCheckinPage() {
     await submit(token, cap.photo, false, modeRef.current ?? "checkin");
   }
 
-  // Lazily build the native face detector (Chrome on Android). null if absent.
-  function getDetector(): FaceDetectorLike | null {
-    if (detectorRef.current) return detectorRef.current;
-    const Ctor = (window as unknown as { FaceDetector?: FaceDetectorCtor }).FaceDetector;
-    if (!Ctor) return null;
-    try { detectorRef.current = new Ctor({ fastMode: false, maxDetectedFaces: 2 }); }
-    catch { detectorRef.current = null; }
-    return detectorRef.current;
-  }
-
-  type FaceCheck = { ok: boolean; hint: string };
-  type FaceMetrics = { cx: number; cy: number; fw: number; fh: number; noseOffset: number | null; eyeSpan: number | null };
-
-  function faceMetrics(face: DetectedFace, W: number, H: number): FaceMetrics {
-    const box = face.boundingBox;
-    const cx = (box.x + box.width / 2) / W;
-    const cy = (box.y + box.height / 2) / H;
-    const fw = box.width / W;
-    const fh = box.height / H;
-    let noseOffset: number | null = null;
-    let eyeSpan: number | null = null;
-    const lm = face.landmarks;
-    if (lm && lm.length) {
-      const eyes = lm.filter((l) => l.type === "eye").map((l) => l.locations[0]).filter(Boolean);
-      const nose = lm.find((l) => l.type === "nose")?.locations[0];
-      if (eyes.length >= 2) {
-        const [e1, e2] = eyes;
-        eyeSpan = Math.abs(e1.x - e2.x) / box.width;
-        if (nose) noseOffset = (nose.x - (e1.x + e2.x) / 2) / box.width;
-      }
-    }
-    return { cx, cy, fw, fh, noseOffset, eyeSpan };
-  }
-
-  // Geometry gate: centred, filling the oval, and frontal (eyes apart, nose between).
-  function checkFramed(m: FaceMetrics): FaceCheck {
-    if (Math.abs(m.cx - 0.5) > FACE_CENTER_DX || Math.abs(m.cy - 0.5) > FACE_CENTER_DY)
-      return { ok: false, hint: "จัดใบหน้าให้อยู่กลางวงรี" };
-    if (m.fh < FACE_MIN_H || m.fw < FACE_MIN_W) return { ok: false, hint: "ขยับเข้าใกล้กล้องอีกนิด" };
-    if (m.fh > FACE_MAX_H || m.fw > FACE_MAX_W) return { ok: false, hint: "ถอยห่างจากกล้องเล็กน้อย" };
-    if (m.eyeSpan != null && m.eyeSpan < EYE_SPAN_MIN) return { ok: false, hint: "หันหน้าตรงเข้ากล้อง" };
-    if (m.noseOffset != null && Math.abs(m.noseOffset) > NOSE_OFFSET_MAX) return { ok: false, hint: "หันหน้าตรงเข้ากล้อง" };
-    return { ok: true, hint: "นิ่งไว้สักครู่…" };
-  }
-
   function finishCapture(maxMotion: number): { ok: true; photo: string } | { ok: false; error: string } {
     if (maxMotion < LIVENESS_MIN_MOTION) return { ok: false, error: "ตรวจพบภาพนิ่ง — กรุณาให้คนจริงมองกล้อง" };
     const photo = capturePhoto();
@@ -219,14 +188,42 @@ export default function EmployeeCheckinPage() {
 
   const nextFrame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
 
-  // Step 2: frame a frontal face → ask for ONE head turn (a live 3D head can do
-  // it; a flat photo/screen can't) → look straight again → capture & send to AWS.
-  // Liveness micro-motion runs throughout as a cheap extra. Degrades gracefully:
-  // no landmarks → skip the turn (hold frontal); no FaceDetector → skin gate.
+  // Pick NUM_CHALLENGES distinct poses in random order.
+  function randomPoses(): PoseName[] {
+    const all: PoseName[] = ["turn", "down", "up"];
+    for (let i = all.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [all[i], all[j]] = [all[j], all[i]];
+    }
+    return all.slice(0, NUM_CHALLENGES);
+  }
+
+  // How far past its threshold a pose currently is (≥1 means performed).
+  function poseScore(want: PoseName, p: Pose, yaw0: number, pitch0: number): number {
+    if (want === "turn") return Math.abs(p.yaw - yaw0) / YAW_TURN;
+    if (want === "down") return (pitch0 - p.pitch) / PITCH_DOWN;
+    return (p.pitch - pitch0) / PITCH_UP; // up
+  }
+
+  function isFramed(p: Pose): { ok: boolean; hint: string } {
+    if (Math.abs(p.cx - 0.5) > FACE_CENTER_DX || Math.abs(p.cy - 0.5) > FACE_CENTER_DY)
+      return { ok: false, hint: "จัดใบหน้าให้อยู่กลางวงรี" };
+    if (p.fh < FACE_MIN_H || p.fw < FACE_MIN_W) return { ok: false, hint: "ขยับเข้าใกล้กล้องอีกนิด" };
+    if (p.fh > FACE_MAX_H || p.fw > FACE_MAX_W) return { ok: false, hint: "ถอยห่างจากกล้องเล็กน้อย" };
+    if (Math.abs(p.yaw) > FRONTAL_YAW || p.pitch < FRONTAL_PITCH_LO || p.pitch > FRONTAL_PITCH_HI)
+      return { ok: false, hint: "มองกล้องตรง ๆ" };
+    return { ok: true, hint: "นิ่งไว้สักครู่…" };
+  }
+
+  // Step 2: frame a frontal face → run a randomised pose challenge (turn / look
+  // down / look up — a flat photo/screen can't) → look straight → capture & AWS.
+  // A wrong move restarts the challenge. Liveness micro-motion runs throughout.
+  // Degrades to a stricter skin-only hold if the landmark model can't load.
   async function captureWhenSteady(): Promise<
     { ok: true; photo: string } | { ok: false; error: string }
   > {
-    const detector = getDetector();
+    setFaceHint("กำลังเตรียมระบบ…");
+    const reader = await getReader();
     const small = document.createElement("canvas");
     small.width = LV_W;
     small.height = LV_H;
@@ -234,107 +231,121 @@ export default function EmployeeCheckinPage() {
 
     let prev: Uint8ClampedArray | null = null;
     let maxMotion = 0;
-    let stage: "frame" | "turn" | "back" = "frame";
-    let framedMs = 0, backMs = 0;
-    let sawLandmarks = false;
-    let last = Date.now();
-    const startedAt = last;
+    let last = performance.now();
+    const startedAt = Date.now();
+
+    // challenge state
+    let seq = randomPoses();
+    let idx = 0;
+    let stage: "frame" | "pose" | "recover" | "back" = "frame";
+    let framedMs = 0, backMs = 0, recoverMs = 0, wrongMs = 0;
+    let yaw0 = 0, pitch0 = 0.5; // the person's frontal baseline, captured while framing
     setFaceStage("frame");
 
+    const liveness = () => {
+      sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
+      const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
+      if (prev) {
+        let sum = 0;
+        for (let p = 0; p < cur.length; p += 4) {
+          sum += Math.abs((cur[p] + cur[p + 1] + cur[p + 2]) / 3 - (prev[p] + prev[p + 1] + prev[p + 2]) / 3);
+        }
+        maxMotion = Math.max(maxMotion, sum / (LV_W * LV_H));
+      }
+      prev = cur;
+      return cur;
+    };
+
     while (Date.now() - startedAt < ALIGN_TIMEOUT_MS) {
-      const now = Date.now();
-      const dt = now - last;
-      last = now;
+      const tMs = performance.now();
+      const dt = tMs - last;
+      last = tMs;
 
-      if (videoReady()) {
-        // continuous liveness — a static screen barely changes frame-to-frame
-        sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
-        const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
-        if (prev) {
-          let sum = 0;
-          for (let p = 0; p < cur.length; p += 4) {
-            sum += Math.abs((cur[p] + cur[p + 1] + cur[p + 2]) / 3 - (prev[p] + prev[p + 1] + prev[p + 2]) / 3);
+      if (!videoReady()) { await nextFrame(); continue; }
+      const cur = liveness();
+
+      // ── Fallback: model unavailable → stricter skin gate, plain frontal hold ──
+      if (!reader) {
+        const c = skinFallback(cur);
+        setFaceHint(c.hint);
+        if (c.ok) {
+          framedMs += dt; setFacePresent(true);
+          setAlignProgress(Math.min(1, framedMs / (FRAME_HOLD_MS + BACK_HOLD_MS)));
+          if (framedMs >= FRAME_HOLD_MS + BACK_HOLD_MS) return finishCapture(maxMotion);
+        } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
+        await nextFrame();
+        continue;
+      }
+
+      const pose = reader.read(videoRef.current!, tMs);
+      if (!pose) {
+        setFacePresent(false);
+        setFaceHint("ไม่พบใบหน้า — มองกล้องตรง ๆ");
+        if (stage === "frame") { framedMs = 0; setAlignProgress(0); }
+        await nextFrame();
+        continue;
+      }
+
+      if (stage === "frame") {
+        setFaceStage("frame");
+        const c = isFramed(pose);
+        setFaceHint(c.ok ? "จับใบหน้าได้แล้ว…" : c.hint);
+        if (c.ok) {
+          framedMs += dt; setFacePresent(true);
+          yaw0 = pose.yaw; pitch0 = pose.pitch; // keep latest frontal baseline
+          setAlignProgress(0.1 * Math.min(1, framedMs / FRAME_HOLD_MS));
+          if (framedMs >= FRAME_HOLD_MS) {
+            stage = "pose"; idx = 0; wrongMs = 0;
+            seq = randomPoses();
+            setFaceStage(seq[0]); setFaceHint(POSE_TEXT[seq[0]]);
           }
-          maxMotion = Math.max(maxMotion, sum / (LV_W * LV_H));
-        }
-        prev = cur;
-
-        // No native detector → stricter skin gate, plain frontal hold (no turn)
-        if (!detector) {
-          const c = skinFallback(cur);
-          setFaceHint(c.hint);
-          if (c.ok) {
-            framedMs += dt; setFacePresent(true);
-            setAlignProgress(Math.min(1, framedMs / (FRAME_HOLD_MS + BACK_HOLD_MS)));
-            if (framedMs >= FRAME_HOLD_MS + BACK_HOLD_MS) return finishCapture(maxMotion);
-          } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
-          await nextFrame();
-          continue;
-        }
-
-        const v = videoRef.current!;
-        let faces: DetectedFace[] = [];
-        try { faces = await detector.detect(v); } catch { faces = []; }
-
-        if (faces.length === 0) {
-          setFacePresent(false);
-          setFaceHint("ไม่พบใบหน้า — มองกล้องตรง ๆ");
-          if (stage !== "turn") { framedMs = 0; backMs = 0; setAlignProgress(0); }
-          await nextFrame();
-          continue;
-        }
-        if (faces.length > 1) {
-          setFacePresent(false);
-          setFaceHint("พบหลายใบหน้า — ให้เหลือคนเดียว");
-          await nextFrame();
-          continue;
-        }
-
-        const m = faceMetrics(faces[0], v.videoWidth, v.videoHeight);
-        if (m.noseOffset != null) sawLandmarks = true;
-
-        if (stage === "frame") {
-          const c = checkFramed(m);
-          setFaceHint(c.ok ? "จับใบหน้าได้แล้ว…" : c.hint);
-          if (c.ok) {
-            framedMs += dt; setFacePresent(true);
-            setAlignProgress(Math.min(0.34, (0.34 * framedMs) / FRAME_HOLD_MS));
-            if (framedMs >= FRAME_HOLD_MS) {
-              if (sawLandmarks) {
-                stage = "turn"; setFaceStage("turn"); setAlignProgress(0.34);
-                setFaceHint("หันหน้าไปด้านข้างช้า ๆ");
-              } else if (framedMs >= FRAME_HOLD_MS + BACK_HOLD_MS) {
-                // engine never gave landmarks → can't challenge; hold then capture
-                return finishCapture(maxMotion);
-              }
-            }
-          } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
-        } else if (stage === "turn") {
-          setFacePresent(true);
-          setFaceHint("หันหน้าไปด้านข้างช้า ๆ");
-          if (m.noseOffset != null && Math.abs(m.noseOffset) >= TURN_MIN) {
-            stage = "back"; setFaceStage("back"); backMs = 0;
-            setAlignProgress(0.67); setFaceHint("เยี่ยม! มองกล้องตรง ๆ");
+        } else { framedMs = 0; setFacePresent(false); setAlignProgress(0); }
+      } else if (stage === "pose") {
+        const want = seq[idx];
+        setFaceStage(want); setFacePresent(true);
+        // wrong move? a *different* pose pushed clearly past its threshold
+        const others = (["turn", "down", "up"] as PoseName[]).filter((x) => x !== want);
+        const doingWrong = others.some((o) => poseScore(o, pose, yaw0, pitch0) >= WRONG_FACTOR);
+        if (doingWrong && poseScore(want, pose, yaw0, pitch0) < 1) {
+          wrongMs += dt;
+          setFaceHint("ทำผิดท่า — เริ่มใหม่");
+          if (wrongMs >= WRONG_HOLD_MS) {
+            stage = "frame"; framedMs = 0; setAlignProgress(0); setFacePresent(false);
+            setFaceStage("frame");
           }
         } else {
-          const c = checkFramed(m);
-          const straight = c.ok && (m.noseOffset == null || Math.abs(m.noseOffset) <= FRONTAL_BACK_MAX);
-          setFaceHint(straight ? "มองกล้องตรง ๆ ค้างไว้…" : "มองกล้องตรง ๆ");
-          if (straight) {
-            backMs += dt;
-            setAlignProgress(0.67 + 0.33 * Math.min(1, backMs / BACK_HOLD_MS));
-            if (backMs >= BACK_HOLD_MS) return finishCapture(maxMotion);
-          } else backMs = 0;
+          wrongMs = 0;
+          setFaceHint(POSE_TEXT[want]);
+          if (poseScore(want, pose, yaw0, pitch0) >= 1) {
+            idx++;
+            if (idx >= seq.length) { stage = "back"; backMs = 0; setFaceHint("เยี่ยม! มองกล้องตรง ๆ"); }
+            else { stage = "recover"; recoverMs = 0; }
+            setAlignProgress(0.1 + 0.8 * (idx / seq.length));
+          }
         }
+      } else if (stage === "recover") {
+        setFaceStage("frame");
+        setFaceHint("กลับมามองกล้องตรง ๆ");
+        const back = isFramed(pose).ok;
+        if (back) { recoverMs += dt; if (recoverMs >= RECOVER_MS) { stage = "pose"; setFaceStage(seq[idx]); setFaceHint(POSE_TEXT[seq[idx]]); } }
+        else recoverMs = 0;
+      } else {
+        setFaceStage("frame");
+        const straight = isFramed(pose).ok;
+        setFaceHint(straight ? "มองกล้องตรง ๆ ค้างไว้…" : "มองกล้องตรง ๆ");
+        if (straight) {
+          backMs += dt; setFacePresent(true);
+          setAlignProgress(0.9 + 0.1 * Math.min(1, backMs / BACK_HOLD_MS));
+          if (backMs >= BACK_HOLD_MS) return finishCapture(maxMotion);
+        } else backMs = 0;
       }
       await nextFrame();
     }
     return { ok: false, error: "ยืนยันใบหน้าไม่สำเร็จ — ลองใหม่อีกครั้ง" };
   }
 
-  // Fallback (no FaceDetector): centre box mostly skin, side strips mostly not —
-  // so a partial cheek at the edge or a sideways face won't pass.
-  function skinFallback(data: Uint8ClampedArray): FaceCheck {
+  // Fallback (model unavailable): centre box mostly skin, side strips mostly not.
+  function skinFallback(data: Uint8ClampedArray): { ok: boolean; hint: string } {
     const isSkin = (p: number) => {
       const r = data[p], g = data[p + 1], b = data[p + 2];
       const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
@@ -462,7 +473,7 @@ export default function EmployeeCheckinPage() {
 
           <div className={`relative rounded-3xl overflow-hidden border-4 bg-black w-full aspect-[4/3] transition-colors ${
             phase === "scanning" ? "border-navy"
-            : faceStage === "turn" ? "border-sky-400"
+            : faceStage !== "frame" ? "border-sky-400"
             : facePresent ? "border-emerald-400" : "border-yellow-400"
           }`}>
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
@@ -476,15 +487,17 @@ export default function EmployeeCheckinPage() {
                   <span className="absolute -bottom-0.5 -right-0.5 w-7 h-7 border-b-4 border-r-4 border-orange rounded-br-2xl" />
                 </div>
               ) : (
-                // face oval = "วางหน้าตรงนี้" — turns green once a face is held;
-                // during the turn challenge, show a side-to-side arrow cue.
+                // face oval = "วางหน้าตรงนี้" — turns green once framed; during a
+                // pose challenge it turns sky-blue and shows the move's cue.
                 <div className="relative flex items-center justify-center">
                   <div className={`w-40 h-52 border-4 rounded-[50%] transition-colors ${
-                    faceStage === "turn" ? "border-sky-300 animate-pulse"
+                    faceStage !== "frame" ? "border-sky-300 animate-pulse"
                     : facePresent ? "border-emerald-300" : "border-white/60"
                   }`} />
-                  {faceStage === "turn" && (
-                    <span className="absolute text-4xl text-sky-200 animate-pulse">↔️</span>
+                  {faceStage !== "frame" && (
+                    <span className="absolute text-5xl text-sky-100 animate-pulse drop-shadow">
+                      {faceStage === "turn" ? "↔️" : faceStage === "down" ? "⬇️" : "⬆️"}
+                    </span>
                   )}
                 </div>
               )}
@@ -507,7 +520,7 @@ export default function EmployeeCheckinPage() {
             </p>
             <p className={`text-sm mt-1 font-medium ${
               phase !== "aligning" ? "text-gray-500"
-              : faceStage === "turn" ? "text-sky-600"
+              : faceStage !== "frame" ? "text-sky-600"
               : facePresent ? "text-emerald-600" : "text-orange"
             }`}>
               {phase === "scanning"
