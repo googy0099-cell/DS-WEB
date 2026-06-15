@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 
 type Mode = "checkin" | "checkout";
-type Phase = "scanning" | "liveness" | "submitting" | "success" | "error";
+type Phase = "scanning" | "aligning" | "submitting" | "success" | "error";
 
 type Result = {
   action: "checkin" | "checkout";
@@ -22,11 +22,17 @@ type ChecklistBlock = {
   photo: string;
 };
 
-// Passive liveness: grab a few downscaled grayscale frames; a printed photo or a
-// static screen is near-identical frame-to-frame, a real person never is.
-const LIVENESS_FRAMES = 5;
-const LIVENESS_INTERVAL_MS = 140;
-const LIVENESS_MIN_MOTION = 1.5; // mean abs pixel diff (0–255) over the sequence
+// Face step: the person must hold their face inside the oval for ~1s before we
+// capture — (a) gives a steady, in-frame shot for a better match, (b) feels
+// deliberate instead of snapping instantly the moment the QR is read.
+const ALIGN_HOLD_MS = 1000;     // continuous in-frame time required before capture
+const ALIGN_TICK_MS = 120;      // sampling cadence during the face step
+const ALIGN_TIMEOUT_MS = 15000; // give up if no face shows up
+const SKIN_MIN_RATIO = 0.12;    // fraction of the center box that must look like skin
+
+// Passive liveness: a printed photo or a static screen barely changes
+// frame-to-frame; a real person always has micro-motion during the hold.
+const LIVENESS_MIN_MOTION = 1.2; // mean abs pixel diff (0–255) over the hold window
 const LV_W = 64;
 const LV_H = 48;
 
@@ -36,6 +42,8 @@ export default function EmployeeCheckinPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [checklistBlock, setChecklistBlock] = useState<ChecklistBlock | null>(null);
+  const [alignProgress, setAlignProgress] = useState(0); // 0–1 hold progress in step 2
+  const [facePresent, setFacePresent] = useState(false); // face currently inside the oval
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -46,7 +54,7 @@ export default function EmployeeCheckinPage() {
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
-  const cameraOn = mode !== null && (phase === "scanning" || phase === "liveness");
+  const cameraOn = mode !== null && (phase === "scanning" || phase === "aligning");
 
   // ── camera lifecycle ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -110,34 +118,47 @@ export default function EmployeeCheckinPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, mode]);
 
-  // ── on QR found → passive liveness → capture → submit ───────────────────────
+  // ── on QR found → wait for a steady face → capture → submit ─────────────────
   async function handleToken(token: string) {
     setError("");
-    setPhase("liveness");
-    // brief pause so the person can lower the phone and look at the camera
-    await new Promise((r) => setTimeout(r, 900));
+    setAlignProgress(0);
+    setFacePresent(false);
+    setPhase("aligning");
+    // brief pause so the person can lower the phone and look up at the camera
+    await new Promise((r) => setTimeout(r, 600));
 
-    const live = await runLiveness();
-    if (!live.ok) {
-      setError("ตรวจพบภาพนิ่ง — กรุณาให้คนจริงมองกล้อง");
+    const cap = await captureWhenSteady();
+    if (!cap.ok) {
+      setError(cap.error);
       setPhase("error");
       return;
     }
-    await submit(token, live.photo, false, modeRef.current ?? "checkin");
+    await submit(token, cap.photo, false, modeRef.current ?? "checkin");
   }
 
-  async function runLiveness(): Promise<{ ok: boolean; photo: string }> {
+  // Wait until a face sits inside the oval and is held steady for ALIGN_HOLD_MS,
+  // confirming live micro-motion during the hold, then grab a full-res shot.
+  async function captureWhenSteady(): Promise<
+    { ok: true; photo: string } | { ok: false; error: string }
+  > {
     const small = document.createElement("canvas");
     small.width = LV_W;
     small.height = LV_H;
     const sctx = small.getContext("2d", { willReadFrequently: true })!;
 
     let prev: Uint8ClampedArray | null = null;
+    let heldMs = 0;
     let maxMotion = 0;
-    for (let i = 0; i < LIVENESS_FRAMES; i++) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < ALIGN_TIMEOUT_MS) {
       if (videoReady()) {
         sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
         const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
+        const present = skinRatio(cur, LV_W, LV_H) >= SKIN_MIN_RATIO;
+
+        // liveness runs continuously across every consecutive frame — a printed
+        // photo / static screen stays near-identical no matter what.
         if (prev) {
           let sum = 0;
           for (let p = 0; p < cur.length; p += 4) {
@@ -148,12 +169,49 @@ export default function EmployeeCheckinPage() {
           maxMotion = Math.max(maxMotion, sum / (LV_W * LV_H));
         }
         prev = cur;
-      }
-      await new Promise((r) => setTimeout(r, LIVENESS_INTERVAL_MS));
-    }
 
-    const photo = capturePhoto();
-    return { ok: maxMotion >= LIVENESS_MIN_MOTION && !!photo, photo: photo ?? "" };
+        if (present) {
+          // gate: the face must sit inside the oval for the full hold before we
+          // call it done and ship the shot to AWS.
+          heldMs += ALIGN_TICK_MS;
+          setFacePresent(true);
+          setAlignProgress(Math.min(1, heldMs / ALIGN_HOLD_MS));
+          if (heldMs >= ALIGN_HOLD_MS) {
+            if (maxMotion < LIVENESS_MIN_MOTION) {
+              return { ok: false, error: "ตรวจพบภาพนิ่ง — กรุณาให้คนจริงมองกล้อง" };
+            }
+            const photo = capturePhoto();
+            if (!photo) return { ok: false, error: "จับภาพไม่สำเร็จ ลองใหม่อีกครั้ง" };
+            return { ok: true, photo };
+          }
+        } else {
+          // face left the frame — only the hold resets; liveness keeps accruing
+          heldMs = 0;
+          setFacePresent(false);
+          setAlignProgress(0);
+        }
+      }
+      await new Promise((r) => setTimeout(r, ALIGN_TICK_MS));
+    }
+    return { ok: false, error: "ไม่พบใบหน้าในกรอบ — ลองใหม่อีกครั้ง" };
+  }
+
+  // Rough skin-tone presence over the center box (the oval area). No ML needed:
+  // an empty frame / wall scores ~0, a face fills a good fraction of the box.
+  function skinRatio(data: Uint8ClampedArray, w: number, h: number): number {
+    const x0 = Math.floor(w * 0.3), x1 = Math.ceil(w * 0.7);
+    const y0 = Math.floor(h * 0.2), y1 = Math.ceil(h * 0.85);
+    let skin = 0, total = 0;
+    for (let y = y0; y < y1; y++) {
+      for (let x = x0; x < x1; x++) {
+        const p = (y * w + x) * 4;
+        const r = data[p], g = data[p + 1], b = data[p + 2];
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        if (r > 95 && g > 40 && b > 20 && mx - mn > 15 && Math.abs(r - g) > 15 && r > g && r > b) skin++;
+        total++;
+      }
+    }
+    return total ? skin / total : 0;
   }
 
   function capturePhoto(): string | null {
@@ -203,6 +261,8 @@ export default function EmployeeCheckinPage() {
     setError("");
     setResult(null);
     setChecklistBlock(null);
+    setAlignProgress(0);
+    setFacePresent(false);
     busyRef.current = false;
     setPhase("scanning");
   }, []);
@@ -245,18 +305,18 @@ export default function EmployeeCheckinPage() {
         </span>
       </div>
 
-      {/* Camera always mounted while scanning/liveness so the stream stays attached */}
-      {(phase === "scanning" || phase === "liveness") && (
+      {/* Camera always mounted while scanning/aligning so the stream stays attached */}
+      {(phase === "scanning" || phase === "aligning") && (
         <>
           {/* Step progress: 1 สแกน QR → 2 ยืนยันใบหน้า */}
           <div className="w-full flex items-center gap-2">
-            <StepPill n={1} label="สแกน QR" active={phase === "scanning"} done={phase === "liveness"} />
-            <div className={`flex-1 h-1 rounded-full transition-colors ${phase === "liveness" ? "bg-emerald-400" : "bg-gray-200"}`} />
-            <StepPill n={2} label="ยืนยันใบหน้า" active={phase === "liveness"} done={false} />
+            <StepPill n={1} label="สแกน QR" active={phase === "scanning"} done={phase === "aligning"} />
+            <div className={`flex-1 h-1 rounded-full transition-colors ${phase === "aligning" ? "bg-emerald-400" : "bg-gray-200"}`} />
+            <StepPill n={2} label="ยืนยันใบหน้า" active={phase === "aligning"} done={false} />
           </div>
 
           <div className={`relative rounded-3xl overflow-hidden border-4 bg-black w-full aspect-[4/3] transition-colors ${
-            phase === "scanning" ? "border-navy" : "border-emerald-400"
+            phase === "scanning" ? "border-navy" : facePresent ? "border-emerald-400" : "border-yellow-400"
           }`}>
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -269,20 +329,38 @@ export default function EmployeeCheckinPage() {
                   <span className="absolute -bottom-0.5 -right-0.5 w-7 h-7 border-b-4 border-r-4 border-orange rounded-br-2xl" />
                 </div>
               ) : (
-                // face oval = "วางหน้าตรงนี้"
-                <div className="w-40 h-52 border-2 border-emerald-300/80 rounded-[50%]" />
+                // face oval = "วางหน้าตรงนี้" — turns green once a face is held
+                <div className={`w-40 h-52 border-4 rounded-[50%] transition-colors ${
+                  facePresent ? "border-emerald-300" : "border-white/60"
+                }`} />
               )}
             </div>
           </div>
 
+          {/* Hold progress bar (step 2) — fills as the face stays in the oval */}
+          {phase === "aligning" && (
+            <div className="h-2 w-full rounded-full bg-gray-200 overflow-hidden">
+              <div
+                className="h-full bg-emerald-400 transition-all duration-150"
+                style={{ width: `${Math.round(alignProgress * 100)}%` }}
+              />
+            </div>
+          )}
+
           <div className="text-center">
             <p className="text-base font-bold text-navy">
-              {phase === "scanning" ? "ขั้นที่ 1 · ยื่น QR ให้กล้องสแกน" : "ขั้นที่ 2 · มองกล้องนิ่ง ๆ"}
+              {phase === "scanning"
+                ? "ขั้นที่ 1 · ยื่น QR ให้กล้องสแกน"
+                : facePresent
+                  ? "ขั้นที่ 2 · นิ่งไว้… กำลังยืนยัน"
+                  : "ขั้นที่ 2 · วางใบหน้าให้อยู่ในกรอบ"}
             </p>
             <p className="text-sm text-gray-500 mt-1">
               {phase === "scanning"
                 ? "เปิดหน้า “QR เช็คอินของฉัน” ในมือถือพนักงาน"
-                : "เอามือถือลง ระบบกำลังยืนยันว่าเป็นคนจริง"}
+                : facePresent
+                  ? "มองกล้องตรง ๆ ค้างไว้สักครู่"
+                  : "เอามือถือลง แล้วเลื่อนหน้าให้อยู่กลางวงรี"}
             </p>
           </div>
         </>
