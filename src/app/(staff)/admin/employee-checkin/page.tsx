@@ -22,19 +22,40 @@ type ChecklistBlock = {
   photo: string;
 };
 
-// Face step: the person must hold their face inside the oval for ~1s before we
-// capture — (a) gives a steady, in-frame shot for a better match, (b) feels
-// deliberate instead of snapping instantly the moment the QR is read.
-const ALIGN_HOLD_MS = 1000;     // continuous in-frame time required before capture
-const ALIGN_TICK_MS = 120;      // sampling cadence during the face step
-const ALIGN_TIMEOUT_MS = 15000; // give up if no face shows up
-const SKIN_MIN_RATIO = 0.12;    // fraction of the center box that must look like skin
+// Face step: a real, frontal face must be centred and filling the oval before
+// we capture — bank-app style, not "a cheek touched the frame". When the
+// browser exposes the native FaceDetector (Chrome on Android, the shop kiosk)
+// we check the face box geometry + eye/nose landmarks; otherwise we fall back
+// to a stricter skin heuristic.
+const ALIGN_HOLD_MS = 900;      // continuous valid-face time required before capture
+const ALIGN_TIMEOUT_MS = 20000; // give up if no good face shows up
+
+// Face-box geometry, as fractions of the camera frame (face must fill the oval)
+const FACE_MIN_H = 0.42;        // too small → "ขยับเข้าใกล้"
+const FACE_MAX_H = 0.95;        // too big   → "ถอยห่าง"
+const FACE_MIN_W = 0.26;
+const FACE_MAX_W = 0.80;
+const FACE_CENTER_DX = 0.16;    // |centreX-0.5| allowed
+const FACE_CENTER_DY = 0.18;    // |centreY-0.5| allowed
+const EYE_SPAN_MIN = 0.26;      // eyeDist / faceWidth — lower = turned sideways
+const NOSE_OFFSET_MAX = 0.22;   // |noseX - eyeMidX| / faceWidth — higher = turned
+
+// Fallback heuristic (no FaceDetector): a centred face has lots of skin in the
+// middle box and little at the side strips.
+const SKIN_CENTER_MIN = 0.38;   // center box must be mostly face
+const SKIN_EDGE_MAX = 0.20;     // side strips must be mostly background
 
 // Passive liveness: a printed photo or a static screen barely changes
 // frame-to-frame; a real person always has micro-motion during the hold.
 const LIVENESS_MIN_MOTION = 1.2; // mean abs pixel diff (0–255) over the hold window
 const LV_W = 64;
 const LV_H = 48;
+
+// Minimal typings for the Shape Detection API (not in the TS DOM lib yet).
+type FaceLandmark = { type: string; locations: { x: number; y: number }[] };
+type DetectedFace = { boundingBox: { x: number; y: number; width: number; height: number }; landmarks?: FaceLandmark[] };
+type FaceDetectorLike = { detect(src: CanvasImageSource): Promise<DetectedFace[]> };
+type FaceDetectorCtor = new (opts?: { fastMode?: boolean; maxDetectedFaces?: number }) => FaceDetectorLike;
 
 export default function EmployeeCheckinPage() {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -43,8 +64,10 @@ export default function EmployeeCheckinPage() {
   const [result, setResult] = useState<Result | null>(null);
   const [checklistBlock, setChecklistBlock] = useState<ChecklistBlock | null>(null);
   const [alignProgress, setAlignProgress] = useState(0); // 0–1 hold progress in step 2
-  const [facePresent, setFacePresent] = useState(false); // face currently inside the oval
+  const [facePresent, setFacePresent] = useState(false); // a valid frontal face is held
+  const [faceHint, setFaceHint] = useState("จัดใบหน้าให้เต็มวงรี"); // guidance during step 2
 
+  const detectorRef = useRef<FaceDetectorLike | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -123,6 +146,7 @@ export default function EmployeeCheckinPage() {
     setError("");
     setAlignProgress(0);
     setFacePresent(false);
+    setFaceHint("จัดใบหน้าให้เต็มวงรี");
     setPhase("aligning");
     // brief pause so the person can lower the phone and look up at the camera
     await new Promise((r) => setTimeout(r, 600));
@@ -136,11 +160,22 @@ export default function EmployeeCheckinPage() {
     await submit(token, cap.photo, false, modeRef.current ?? "checkin");
   }
 
-  // Wait until a face sits inside the oval and is held steady for ALIGN_HOLD_MS,
+  // Lazily build the native face detector (Chrome on Android). null if absent.
+  function getDetector(): FaceDetectorLike | null {
+    if (detectorRef.current) return detectorRef.current;
+    const Ctor = (window as unknown as { FaceDetector?: FaceDetectorCtor }).FaceDetector;
+    if (!Ctor) return null;
+    try { detectorRef.current = new Ctor({ fastMode: false, maxDetectedFaces: 2 }); }
+    catch { detectorRef.current = null; }
+    return detectorRef.current;
+  }
+
+  // Wait until a real, frontal face fills the oval and is held for ALIGN_HOLD_MS,
   // confirming live micro-motion during the hold, then grab a full-res shot.
   async function captureWhenSteady(): Promise<
     { ok: true; photo: string } | { ok: false; error: string }
   > {
+    const detector = getDetector();
     const small = document.createElement("canvas");
     small.width = LV_W;
     small.height = LV_H;
@@ -149,16 +184,15 @@ export default function EmployeeCheckinPage() {
     let prev: Uint8ClampedArray | null = null;
     let heldMs = 0;
     let maxMotion = 0;
-    const startedAt = Date.now();
+    let last = Date.now();
+    const startedAt = last;
 
     while (Date.now() - startedAt < ALIGN_TIMEOUT_MS) {
       if (videoReady()) {
-        sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
-        const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
-        const present = skinRatio(cur, LV_W, LV_H) >= SKIN_MIN_RATIO;
-
         // liveness runs continuously across every consecutive frame — a printed
         // photo / static screen stays near-identical no matter what.
+        sctx.drawImage(videoRef.current!, 0, 0, LV_W, LV_H);
+        const cur = sctx.getImageData(0, 0, LV_W, LV_H).data;
         if (prev) {
           let sum = 0;
           for (let p = 0; p < cur.length; p += 4) {
@@ -170,10 +204,15 @@ export default function EmployeeCheckinPage() {
         }
         prev = cur;
 
-        if (present) {
-          // gate: the face must sit inside the oval for the full hold before we
-          // call it done and ship the shot to AWS.
-          heldMs += ALIGN_TICK_MS;
+        const check = detector ? await analyzeFace(detector, sctx) : skinFallback(cur);
+        const now = Date.now();
+        const dt = now - last;
+        last = now;
+        setFaceHint(check.hint);
+
+        if (check.ok) {
+          // gate: a valid frontal face must fill the oval for the full hold
+          heldMs += dt;
           setFacePresent(true);
           setAlignProgress(Math.min(1, heldMs / ALIGN_HOLD_MS));
           if (heldMs >= ALIGN_HOLD_MS) {
@@ -185,33 +224,84 @@ export default function EmployeeCheckinPage() {
             return { ok: true, photo };
           }
         } else {
-          // face left the frame — only the hold resets; liveness keeps accruing
+          // face not properly framed — reset the hold; liveness keeps accruing
           heldMs = 0;
           setFacePresent(false);
           setAlignProgress(0);
         }
+      } else {
+        last = Date.now();
       }
-      await new Promise((r) => setTimeout(r, ALIGN_TICK_MS));
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
     }
-    return { ok: false, error: "ไม่พบใบหน้าในกรอบ — ลองใหม่อีกครั้ง" };
+    return { ok: false, error: "ตรวจใบหน้าไม่สำเร็จ — จัดหน้าให้เต็มวงรีแล้วลองใหม่" };
   }
 
-  // Rough skin-tone presence over the center box (the oval area). No ML needed:
-  // an empty frame / wall scores ~0, a face fills a good fraction of the box.
-  function skinRatio(data: Uint8ClampedArray, w: number, h: number): number {
-    const x0 = Math.floor(w * 0.3), x1 = Math.ceil(w * 0.7);
-    const y0 = Math.floor(h * 0.2), y1 = Math.ceil(h * 0.85);
-    let skin = 0, total = 0;
-    for (let y = y0; y < y1; y++) {
-      for (let x = x0; x < x1; x++) {
-        const p = (y * w + x) * 4;
-        const r = data[p], g = data[p + 1], b = data[p + 2];
-        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-        if (r > 95 && g > 40 && b > 20 && mx - mn > 15 && Math.abs(r - g) > 15 && r > g && r > b) skin++;
-        total++;
+  type FaceCheck = { ok: boolean; hint: string };
+
+  // Native FaceDetector: require exactly one face, centred, filling the oval,
+  // and facing forward (eyes apart + nose between them). Bank-app grade.
+  async function analyzeFace(detector: FaceDetectorLike, sctx: CanvasRenderingContext2D): Promise<FaceCheck> {
+    const v = videoRef.current!;
+    const W = v.videoWidth, H = v.videoHeight;
+    let faces: DetectedFace[] = [];
+    try { faces = await detector.detect(v); } catch { return skinFallback(sctx.getImageData(0, 0, LV_W, LV_H).data); }
+
+    if (faces.length === 0) return { ok: false, hint: "ไม่พบใบหน้า — มองกล้องตรง ๆ" };
+    if (faces.length > 1) return { ok: false, hint: "พบหลายใบหน้า — ให้เหลือคนเดียว" };
+
+    const box = faces[0].boundingBox;
+    const cx = (box.x + box.width / 2) / W;
+    const cy = (box.y + box.height / 2) / H;
+    const fw = box.width / W;
+    const fh = box.height / H;
+
+    if (Math.abs(cx - 0.5) > FACE_CENTER_DX || Math.abs(cy - 0.5) > FACE_CENTER_DY)
+      return { ok: false, hint: "จัดใบหน้าให้อยู่กลางวงรี" };
+    if (fh < FACE_MIN_H || fw < FACE_MIN_W) return { ok: false, hint: "ขยับเข้าใกล้กล้องอีกนิด" };
+    if (fh > FACE_MAX_H || fw > FACE_MAX_W) return { ok: false, hint: "ถอยห่างจากกล้องเล็กน้อย" };
+
+    // frontal pose from landmarks (when the engine provides them)
+    const lm = faces[0].landmarks;
+    if (lm && lm.length) {
+      const eyes = lm.filter((l) => l.type === "eye").map((l) => l.locations[0]).filter(Boolean);
+      const nose = lm.find((l) => l.type === "nose")?.locations[0];
+      if (eyes.length < 2) return { ok: false, hint: "หันหน้าตรงเข้ากล้อง" };
+      const [e1, e2] = eyes;
+      const eyeSpan = Math.abs(e1.x - e2.x) / box.width;
+      if (eyeSpan < EYE_SPAN_MIN) return { ok: false, hint: "หันหน้าตรงเข้ากล้อง" };
+      if (nose) {
+        const eyeMid = (e1.x + e2.x) / 2;
+        if (Math.abs(nose.x - eyeMid) / box.width > NOSE_OFFSET_MAX)
+          return { ok: false, hint: "หันหน้าตรงเข้ากล้อง" };
       }
     }
-    return total ? skin / total : 0;
+    return { ok: true, hint: "นิ่งไว้… กำลังยืนยัน" };
+  }
+
+  // Fallback (no FaceDetector): centre box mostly skin, side strips mostly not —
+  // so a partial cheek at the edge or a sideways face won't pass.
+  function skinFallback(data: Uint8ClampedArray): FaceCheck {
+    const isSkin = (p: number) => {
+      const r = data[p], g = data[p + 1], b = data[p + 2];
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      return r > 95 && g > 40 && b > 20 && mx - mn > 15 && Math.abs(r - g) > 15 && r > g && r > b;
+    };
+    const ratio = (x0f: number, x1f: number) => {
+      const x0 = Math.floor(LV_W * x0f), x1 = Math.ceil(LV_W * x1f);
+      const y0 = Math.floor(LV_H * 0.18), y1 = Math.ceil(LV_H * 0.9);
+      let skin = 0, total = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        if (isSkin((y * LV_W + x) * 4)) skin++;
+        total++;
+      }
+      return total ? skin / total : 0;
+    };
+    const center = ratio(0.32, 0.68);
+    const edges = Math.max(ratio(0, 0.18), ratio(0.82, 1));
+    if (center < SKIN_CENTER_MIN) return { ok: false, hint: "จัดใบหน้าให้เต็มวงรี" };
+    if (edges > SKIN_EDGE_MAX) return { ok: false, hint: "จัดใบหน้าให้อยู่กลางวงรี" };
+    return { ok: true, hint: "นิ่งไว้… กำลังยืนยัน" };
   }
 
   function capturePhoto(): string | null {
@@ -263,6 +353,7 @@ export default function EmployeeCheckinPage() {
     setChecklistBlock(null);
     setAlignProgress(0);
     setFacePresent(false);
+    setFaceHint("จัดใบหน้าให้เต็มวงรี");
     busyRef.current = false;
     setPhase("scanning");
   }, []);
@@ -349,18 +440,14 @@ export default function EmployeeCheckinPage() {
 
           <div className="text-center">
             <p className="text-base font-bold text-navy">
-              {phase === "scanning"
-                ? "ขั้นที่ 1 · ยื่น QR ให้กล้องสแกน"
-                : facePresent
-                  ? "ขั้นที่ 2 · นิ่งไว้… กำลังยืนยัน"
-                  : "ขั้นที่ 2 · วางใบหน้าให้อยู่ในกรอบ"}
+              {phase === "scanning" ? "ขั้นที่ 1 · ยื่น QR ให้กล้องสแกน" : "ขั้นที่ 2 · ยืนยันใบหน้า"}
             </p>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className={`text-sm mt-1 font-medium ${
+              phase === "aligning" ? (facePresent ? "text-emerald-600" : "text-orange") : "text-gray-500"
+            }`}>
               {phase === "scanning"
                 ? "เปิดหน้า “QR เช็คอินของฉัน” ในมือถือพนักงาน"
-                : facePresent
-                  ? "มองกล้องตรง ๆ ค้างไว้สักครู่"
-                  : "เอามือถือลง แล้วเลื่อนหน้าให้อยู่กลางวงรี"}
+                : faceHint}
             </p>
           </div>
         </>
