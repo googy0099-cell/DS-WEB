@@ -211,8 +211,13 @@ export default function EmployeeCheckinPage() {
   if (!mode) {
     return (
       <div className="max-w-md mx-auto py-8">
-        <h1 className="text-xl font-bold text-navy text-center mb-6">เช็คอินพนักงาน</h1>
-        <p className="text-center text-sm text-gray-500 mb-6">เลือกประเภท แล้วให้พนักงานยื่น QR ให้กล้องสแกน</p>
+        <h1 className="text-xl font-bold text-navy text-center mb-2">เช็คอินพนักงาน</h1>
+        <p className="text-center text-sm text-gray-500 mb-4">เลือกประเภทก่อน</p>
+        <div className="mb-6 mx-auto max-w-xs text-sm text-gray-500 bg-sand/40 rounded-2xl px-4 py-3">
+          <p className="font-bold text-navy mb-1">มี 2 ขั้นตอน</p>
+          <p>1️⃣ ยื่น QR ในแอปให้กล้องสแกน</p>
+          <p>2️⃣ เอามือถือลง มองกล้องเพื่อยืนยันใบหน้า</p>
+        </div>
         <div className="flex flex-col gap-4">
           <button
             onClick={() => { setMode("checkin"); resetToScan(); }}
@@ -243,15 +248,43 @@ export default function EmployeeCheckinPage() {
       {/* Camera always mounted while scanning/liveness so the stream stays attached */}
       {(phase === "scanning" || phase === "liveness") && (
         <>
-          <div className="relative rounded-3xl overflow-hidden border-4 border-navy bg-black w-full aspect-[4/3]">
+          {/* Step progress: 1 สแกน QR → 2 ยืนยันใบหน้า */}
+          <div className="w-full flex items-center gap-2">
+            <StepPill n={1} label="สแกน QR" active={phase === "scanning"} done={phase === "liveness"} />
+            <div className={`flex-1 h-1 rounded-full transition-colors ${phase === "liveness" ? "bg-emerald-400" : "bg-gray-200"}`} />
+            <StepPill n={2} label="ยืนยันใบหน้า" active={phase === "liveness"} done={false} />
+          </div>
+
+          <div className={`relative rounded-3xl overflow-hidden border-4 bg-black w-full aspect-[4/3] transition-colors ${
+            phase === "scanning" ? "border-navy" : "border-emerald-400"
+          }`}>
             <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover scale-x-[-1]" />
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-48 h-48 border-2 border-white/70 rounded-2xl" />
+              {phase === "scanning" ? (
+                // square reticle = "วาง QR ตรงนี้"
+                <div className="w-48 h-48 rounded-2xl border-2 border-white/40 relative">
+                  <span className="absolute -top-0.5 -left-0.5 w-7 h-7 border-t-4 border-l-4 border-orange rounded-tl-2xl" />
+                  <span className="absolute -top-0.5 -right-0.5 w-7 h-7 border-t-4 border-r-4 border-orange rounded-tr-2xl" />
+                  <span className="absolute -bottom-0.5 -left-0.5 w-7 h-7 border-b-4 border-l-4 border-orange rounded-bl-2xl" />
+                  <span className="absolute -bottom-0.5 -right-0.5 w-7 h-7 border-b-4 border-r-4 border-orange rounded-br-2xl" />
+                </div>
+              ) : (
+                // face oval = "วางหน้าตรงนี้"
+                <div className="w-40 h-52 border-2 border-emerald-300/80 rounded-[50%]" />
+              )}
             </div>
           </div>
-          <p className="text-base font-bold text-center text-navy">
-            {phase === "scanning" ? "ยื่น QR ในมือถือให้กล้องสแกน" : "เอามือถือลง มองกล้อง…"}
-          </p>
+
+          <div className="text-center">
+            <p className="text-base font-bold text-navy">
+              {phase === "scanning" ? "ขั้นที่ 1 · ยื่น QR ให้กล้องสแกน" : "ขั้นที่ 2 · มองกล้องนิ่ง ๆ"}
+            </p>
+            <p className="text-sm text-gray-500 mt-1">
+              {phase === "scanning"
+                ? "เปิดหน้า “QR เช็คอินของฉัน” ในมือถือพนักงาน"
+                : "เอามือถือลง ระบบกำลังยืนยันว่าเป็นคนจริง"}
+            </p>
+          </div>
         </>
       )}
 
@@ -313,6 +346,25 @@ export default function EmployeeCheckinPage() {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+function StepPill({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
+  return (
+    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border-2 transition-colors ${
+      active ? "border-orange bg-orange/10 text-orange"
+      : done ? "border-emerald-400 bg-emerald-50 text-emerald-600"
+      : "border-gray-200 bg-gray-50 text-gray-400"
+    }`}>
+      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-sm font-bold ${
+        active ? "bg-orange text-white"
+        : done ? "bg-emerald-400 text-white"
+        : "bg-gray-200 text-gray-500"
+      }`}>
+        {done ? "✓" : n}
+      </span>
+      <span className="text-sm font-bold whitespace-nowrap">{label}</span>
     </div>
   );
 }
