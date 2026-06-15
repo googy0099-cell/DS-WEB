@@ -14,8 +14,8 @@ const MODEL =
 
 export type Pose = {
   cx: number; cy: number; fw: number; fh: number; // face box, fractions of frame
-  yaw: number;   // horizontal turn proxy: 0 frontal, magnitude grows when turned
-  pitch: number; // vertical nod ratio: ~0.5 frontal, smaller looking down, larger up
+  yaw: number;   // horizontal turn proxy: ~0 frontal, magnitude grows when turned
+  pitch: number; // vertical nod proxy = (eyes→nose)/(nose→chin): grows looking DOWN, shrinks looking UP
 };
 
 export interface PoseReader {
@@ -68,10 +68,12 @@ export async function createPoseReader(): Promise<PoseReader | null> {
       const eyeMidX = (lm[EYE_L].x + lm[EYE_R].x) / 2;
       const eyeMidY = (lm[EYE_L].y + lm[EYE_R].y) / 2;
       const eyeDist = Math.abs(lm[EYE_R].x - lm[EYE_L].x) || 1e-3;
-      const chinSpan = (lm[CHIN].y - eyeMidY) || 1e-3;
+      const noseToChin = (lm[CHIN].y - lm[NOSE].y) || 1e-3;
 
-      const yaw = (lm[NOSE].x - eyeMidX) / eyeDist;       // ~0 frontal
-      const pitch = (lm[NOSE].y - eyeMidY) / chinSpan;    // ~0.5 frontal
+      const yaw = (lm[NOSE].x - eyeMidX) / eyeDist;          // ~0 frontal, ± when turned
+      // looking down tucks the chin toward the nose → nose→chin shrinks → ratio up;
+      // looking up does the opposite → ratio down. Far more sensitive than eyes→chin.
+      const pitch = (lm[NOSE].y - eyeMidY) / noseToChin;
 
       return { cx, cy, fw, fh, yaw, pitch };
     },

@@ -31,22 +31,21 @@ type ChecklistBlock = {
 const FRAME_HOLD_MS = 450;       // hold a good frontal face before the challenge starts
 const BACK_HOLD_MS = 400;        // hold frontal again at the end, right before capture
 const RECOVER_MS = 250;          // brief return-to-frontal between consecutive poses
-const NUM_CHALLENGES = 2;        // how many random poses the person must perform
+const NUM_CHALLENGES = 1;        // how many random poses the person must perform
 const ALIGN_TIMEOUT_MS = 30000;  // give up if the whole step isn't completed in time
 
-// Pose thresholds, relative to the person's own frontal baseline
+// Pose thresholds, relative to the person's own frontal baseline (yaw0 / pitch0)
 const YAW_TURN = 0.20;           // |yaw - yaw0| that counts as "turned to the side"
-const PITCH_DOWN = 0.10;         // (pitch0 - pitch) that counts as "looking down"
-const PITCH_UP = 0.12;           // (pitch - pitch0) that counts as "looking up"
-const WRONG_FACTOR = 1.5;        // a non-requested pose this much past threshold = wrong move
-const WRONG_HOLD_MS = 300;       // …sustained this long before we restart
+const PITCH_DOWN = 0.16;         // (pitch - pitch0) that counts as "looking down"
+const PITCH_UP = 0.16;           // (pitch0 - pitch) that counts as "looking up"
+const WRONG_FACTOR = 1.6;        // a non-requested pose this much past threshold = wrong move
+const WRONG_HOLD_MS = 350;       // …sustained this long before we restart
 
 // Framing geometry, as fractions of the camera frame (face must fill the oval)
 const FACE_MIN_H = 0.42, FACE_MAX_H = 0.97;
 const FACE_MIN_W = 0.24, FACE_MAX_W = 0.85;
 const FACE_CENTER_DX = 0.17, FACE_CENTER_DY = 0.19;
 const FRONTAL_YAW = 0.14;        // |yaw| considered frontal while framing
-const FRONTAL_PITCH_LO = 0.32, FRONTAL_PITCH_HI = 0.68; // plausible frontal pitch ratio
 
 // Fallback (MediaPipe unavailable, e.g. offline): stricter skin gate, no challenge.
 const SKIN_CENTER_MIN = 0.38, SKIN_EDGE_MAX = 0.20;
@@ -199,10 +198,11 @@ export default function EmployeeCheckinPage() {
   }
 
   // How far past its threshold a pose currently is (≥1 means performed).
+  // pitch grows when looking DOWN, shrinks when looking UP (see hr-liveness).
   function poseScore(want: PoseName, p: Pose, yaw0: number, pitch0: number): number {
     if (want === "turn") return Math.abs(p.yaw - yaw0) / YAW_TURN;
-    if (want === "down") return (pitch0 - p.pitch) / PITCH_DOWN;
-    return (p.pitch - pitch0) / PITCH_UP; // up
+    if (want === "down") return (p.pitch - pitch0) / PITCH_DOWN;
+    return (pitch0 - p.pitch) / PITCH_UP; // up
   }
 
   function isFramed(p: Pose): { ok: boolean; hint: string } {
@@ -210,8 +210,7 @@ export default function EmployeeCheckinPage() {
       return { ok: false, hint: "จัดใบหน้าให้อยู่กลางวงรี" };
     if (p.fh < FACE_MIN_H || p.fw < FACE_MIN_W) return { ok: false, hint: "ขยับเข้าใกล้กล้องอีกนิด" };
     if (p.fh > FACE_MAX_H || p.fw > FACE_MAX_W) return { ok: false, hint: "ถอยห่างจากกล้องเล็กน้อย" };
-    if (Math.abs(p.yaw) > FRONTAL_YAW || p.pitch < FRONTAL_PITCH_LO || p.pitch > FRONTAL_PITCH_HI)
-      return { ok: false, hint: "มองกล้องตรง ๆ" };
+    if (Math.abs(p.yaw) > FRONTAL_YAW) return { ok: false, hint: "มองกล้องตรง ๆ" };
     return { ok: true, hint: "นิ่งไว้สักครู่…" };
   }
 
