@@ -6,8 +6,10 @@ import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
 import {
   buildReceiptEscPos, buildKitchenEscPos, printToSerial,
-  getGrantedPrinter,
+  getGrantedPrinter, rawbtEnabled, renderLinesPng, printImageViaRawbt,
+  buildReceiptLines, buildKitchenLines,
 } from "@/lib/thermal-print";
+import type { ReceiptEscPosSettings, KitchenEscPosSettings, EscPosOrder } from "@/lib/thermal-print";
 import { buildReceiptHtml } from "@/lib/receipt-html";
 import type { ReceiptHtmlSettings } from "@/lib/receipt-html";
 
@@ -58,46 +60,61 @@ function openPrintWindow(html: string) {
   setTimeout(() => win.print(), 300);
 }
 
+// Map our app order + settings to the shared ESC/POS shapes once, then reuse
+// for serial bytes (desktop) and RawBT image rendering (Android tablet).
+function toEscPosOrder(order: OrderWithItems, netTotal: number, discountAmount: number): EscPosOrder {
+  return {
+    id: order.id,
+    orderName: order.orderName,
+    totalTHB: netTotal,
+    discountAmount,
+    note: order.note,
+    createdAt: order.createdAt,
+    tableId: order.tableId,
+    items: order.items.map((i) => ({
+      nameTh: i.menuItem.nameTh,
+      selectedSize: i.selectedSize,
+      selectedAddons: i.selectedAddons,
+      selectedOptions: i.selectedOptions,
+      quantity: i.quantity,
+      unitPriceTHB: i.unitPriceTHB,
+    })),
+  };
+}
+
+function toEscPosSettings(settings: ReceiptSettings): ReceiptEscPosSettings {
+  return {
+    shopName: settings.shopName,
+    shopInfo: settings.shopInfo,
+    footer: settings.footer,
+    showOrderId: settings.showOrderId,
+    showDate: settings.showDate,
+    showCustomer: settings.showCustomer,
+    showNote: settings.showNote,
+    showItemPrice: settings.showItemPrice,
+    showTotal: settings.showTotal,
+    titleSize: settings.titleSize,
+    feedLines: settings.feedLines,
+    headerAlign: settings.headerAlign,
+  };
+}
+
 async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
   const discountAmount = order.discountAmount ?? 0;
   const netTotal = order.totalTHB - discountAmount;
-  // Try silent serial print first
-  const hasPrinter = await getGrantedPrinter();
-  if (hasPrinter) {
-    const data = buildReceiptEscPos(
-      {
-        id: order.id,
-        orderName: order.orderName,
-        totalTHB: netTotal,
-        discountAmount,
-        note: order.note,
-        createdAt: order.createdAt,
-        tableId: order.tableId,
-        items: order.items.map((i) => ({
-          nameTh: i.menuItem.nameTh,
-          selectedSize: i.selectedSize,
-          selectedAddons: i.selectedAddons,
-          selectedOptions: i.selectedOptions,
-          quantity: i.quantity,
-          unitPriceTHB: i.unitPriceTHB,
-        })),
-      },
-      {
-        shopName: settings.shopName,
-        shopInfo: settings.shopInfo,
-        footer: settings.footer,
-        showOrderId: settings.showOrderId,
-        showDate: settings.showDate,
-        showCustomer: settings.showCustomer,
-        showNote: settings.showNote,
-        showItemPrice: settings.showItemPrice,
-        showTotal: settings.showTotal,
-        titleSize: settings.titleSize,
-        feedLines: settings.feedLines,
-        headerAlign: settings.headerAlign,
-      }
-    );
-    const ok = await printToSerial(data);
+  const escOrder = toEscPosOrder(order, netTotal, discountAmount);
+  const escSettings = toEscPosSettings(settings);
+
+  // RawBT (Android tablet → Bluetooth printer): render to image, print, no dialog
+  if (rawbtEnabled()) {
+    try {
+      printImageViaRawbt(renderLinesPng(buildReceiptLines(escOrder, escSettings), settings.paperWidth));
+      return;
+    } catch (e) { console.error("RawBT print failed", e); }
+  }
+  // Silent serial print (desktop with Web Serial)
+  if (await getGrantedPrinter()) {
+    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
     if (ok) return;
   }
   // Fallback: browser print window
@@ -132,16 +149,22 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
   const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
   const orderName = bill ? `ตี้ ${bill.name} · โต๊ะ ${bill.table.number}` : `โต๊ะ ${first.tableId ?? ""}`;
 
-  const hasPrinter = await getGrantedPrinter();
-  if (hasPrinter) {
-    const data = buildReceiptEscPos(
-      { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems },
-      { shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
-        showOrderId: false, showDate: settings.showDate, showCustomer: true,
-        showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal,
-        titleSize: settings.titleSize, feedLines: settings.feedLines, headerAlign: settings.headerAlign }
-    );
-    const ok = await printToSerial(data);
+  const escOrder: EscPosOrder = { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems };
+  const escSettings: ReceiptEscPosSettings = {
+    shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
+    showOrderId: false, showDate: settings.showDate, showCustomer: true,
+    showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal,
+    titleSize: settings.titleSize, feedLines: settings.feedLines, headerAlign: settings.headerAlign,
+  };
+
+  if (rawbtEnabled()) {
+    try {
+      printImageViaRawbt(renderLinesPng(buildReceiptLines(escOrder, escSettings), settings.paperWidth));
+      return;
+    } catch (e) { console.error("RawBT print failed", e); }
+  }
+  if (await getGrantedPrinter()) {
+    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
     if (ok) return;
   }
 
@@ -159,29 +182,17 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
 }
 
 async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
-  // Try silent serial print first
-  const hasPrinter = await getGrantedPrinter();
-  if (hasPrinter) {
-    const data = buildKitchenEscPos(
-      {
-        id: order.id,
-        orderName: order.orderName,
-        totalTHB: order.totalTHB,
-        note: order.note,
-        createdAt: order.createdAt,
-        tableId: order.tableId,
-        items: order.items.map((i) => ({
-          nameTh: i.menuItem.nameTh,
-          selectedSize: i.selectedSize,
-          selectedAddons: i.selectedAddons,
-          selectedOptions: i.selectedOptions,
-          quantity: i.quantity,
-          unitPriceTHB: i.unitPriceTHB,
-        })),
-      },
-      { showTable: settings.showTable, showNote: settings.showNote }
-    );
-    const ok = await printToSerial(data);
+  const escOrder = toEscPosOrder(order, order.totalTHB, 0);
+  const kSettings: KitchenEscPosSettings = { showTable: settings.showTable, showNote: settings.showNote };
+
+  if (rawbtEnabled()) {
+    try {
+      printImageViaRawbt(renderLinesPng(buildKitchenLines(escOrder, kSettings), settings.paperWidth));
+      return;
+    } catch (e) { console.error("RawBT print failed", e); }
+  }
+  if (await getGrantedPrinter()) {
+    const ok = await printToSerial(buildKitchenEscPos(escOrder, kSettings));
     if (ok) return;
   }
   // Fallback: browser print window
