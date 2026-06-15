@@ -357,6 +357,24 @@ export default function AdminGamesPage() {
   const summaryFullRef = useRef<HTMLTextAreaElement>(null);
   const [expandEditor, setExpandEditor] = useState(false);
 
+  function handleEditorKeyDown(
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+    ref: RefObject<HTMLTextAreaElement | null>
+  ) {
+    if (e.key === "Escape") {
+      if (expandEditor) { e.preventDefault(); setExpandEditor(false); }
+      return;
+    }
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if (!e.shiftKey && k === "b") { e.preventDefault(); insertFormat("bold", ref); }
+    else if (e.shiftKey && e.code === "Digit2") { e.preventDefault(); insertFormat("h2", ref); }
+    else if (!e.shiftKey && e.code === "Digit3") { e.preventDefault(); insertFormat("h3", ref); }
+    else if (e.shiftKey && k === "l") { e.preventDefault(); insertFormat("list", ref); }
+    else if (e.shiftKey && k === "e") { e.preventDefault(); setExpandEditor((v) => !v); }
+  }
+
   function insertFormat(type: "h2" | "h3" | "bold" | "list", ref: RefObject<HTMLTextAreaElement | null> = summaryRef) {
     const el = ref.current;
     if (!el || !editing) return;
@@ -677,28 +695,29 @@ export default function AdminGamesPage() {
                 <div className="border border-sand rounded-xl overflow-hidden focus-within:border-orange transition-colors">
                   <div className="flex gap-0.5 px-2 py-1.5 bg-gray-50 border-b border-sand">
                     <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h2"); }}
-                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่ (## )">H2</button>
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่ (Ctrl+Shift+2)">H2</button>
                     <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h3"); }}
-                      className="px-2 py-1 rounded text-xs font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก (### )">H3</button>
+                      className="px-2 py-1 rounded text-xs font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก (Ctrl+3)">H3</button>
                     <div className="w-px bg-sand mx-0.5" />
                     <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("bold"); }}
-                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="ตัวหนา (**ข้อความ**)"><span className="font-black">B</span></button>
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="ตัวหนา (Ctrl+B)"><span className="font-black">B</span></button>
                     <div className="w-px bg-sand mx-0.5" />
                     <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("list"); }}
-                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="รายการ (- )">— รายการ</button>
+                      className="px-2 py-1 rounded text-xs font-bold text-navy hover:bg-sand transition-colors" title="รายการ (Ctrl+Shift+L)">— รายการ</button>
                     <button type="button" onClick={() => setExpandEditor(true)}
-                      className="ml-auto px-2 py-1 rounded text-xs font-bold text-orange hover:bg-orange/10 transition-colors flex items-center gap-1" title="ขยายเต็มจอ">⛶ ขยายเต็มจอ</button>
+                      className="ml-auto px-2 py-1 rounded text-xs font-bold text-orange hover:bg-orange/10 transition-colors flex items-center gap-1" title="ขยายเต็มจอ (Ctrl+Shift+E)">⛶ ขยายเต็มจอ</button>
                   </div>
                   <textarea
                     ref={summaryRef}
                     value={editing.summaryTh ?? ""}
                     onChange={(e) => setEditing({ ...editing, summaryTh: e.target.value })}
+                    onKeyDown={(e) => handleEditorKeyDown(e, summaryRef)}
                     rows={6}
                     className="w-full px-3 py-2 text-sm focus:outline-none resize-none bg-white font-mono"
                     placeholder={"## หัวข้อหลัก\n### หัวข้อย่อย\n**ตัวหนา** หรือข้อความปกติ\n- รายการ 1\n- รายการ 2"}
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">## หัวข้อ · ### หัวข้อเล็ก · **ตัวหนา** · - รายการ · กด ⛶ เพื่อขยายเต็มจอ</p>
+                <p className="text-xs text-gray-400 mt-1">Ctrl+B ตัวหนา · Ctrl+Shift+2 หัวข้อ · Ctrl+3 หัวข้อย่อย · Ctrl+Shift+L รายการ · Ctrl+Shift+E เต็มจอ</p>
               </div>
 
               {/* Fullscreen editor + live preview */}
@@ -713,15 +732,18 @@ export default function AdminGamesPage() {
 
                     <div className="flex gap-0.5 px-3 py-2 bg-gray-50 border-b border-sand shrink-0">
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h2", summaryFullRef); }}
-                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่">H2</button>
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="หัวข้อใหญ่ (Ctrl+Shift+2)">H2</button>
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("h3", summaryFullRef); }}
-                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก">H3</button>
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy/60 hover:bg-sand transition-colors" title="หัวข้อเล็ก (Ctrl+3)">H3</button>
                       <div className="w-px bg-sand mx-1" />
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("bold", summaryFullRef); }}
-                        className="px-2.5 py-1.5 rounded text-sm font-black text-navy hover:bg-sand transition-colors" title="ตัวหนา">B</button>
+                        className="px-2.5 py-1.5 rounded text-sm font-black text-navy hover:bg-sand transition-colors" title="ตัวหนา (Ctrl+B)">B</button>
                       <div className="w-px bg-sand mx-1" />
                       <button type="button" onMouseDown={(e) => { e.preventDefault(); insertFormat("list", summaryFullRef); }}
-                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="รายการ">— รายการ</button>
+                        className="px-2.5 py-1.5 rounded text-sm font-bold text-navy hover:bg-sand transition-colors" title="รายการ (Ctrl+Shift+L)">— รายการ</button>
+                      <div className="ml-auto text-xs text-gray-400 self-center pr-1 hidden sm:block">
+                        Ctrl+B · Ctrl+Shift+2/L · Ctrl+3 · Esc ปิด
+                      </div>
                     </div>
 
                     <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-hidden min-h-0">
@@ -730,6 +752,7 @@ export default function AdminGamesPage() {
                         autoFocus
                         value={editing.summaryTh ?? ""}
                         onChange={(e) => setEditing({ ...editing, summaryTh: e.target.value })}
+                        onKeyDown={(e) => handleEditorKeyDown(e, summaryFullRef)}
                         className="w-full h-full px-4 py-3 text-base leading-relaxed focus:outline-none resize-none bg-white font-mono border-b md:border-b-0 md:border-r border-sand overflow-y-auto"
                         placeholder={"## หัวข้อหลัก\n### หัวข้อย่อย\n**ตัวหนา** หรือข้อความปกติ\n- รายการ 1\n- รายการ 2"}
                       />
