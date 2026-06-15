@@ -6,11 +6,10 @@ import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
 import {
   buildReceiptEscPos, buildKitchenEscPos, printToSerial,
-  getGrantedPrinter, rawbtEnabled, renderLinesPng, printImageViaRawbt,
-  buildReceiptLines, buildKitchenLines,
+  getGrantedPrinter, rawbtEnabled, htmlToPng, printImageViaRawbt,
 } from "@/lib/thermal-print";
 import type { ReceiptEscPosSettings, KitchenEscPosSettings, EscPosOrder } from "@/lib/thermal-print";
-import { buildReceiptHtml } from "@/lib/receipt-html";
+import { buildReceiptHtml, buildKitchenHtml } from "@/lib/receipt-html";
 import type { ReceiptHtmlSettings } from "@/lib/receipt-html";
 
 interface ReceiptSettings {
@@ -102,23 +101,7 @@ function toEscPosSettings(settings: ReceiptSettings): ReceiptEscPosSettings {
 async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = DEFAULT_RECEIPT) {
   const discountAmount = order.discountAmount ?? 0;
   const netTotal = order.totalTHB - discountAmount;
-  const escOrder = toEscPosOrder(order, netTotal, discountAmount);
-  const escSettings = toEscPosSettings(settings);
-
-  // RawBT (Android tablet → Bluetooth printer): render to image, print, no dialog
-  if (rawbtEnabled()) {
-    try {
-      printImageViaRawbt(renderLinesPng(buildReceiptLines(escOrder, escSettings), settings.paperWidth));
-      return;
-    } catch (e) { console.error("RawBT print failed", e); }
-  }
-  // Silent serial print (desktop with Web Serial)
-  if (await getGrantedPrinter()) {
-    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
-    if (ok) return;
-  }
-  // Fallback: browser print window
-  openPrintWindow(buildReceiptHtml(
+  const html = buildReceiptHtml(
     {
       orderId: order.id,
       orderName: order.orderName,
@@ -129,7 +112,22 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
       items: order.items.map((i) => ({ ...i, nameTh: i.menuItem.nameTh })),
     },
     settings as ReceiptHtmlSettings
-  ));
+  );
+
+  // RawBT (Android tablet → Bluetooth printer): same HTML → image, print, no dialog
+  if (rawbtEnabled()) {
+    try {
+      printImageViaRawbt(await htmlToPng(html));
+      return;
+    } catch (e) { console.error("RawBT print failed", e); }
+  }
+  // Silent serial print (desktop with Web Serial)
+  if (await getGrantedPrinter()) {
+    const ok = await printToSerial(buildReceiptEscPos(toEscPosOrder(order, netTotal, discountAmount), toEscPosSettings(settings)));
+    if (ok) return;
+  }
+  // Fallback: browser print window
+  openPrintWindow(html);
 }
 
 async function printBillGroupReceipt(orders: OrderWithItems[], settings: ReceiptSettings = DEFAULT_RECEIPT) {
@@ -149,27 +147,7 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
   const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
   const orderName = bill ? `ตี้ ${bill.name} · โต๊ะ ${bill.table.number}` : `โต๊ะ ${first.tableId ?? ""}`;
 
-  const escOrder: EscPosOrder = { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems };
-  const escSettings: ReceiptEscPosSettings = {
-    shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
-    showOrderId: false, showDate: settings.showDate, showCustomer: true,
-    showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal,
-    titleSize: settings.titleSize, feedLines: settings.feedLines, headerAlign: settings.headerAlign,
-  };
-
-  if (rawbtEnabled()) {
-    try {
-      printImageViaRawbt(renderLinesPng(buildReceiptLines(escOrder, escSettings), settings.paperWidth));
-      return;
-    } catch (e) { console.error("RawBT print failed", e); }
-  }
-  if (await getGrantedPrinter()) {
-    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
-    if (ok) return;
-  }
-
-  // Fallback: browser print window
-  openPrintWindow(buildReceiptHtml(
+  const html = buildReceiptHtml(
     {
       orderId: first.id,
       orderName,
@@ -178,48 +156,62 @@ async function printBillGroupReceipt(orders: OrderWithItems[], settings: Receipt
       items: allItems,
     },
     settings as ReceiptHtmlSettings
-  ));
-}
-
-async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
-  const escOrder = toEscPosOrder(order, order.totalTHB, 0);
-  const kSettings: KitchenEscPosSettings = { showTable: settings.showTable, showNote: settings.showNote };
+  );
 
   if (rawbtEnabled()) {
     try {
-      printImageViaRawbt(renderLinesPng(buildKitchenLines(escOrder, kSettings), settings.paperWidth));
+      printImageViaRawbt(await htmlToPng(html));
       return;
     } catch (e) { console.error("RawBT print failed", e); }
   }
   if (await getGrantedPrinter()) {
+    const escOrder: EscPosOrder = { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems };
+    const escSettings: ReceiptEscPosSettings = {
+      shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
+      showOrderId: false, showDate: settings.showDate, showCustomer: true,
+      showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal,
+      titleSize: settings.titleSize, feedLines: settings.feedLines, headerAlign: settings.headerAlign,
+    };
+    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
+    if (ok) return;
+  }
+
+  // Fallback: browser print window
+  openPrintWindow(html);
+}
+
+async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
+  const html = buildKitchenHtml(
+    {
+      orderId: order.id,
+      orderName: order.orderName,
+      note: order.note,
+      tableId: order.tableId,
+      items: order.items.map((i) => ({
+        nameTh: i.menuItem.nameTh,
+        quantity: i.quantity,
+        selectedSize: i.selectedSize,
+        selectedAddons: i.selectedAddons,
+        selectedOptions: i.selectedOptions,
+      })),
+    },
+    { paperWidth: settings.paperWidth, showTable: settings.showTable, showNote: settings.showNote }
+  );
+
+  if (rawbtEnabled()) {
+    try {
+      printImageViaRawbt(await htmlToPng(html));
+      return;
+    } catch (e) { console.error("RawBT print failed", e); }
+  }
+  if (await getGrantedPrinter()) {
+    const escOrder = toEscPosOrder(order, order.totalTHB, 0);
+    const kSettings: KitchenEscPosSettings = { showTable: settings.showTable, showNote: settings.showNote };
     const ok = await printToSerial(buildKitchenEscPos(escOrder, kSettings));
     if (ok) return;
   }
   // Fallback: browser print window
-  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
-  const itemsHtml = order.items
-    .map((item) => {
-      const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-      const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
-      const extras = [
-        item.selectedSize ? item.selectedSize : "",
-        addons.length > 0 ? addons.map((a) => a.nameTh).join(", ") : "",
-        options.length > 0 ? options.map((o) => o.choiceName).join(", ") : "",
-      ].filter(Boolean).join(" · ");
-      return `<div style="padding:4px 0;font-size:15px;font-weight:bold">• ${item.menuItem.nameTh} ×${item.quantity}${extras ? `<span style="font-weight:normal;font-size:13px"> (${extras})</span>` : ""}</div>`;
-    })
-    .join("");
-
-  const tableInfo = settings.showTable && order.tableId ? `โต๊ะ ${order.tableId} — ` : "";
-  openPrintWindow(`<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบครัว #${order.id}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:17px;font-weight:900;text-align:center;margin-bottom:4px}.info{font-size:12px;text-align:center;margin-bottom:4px}.divider{border:none;border-top:2px solid #111;margin:6px 0}.note{font-size:13px;margin-top:6px;padding:4px 0;border-top:1px dashed #aaa}@media print{body{width:100%}}</style>
-</head><body>
-<h1>🍳 ใบแจ้งครัว</h1>
-<div class="info">${tableInfo}ออเดอร์ #${order.id}${order.orderName ? ` — ${order.orderName}` : ""}</div>
-<hr class="divider"/>
-${itemsHtml}
-${settings.showNote && order.note ? `<div class="note">📝 ${order.note}</div>` : ""}
-</body></html>`);
+  openPrintWindow(html);
 }
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());

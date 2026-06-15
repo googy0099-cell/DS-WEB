@@ -103,3 +103,50 @@ ${settings.showNote && data.note ? `<div class="note">📝 หมายเหต
 ${data.showPrintButton ? `<button style="display:block;width:100%;margin-top:20px;padding:12px;background:#182a47;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer" onclick="window.print()">🖨️ พิมพ์ / ดาวน์โหลด PDF</button>` : ""}
 </body></html>`;
 }
+
+export interface KitchenHtmlSettings {
+  paperWidth: string;
+  showTable: boolean;
+  showNote: boolean;
+}
+
+export interface KitchenHtmlItem {
+  nameTh: string;
+  quantity: number;
+  selectedSize?: string | null;
+  selectedAddons?: string | null;
+  selectedOptions?: string | null;
+}
+
+export interface KitchenHtmlData {
+  orderId: number;
+  orderName: string | null;
+  note?: string | null;
+  tableId?: number | null;
+  items: KitchenHtmlItem[];
+}
+
+export function buildKitchenHtml(data: KitchenHtmlData, settings: KitchenHtmlSettings): string {
+  const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
+  const itemsHtml = data.items.map((item) => {
+    const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+    const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
+    const extras = [
+      item.selectedSize ? item.selectedSize : "",
+      addons.length > 0 ? addons.map((a) => a.nameTh).join(", ") : "",
+      options.length > 0 ? options.map((o) => o.choiceName).join(", ") : "",
+    ].filter(Boolean).join(" · ");
+    return `<div style="padding:4px 0;font-size:15px;font-weight:bold">• ${item.nameTh} ×${item.quantity}${extras ? `<span style="font-weight:normal;font-size:13px"> (${extras})</span>` : ""}</div>`;
+  }).join("");
+
+  const tableInfo = settings.showTable && data.tableId ? `โต๊ะ ${data.tableId} — ` : "";
+  return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><title>ใบครัว #${data.orderId}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:14px;color:#111;width:${w};margin:0 auto;padding:8px}h1{font-size:17px;font-weight:900;text-align:center;margin-bottom:4px}.info{font-size:12px;text-align:center;margin-bottom:4px}.divider{border:none;border-top:2px solid #111;margin:6px 0}.note{font-size:13px;margin-top:6px;padding:4px 0;border-top:1px dashed #aaa}@media print{body{width:100%}}</style>
+</head><body>
+<h1>🍳 ใบแจ้งครัว</h1>
+<div class="info">${tableInfo}ออเดอร์ #${data.orderId}${data.orderName ? ` — ${data.orderName}` : ""}</div>
+<hr class="divider"/>
+${itemsHtml}
+${settings.showNote && data.note ? `<div class="note">📝 ${data.note}</div>` : ""}
+</body></html>`;
+}
