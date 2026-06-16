@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import useSWR from "swr";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
@@ -217,9 +218,8 @@ async function printKitchen(order: OrderWithItems, settings: KitchenSettings = D
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
-function playDoneChime() {
+function playDoneChime(ctx: AudioContext) {
   try {
-    const ctx = new AudioContext();
     const notes = [880, 1108];
     notes.forEach((freq, i) => {
       const osc = ctx.createOscillator();
@@ -368,6 +368,9 @@ async function showBrowserNotification(orderName: string, total: number | string
 }
 
 export default function OrderQueue() {
+  const { data: session } = useSession();
+  // Dashboard alert sounds ring on the cashier station only
+  const canPlaySound = session?.user?.role === "CASHIER";
   const { data: orders, mutate } = useSWR<OrderWithItems[]>(
     "/api/orders?status=active",
     fetcher,
@@ -703,7 +706,7 @@ export default function OrderQueue() {
       return kitchenItems.length > 0 && kitchenItems.every((i) => !!i.kitchenServedAt);
     });
 
-    if (alertEnabled) {
+    if (alertEnabled && canPlaySound) {
       void (async () => {
         if (newOrders.length > 0) {
           try {
@@ -720,7 +723,11 @@ export default function OrderQueue() {
         }
         if (newKitchenDone.length > 0) {
           const played = await playCustom(kitchenBufRef);
-          if (!played) playDoneChime();
+          if (!played) {
+            if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+            try { if (audioCtxRef.current.state === "suspended") await audioCtxRef.current.resume(); } catch {}
+            playDoneChime(audioCtxRef.current);
+          }
           newKitchenDone.forEach((o) =>
             showBrowserNotification(`✅ อาหารพร้อม`, o.orderName || `#${o.id}`)
           );
@@ -735,11 +742,11 @@ export default function OrderQueue() {
         return kitchenItems.length > 0 && kitchenItems.every((i) => !!i.kitchenServedAt);
       }).map((o) => o.id)
     );
-  }, [orders, alertEnabled]);
+  }, [orders, alertEnabled, canPlaySound]);
 
   // Loop alert sound while there are unacked alert orders — stop when all acked or dismissed
   useEffect(() => {
-    const hasAlerts = alertEnabled && unackedAlertOrderCount > 0;
+    const hasAlerts = alertEnabled && canPlaySound && unackedAlertOrderCount > 0;
 
     // Stop any existing loop
     if (alertLoopRef.current) {
@@ -796,11 +803,11 @@ export default function OrderQueue() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, unackedAlertOrderCount > 0, alertSoundUrl]);
+  }, [alertEnabled, canPlaySound, unackedAlertOrderCount > 0, alertSoundUrl]);
 
   // Loop kitchen chime while food-ready orders are unserved — stop when cleared
   useEffect(() => {
-    const hasReady = alertEnabled && kitchenReadyItems.length > 0;
+    const hasReady = alertEnabled && canPlaySound && kitchenReadyItems.length > 0;
 
     if (kitchenLoopRef.current) {
       try { kitchenLoopRef.current.stop(); } catch {}
@@ -831,11 +838,15 @@ export default function OrderQueue() {
           return;
         } catch {}
       }
-      // Fallback: chime on repeat
+      // Fallback: chime on repeat (reuse the resumed context so tablets aren't
+      // silenced by the autoplay policy — a fresh AudioContext starts suspended)
       if (!cancelled) {
-        playDoneChime();
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
+        const ctx = audioCtxRef.current;
+        try { if (ctx.state === "suspended") await ctx.resume(); } catch {}
+        playDoneChime(ctx);
         fallbackInterval = setInterval(() => {
-          if (!cancelled) playDoneChime();
+          if (!cancelled) playDoneChime(ctx);
         }, 2500);
       }
     }
@@ -851,7 +862,7 @@ export default function OrderQueue() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, kitchenReadyItems.length > 0, kitchenSoundUrl]);
+  }, [alertEnabled, canPlaySound, kitchenReadyItems.length > 0, kitchenSoundUrl]);
 
   function setLoading(id: number, on: boolean) {
     setLoadingIds((prev) => {

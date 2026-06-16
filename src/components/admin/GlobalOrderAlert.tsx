@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import useSWR from "swr";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -71,6 +72,9 @@ export default function GlobalOrderAlert() {
 
 function GlobalOrderAlertInner() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  // Order/kitchen alert sounds ring on the cashier station only
+  const canPlaySound = session?.user?.role === "CASHIER";
   // OrderQueue on /admin handles sounds — GlobalOrderAlert only fires sounds on other pages
   const isBoardPage = pathname === "/admin";
   // Time expiry alerts don't fire on /admin/pos (POS page handles its own)
@@ -245,7 +249,7 @@ function GlobalOrderAlertInner() {
       );
       return;
     }
-    if (!alertEnabled || isBoardPage) {
+    if (!alertEnabled || isBoardPage || !canPlaySound) {
       prevIdsRef.current = new Set(orders.map((o) => o.id));
       prevKitchenDoneRef.current = new Set(
         orders.filter((o) => {
@@ -291,11 +295,11 @@ function GlobalOrderAlertInner() {
     prevKitchenDoneRef.current = new Set(
       orders.filter((o) => o.items.length > 0 && o.items.every((i) => !!i.kitchenServedAt)).map((o) => o.id)
     );
-  }, [orders, alertEnabled]);
+  }, [orders, alertEnabled, canPlaySound]);
 
   // Loop order alert sound while unacked
   useEffect(() => {
-    const hasAlerts = alertEnabled && unackedAlertOrders.length > 0;
+    const hasAlerts = alertEnabled && canPlaySound && unackedAlertOrders.length > 0;
 
     if (alertLoopRef.current) {
       try { alertLoopRef.current.stop(); } catch {}
@@ -341,11 +345,11 @@ function GlobalOrderAlertInner() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, unackedAlertOrders.length > 0, alertSoundUrl]);
+  }, [alertEnabled, canPlaySound, unackedAlertOrders.length > 0, alertSoundUrl]);
 
   // Loop kitchen chime while unserved kitchen-done items
   useEffect(() => {
-    const hasReady = alertEnabled && kitchenReadyItems.length > 0;
+    const hasReady = alertEnabled && canPlaySound && kitchenReadyItems.length > 0;
 
     if (kitchenLoopRef.current) { try { kitchenLoopRef.current.stop(); } catch {} kitchenLoopRef.current = null; }
     if (!hasReady) return;
@@ -388,7 +392,7 @@ function GlobalOrderAlertInner() {
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alertEnabled, kitchenReadyItems.length > 0, kitchenSoundUrl]);
+  }, [alertEnabled, canPlaySound, kitchenReadyItems.length > 0, kitchenSoundUrl]);
 
   // Loop time-up beep while unacked expired sessions
   useEffect(() => {
