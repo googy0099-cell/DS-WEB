@@ -1046,14 +1046,11 @@ export default function AdminSettingsPage() {
                   {rFooter}
                 </div>
 
-                {/* Cut line — the tear guide, sits just above the blank feed */}
-                <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
-                  <div style={{ flex: 1, borderTop: "1.5px dashed #bbb" }} />
-                  <span style={{ fontSize: "13px", color: "#bbb", lineHeight: 1 }}>✂</span>
-                </div>
+                {/* Cut line — clean dashed tear guide, clear gap above */}
+                <div style={{ marginTop: "18px", borderTop: "1px dashed #999" }} />
 
                 {/* Feed space LAST — blank fills the print-head→tear-bar dead zone */}
-                <div style={{ height: `${(rFeedLines + 1) * 20}px` }} />
+                <div style={{ height: `${(rFeedLines + 3) * 20}px` }} />
               </div>
             </div>
           </div>
