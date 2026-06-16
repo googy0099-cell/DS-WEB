@@ -82,6 +82,15 @@ const GROUP_SYSTEM: NavGroup = {
   ],
 };
 
+const GROUP_SYSTEM_CASHIER: NavGroup = {
+  label: "จัดการ",
+  items: [
+    { href: "/admin/analytics", label: "วิเคราะห์ข้อมูล", icon: "analytics" },
+    { href: "/admin/tables", label: "โต๊ะ & QR Code", icon: "tables" },
+    { href: "/admin/settings", label: "การตั้งค่า", icon: "settings" },
+  ],
+};
+
 const GROUP_HR: NavGroup = {
   label: "HR",
   items: [
@@ -114,7 +123,7 @@ export default async function AdminLayout({
       : role === "MANAGER"
       ? [GROUP_HR]
       : role === "CASHIER"
-      ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF]
+      ? [GROUP_DASHBOARD, GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF, GROUP_SYSTEM_CASHIER]
       : [GROUP_SALES, GROUP_MENU, GROUP_GAMES, GROUP_CUSTOMERS_STAFF]),
   ];
 

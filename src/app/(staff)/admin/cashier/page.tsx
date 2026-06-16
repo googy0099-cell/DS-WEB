@@ -513,35 +513,6 @@ export default function CashierPage() {
           </div>
         )}
 
-        {/* Analytics quick links */}
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-sand">
-            <p className="text-sm font-bold text-navy">📊 วิเคราะห์ข้อมูล</p>
-          </div>
-          <div className="p-3 grid grid-cols-3 gap-2">
-            {([
-              { label: "สรุปยอดขาย", icon: "💰", href: "/admin/analytics/sales" },
-              { label: "เมนูขายดี", icon: "🍽️", href: "/admin/analytics/menu" },
-              { label: "Package เวลา", icon: "⏱️", href: "/admin/analytics/gametime" },
-              { label: "รายงานลิ้นชัก", icon: "🏧", href: "/admin/analytics/drawer" },
-              { label: "ประวัติออเดอร์", icon: "📋", href: "/admin/analytics/orders" },
-              { label: "ประวัติปาร์ตี้", icon: "🎮", href: "/admin/analytics/parties" },
-              { label: "ใบเสร็จดิจิตอล", icon: "🧾", href: "/admin/analytics/receipts" },
-              { label: "รายงานจากเก๊ะ", icon: "💳", href: "/admin/analytics/expenses" },
-              { label: "เข้างานพนักงาน", icon: "👥", href: "/admin/analytics/hr-attendance" },
-            ] as const).map(({ label, icon, href }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex flex-col items-center gap-1.5 bg-sand/30 hover:bg-orange/10 rounded-xl py-3 px-1 transition-colors text-center"
-              >
-                <span className="text-xl">{icon}</span>
-                <span className="text-[11px] font-medium text-navy leading-tight">{label}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-
         <div className="text-center">
           <Link href="/admin" className="text-sm text-gray-400 hover:text-navy">← กลับ Dashboard</Link>
         </div>
