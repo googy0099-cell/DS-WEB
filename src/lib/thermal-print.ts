@@ -258,6 +258,22 @@ export function printEscPosViaRawbt(data: Uint8Array): void {
   triggerScheme(`intent:base64,${btoa(bin)}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`);
 }
 
+// ESC/POS "drawer kick" — pulses the cash drawer wired to the printer's RJ11/DK
+// port so it pops open. Routed through whichever transport prints receipts:
+// RawBT on the Android station, Web Serial on desktop. No-op if no printer.
+// If the drawer doesn't open, some models use pin 5 — swap byte 3 to 0x01.
+const DRAWER_KICK = new Uint8Array([0x1b, 0x70, 0x00, 0x19, 0xfa]); // ESC p m=0 t1=25 t2=250
+
+export async function openCashDrawer(): Promise<void> {
+  if (rawbtEnabled()) {
+    printEscPosViaRawbt(DRAWER_KICK);
+    return;
+  }
+  if (await getGrantedPrinter()) {
+    await printToSerial(DRAWER_KICK);
+  }
+}
+
 // --- Serial port helpers ---
 
 function getSerial(): SerialApi | null {

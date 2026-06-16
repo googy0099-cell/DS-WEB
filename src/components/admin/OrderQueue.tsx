@@ -8,7 +8,7 @@ import type { OrderWithItems } from "@/types";
 import { addonLabel } from "@/types";
 import {
   buildReceiptEscPos, buildKitchenEscPos, printToSerial,
-  getGrantedPrinter, rawbtEnabled, htmlToPng, printImageViaRawbt,
+  getGrantedPrinter, rawbtEnabled, htmlToPng, printImageViaRawbt, openCashDrawer,
 } from "@/lib/thermal-print";
 import type { ReceiptEscPosSettings, KitchenEscPosSettings, EscPosOrder } from "@/lib/thermal-print";
 import { buildReceiptHtml, buildKitchenHtml } from "@/lib/receipt-html";
@@ -981,6 +981,7 @@ export default function OrderQueue() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ confirmCash: true, receivedAmount: received, changeAmount: change, ...(discAmt > 0 ? { amountTHB: finalTotal } : {}) }),
     });
+    void openCashDrawer(); // pop the cash drawer on cash received
     setCashOrder(null);
     setCashInputStr("");
     await mutate();
@@ -1111,6 +1112,7 @@ export default function OrderQueue() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memberUserId: null, paymentMethod: "CASH", ...discountBody() }),
       });
+      void openCashDrawer(); // pop the cash drawer on cash received
       setBillGroupCash(null);
       setBillCashInputStr("");
       resetDiscount();
@@ -1148,6 +1150,7 @@ export default function OrderQueue() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", splitCashTHB: snapshot.cashPaid, ...discountBody() }),
       });
+      void openCashDrawer(); // split payment includes a cash leg — pop the drawer
       setBillGroupSplit(null);
       setSplitCashStr("");
       setSplitReceivedStr("");

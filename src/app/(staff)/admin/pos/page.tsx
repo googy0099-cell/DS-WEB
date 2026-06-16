@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
 import { addonLabel } from "@/types";
+import { openCashDrawer } from "@/lib/thermal-print";
 import PartyOrderButton from "@/components/admin/PartyOrderButton";
 
 type MemberRef = { id: number; username: string; memberCode: string; firstName: string; dicePoints: number };
@@ -800,6 +801,7 @@ export default function AdminTimePage() {
       body: JSON.stringify({ paymentMethod: method, items, totalTHB: grandTotal, pendingPlayers, pendingExtras }),
     });
     if (!res.ok) { window.alert("สร้างออเดอร์ไม่สำเร็จ"); return null; }
+    if (method === "CASH") void openCashDrawer(); // pop the cash drawer on cash received
     return await res.json() as { orderId: number; totalTHB: number; qrDataUrl: string | null; accountName: string; bankName: string };
   }
 
@@ -1048,6 +1050,7 @@ export default function AdminTimePage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentMethod: "CASH", items: buildExtendLineItems(), totalTHB: extendTotal(), receivedAmount: received }),
     });
+    void openCashDrawer(); // pop the cash drawer on cash received
     await addExtendTime();
     setSaving(false);
     closeExtendFlow();
@@ -1139,6 +1142,7 @@ export default function AdminTimePage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentMethod: "CASH", items: buildBulkExtendLineItems(), totalTHB: extendAllTotal() }),
     });
+    void openCashDrawer(); // pop the cash drawer on cash received
     await addExtendTimeAll();
     setSaving(false);
     closeExtendAllFlow();

@@ -5,6 +5,7 @@ import useSWR from "swr";
 import Image from "next/image";
 import Link from "next/link";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
+import { openCashDrawer } from "@/lib/thermal-print";
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -56,6 +57,7 @@ export default function AdminPaymentPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paymentId, receivedAmount, changeAmount }),
     });
+    if (receivedAmount != null) void openCashDrawer(); // cash received → pop drawer
     const data = await res.json();
     mutate();
     setCashModal(null);
