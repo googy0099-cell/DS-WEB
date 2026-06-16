@@ -1046,8 +1046,8 @@ export default function AdminSettingsPage() {
                   {rFooter}
                 </div>
 
-                {/* Feed space — adjustable blank gap before the cut line */}
-                <div style={{ height: `${Math.max(0, rFeedLines * (rHtmlFontSize + 2))}px` }} />
+                {/* Feed space — adjustable blank gap before the cut line (+1 base line) */}
+                <div style={{ height: `${(rFeedLines + 1) * 20}px` }} />
 
                 {/* Cut line — closes the receipt, this is where paper is torn */}
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>

@@ -51,14 +51,13 @@ export function buildReceiptHtml(data: ReceiptHtmlData, settings: ReceiptHtmlSet
   const fs = settings.htmlFontSize ?? 13;
   const hAlign = settings.headerAlign ?? "center";
   const logoSz = settings.logoSize ?? 80;
-  // Blank feed before the cut line. Each line is a real white-filled box (not an
-  // empty gap) so it renders as actual white pixels in the html2canvas PNG and the
-  // thermal printer advances the paper through it — pushing content past the
-  // print-head→tear-bar dead zone. Verified with scripts/verify-feed.mjs.
+  // Blank feed before the cut line. Each line is a real white-filled box (~5mm) —
+  // real white pixels in the html2canvas PNG, so the thermal printer advances the
+  // paper through it and pushes content past the print-head→tear-bar dead zone.
+  // One always-on base line guarantees minimum clearance. Verified: scripts/verify-feed.mjs.
   const feedLines = Math.max(0, Math.min(10, settings.feedLines ?? 3));
-  const feedLineH = fs + 2;
-  const feedHtml = Array.from({ length: feedLines },
-    () => `<div style="height:${feedLineH}px;background:#fff"></div>`).join("");
+  const feedHtml = Array.from({ length: feedLines + 1 },
+    () => `<div style="height:20px;background:#fff"></div>`).join("");
 
   const itemsHtml = data.items.map((item) => {
     const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
