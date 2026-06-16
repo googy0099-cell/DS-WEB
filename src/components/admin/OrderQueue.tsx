@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { formatThaiDateTime } from "@/lib/thai-datetime";
 import type { OrderWithItems } from "@/types";
+import { addonLabel } from "@/types";
 import {
   buildReceiptEscPos, buildKitchenEscPos, printToSerial,
   getGrantedPrinter, rawbtEnabled, htmlToPng, printImageViaRawbt,
@@ -2688,7 +2689,7 @@ function BillOrderGroupCard({
               </div>
             )}
             {order.items.map((item) => {
-              const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+              const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
               const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
               return (
                 <div key={item.id} className="flex justify-between text-sm gap-2 py-0.5">
@@ -2703,7 +2704,7 @@ function BillOrderGroupCard({
                           : <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🍳 กำลังทำ</span>
                       )}
                     </div>
-                    {addons.length > 0 && <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>}
+                    {addons.length > 0 && <p className="text-xs text-gray-400">+ {addons.map((a) => addonLabel(a)).join(", ")}</p>}
                     {options.length > 0 && <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>}
                   </div>
                   <span className="text-navy font-semibold shrink-0">฿{item.unitPriceTHB * item.quantity}</span>
@@ -2979,7 +2980,7 @@ function OrderCard({
         {/* Items */}
         <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-2">
           {order.items.filter((item) => !item.cancelledAt).map((item) => {
-            const addons: { nameTh: string }[] = item.selectedAddons
+            const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons
               ? JSON.parse(item.selectedAddons)
               : [];
             const options: { groupName: string; choiceName: string }[] = item.selectedOptions
@@ -3009,7 +3010,7 @@ function OrderCard({
                     )}
                   </div>
                   {addons.length > 0 && (
-                    <p className="text-xs text-gray-400">+ {addons.map((a) => a.nameTh).join(", ")}</p>
+                    <p className="text-xs text-gray-400">+ {addons.map((a) => addonLabel(a)).join(", ")}</p>
                   )}
                   {options.length > 0 && (
                     <p className="text-xs text-gray-400">

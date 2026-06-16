@@ -42,10 +42,20 @@ export default function MenuItemPicker({ item, onClose }: Props) {
   const basePrice = hasSizes
     ? size === "S" ? (item.priceS ?? item.priceTHB) : (item.priceXL ?? item.priceTHB)
     : item.priceTHB;
-  const total = basePrice + addons.reduce((s, a) => s + a.priceTHB, 0) + options.reduce((s, o) => s + o.priceTHB, 0);
+  const total = basePrice + addons.reduce((s, a) => s + a.priceTHB * a.quantity, 0) + options.reduce((s, o) => s + o.priceTHB, 0);
 
-  function toggleAddon(groupId: number, id: number, nameTh: string, priceTHB: number) {
-    setAddons((prev) => prev.some((a) => a.id === id) ? prev.filter((a) => a.id !== id) : [...prev, { id, groupId, nameTh, priceTHB }]);
+  function addonQty(id: number): number {
+    return addons.find((a) => a.id === id)?.quantity ?? 0;
+  }
+
+  function changeAddonQty(groupId: number, id: number, nameTh: string, priceTHB: number, delta: number) {
+    setAddons((prev) => {
+      const existing = prev.find((a) => a.id === id);
+      const next = (existing?.quantity ?? 0) + delta;
+      if (next <= 0) return prev.filter((a) => a.id !== id);
+      if (existing) return prev.map((a) => a.id === id ? { ...a, quantity: next } : a);
+      return [...prev, { id, groupId, nameTh, priceTHB, quantity: next }];
+    });
   }
 
   function selectOption(groupId: number, groupName: string, choiceId: number, choiceName: string, priceTHB: number) {
@@ -112,12 +122,24 @@ export default function MenuItemPicker({ item, onClose }: Props) {
             <p className="text-sm font-semibold text-navy mb-2">{group.nameTh}</p>
             <div className="space-y-2">
               {group.items.filter((i) => i.isActive).map((ai) => {
-                const selected = addons.some((a) => a.id === ai.id);
+                const qty = addonQty(ai.id);
+                const selected = qty > 0;
                 return (
-                  <button key={ai.id} onClick={() => toggleAddon(group.id, ai.id, ai.nameTh, ai.priceTHB)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all ${selected ? "border-orange bg-orange/10" : "border-sand"}`}>
-                    <span className={`text-sm font-medium flex items-center gap-1.5 ${selected ? "text-orange" : "text-navy"}`}>{selected && "✓ "}{ai.nameTh}</span>
-                    <span className="text-sm text-gray-500">+฿{ai.priceTHB}</span>
-                  </button>
+                  <div key={ai.id} className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 transition-all ${selected ? "border-orange bg-orange/10" : "border-sand"}`}>
+                    <span className={`text-sm font-medium ${selected ? "text-orange" : "text-navy"}`}>{ai.nameTh}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-500">+฿{ai.priceTHB}</span>
+                      {selected ? (
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, -1)} className="w-7 h-7 rounded-full bg-orange text-white font-bold flex items-center justify-center leading-none">−</button>
+                          <span className="w-5 text-center text-sm font-bold text-navy">{qty}</span>
+                          <button onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, +1)} className="w-7 h-7 rounded-full bg-orange text-white font-bold flex items-center justify-center leading-none">+</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, +1)} className="w-7 h-7 rounded-full border-2 border-orange text-orange font-bold flex items-center justify-center leading-none">+</button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>

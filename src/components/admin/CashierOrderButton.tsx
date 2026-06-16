@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { MenuItemType, CartSelectedAddon, CartSelectedOption } from "@/types";
+import { addonLabel } from "@/types";
 
 type CartEntry = {
   cartKey: string;
@@ -41,11 +42,21 @@ function ItemDetail({ item, onClose, onAdd }: {
   let basePrice = item.priceTHB;
   if (hasSizes && size === "S" && item.priceS != null) basePrice = item.priceS;
   if (hasSizes && size === "XL" && item.priceXL != null) basePrice = item.priceXL;
-  const total = basePrice + addons.reduce((s, a) => s + a.priceTHB, 0) + options.reduce((s, o) => s + o.priceTHB, 0);
+  const total = basePrice + addons.reduce((s, a) => s + a.priceTHB * a.quantity, 0) + options.reduce((s, o) => s + o.priceTHB, 0);
+
+  function changeAddonQty(groupId: number, id: number, nameTh: string, priceTHB: number, delta: number) {
+    setAddons((prev) => {
+      const existing = prev.find((a) => a.id === id);
+      const next = (existing?.quantity ?? 0) + delta;
+      if (next <= 0) return prev.filter((a) => a.id !== id);
+      if (existing) return prev.map((a) => a.id === id ? { ...a, quantity: next } : a);
+      return [...prev, { id, groupId, nameTh, priceTHB, quantity: next }];
+    });
+  }
 
   function add() {
     const sizeLabel = hasSizes ? ` (${size})` : "";
-    const extras = [...addons.map((a) => a.nameTh), ...options.map((o) => o.choiceName)].filter(Boolean).join(", ");
+    const extras = [...addons.map((a) => addonLabel(a)), ...options.map((o) => o.choiceName)].filter(Boolean).join(", ");
     const fullName = `${item.nameTh}${sizeLabel}${extras ? ` + ${extras}` : ""}`;
     onAdd(fullName, total, hasSizes ? size : null, addons, options);
   }
@@ -72,14 +83,25 @@ function ItemDetail({ item, onClose, onAdd }: {
               <p className="text-sm font-semibold text-navy mb-2">{group.nameTh}</p>
               <div className="space-y-2">
                 {group.items.filter((gi) => gi.isActive).map((ai) => {
-                  const sel = addons.some((a) => a.id === ai.id);
+                  const qty = addons.find((a) => a.id === ai.id)?.quantity ?? 0;
+                  const sel = qty > 0;
                   return (
-                    <button key={ai.id} type="button"
-                      onClick={() => setAddons((prev) => sel ? prev.filter((a) => a.id !== ai.id) : [...prev, { id: ai.id, groupId: group.id, nameTh: ai.nameTh, priceTHB: ai.priceTHB }])}
-                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 ${sel ? "border-orange bg-orange/10" : "border-sand"}`}>
-                      <span className={`text-sm font-medium flex items-center gap-1.5 ${sel ? "text-orange" : "text-navy"}`}>{sel && <span>✓</span>}{ai.nameTh}</span>
-                      <span className="text-sm text-gray-500">+฿{ai.priceTHB}</span>
-                    </button>
+                    <div key={ai.id}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 ${sel ? "border-orange bg-orange/10" : "border-sand"}`}>
+                      <span className={`text-sm font-medium ${sel ? "text-orange" : "text-navy"}`}>{ai.nameTh}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-gray-500">+฿{ai.priceTHB}</span>
+                        {sel ? (
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, -1)} className="w-7 h-7 rounded-full bg-orange text-white font-bold flex items-center justify-center leading-none">−</button>
+                            <span className="w-5 text-center text-sm font-bold text-navy">{qty}</span>
+                            <button type="button" onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, +1)} className="w-7 h-7 rounded-full bg-orange text-white font-bold flex items-center justify-center leading-none">+</button>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => changeAddonQty(group.id, ai.id, ai.nameTh, ai.priceTHB, +1)} className="w-7 h-7 rounded-full border-2 border-orange text-orange font-bold flex items-center justify-center leading-none">+</button>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -264,7 +286,7 @@ export default function CashierOrderButton({ onCreated, initialBillId, initialBi
   }
 
   function addToCart(item: MenuItemType, name: string, price: number, size: string | null, addons: CartSelectedAddon[], options: CartSelectedOption[]) {
-    const cartKey = `${item.id}-${size ?? ""}-${addons.map((a) => a.id).join(",")}-${options.map((o) => o.choiceId).join(",")}`;
+    const cartKey = `${item.id}-${size ?? ""}-${addons.map((a) => `${a.id}x${a.quantity}`).join(",")}-${options.map((o) => o.choiceId).join(",")}`;
     setCart((prev) => {
       const existing = prev.find((c) => c.cartKey === cartKey);
       if (existing) return prev.map((c) => c.cartKey === cartKey ? { ...c, qty: c.qty + 1 } : c);

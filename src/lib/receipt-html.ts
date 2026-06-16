@@ -60,11 +60,11 @@ export function buildReceiptHtml(data: ReceiptHtmlData, settings: ReceiptHtmlSet
     () => `<div style="height:20px;background:#fff"></div>`).join("");
 
   const itemsHtml = data.items.map((item) => {
-    const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+    const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
     const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
     const subtotal = item.unitPriceTHB * item.quantity;
     const extras = [
-      addons.length > 0 ? `+ ${addons.map((a) => a.nameTh).join(", ")}` : "",
+      addons.length > 0 ? `+ ${addons.map((a) => (a.quantity ?? 1) > 1 ? `${a.nameTh} ×${a.quantity}` : a.nameTh).join(", ")}` : "",
       options.length > 0 ? options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ") : "",
     ].filter(Boolean).join(" | ");
     return `<tr>
@@ -138,11 +138,11 @@ export interface KitchenHtmlData {
 export function buildKitchenHtml(data: KitchenHtmlData, settings: KitchenHtmlSettings): string {
   const w = settings.paperWidth === "A4" ? "210mm" : `${settings.paperWidth}mm`;
   const itemsHtml = data.items.map((item) => {
-    const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+    const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
     const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
     const extras = [
       item.selectedSize ? item.selectedSize : "",
-      addons.length > 0 ? addons.map((a) => a.nameTh).join(", ") : "",
+      addons.length > 0 ? addons.map((a) => (a.quantity ?? 1) > 1 ? `${a.nameTh} ×${a.quantity}` : a.nameTh).join(", ") : "",
       options.length > 0 ? options.map((o) => o.choiceName).join(", ") : "",
     ].filter(Boolean).join(" · ");
     return `<div style="padding:4px 0;font-size:15px;font-weight:bold">• ${item.nameTh} ×${item.quantity}${extras ? `<span style="font-weight:normal;font-size:13px"> (${extras})</span>` : ""}</div>`;

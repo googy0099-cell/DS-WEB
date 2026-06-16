@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import ThaiPrice from "@/components/shared/ThaiPrice";
 import { useOrderStore } from "@/store/orderStore";
+import { addonLabel } from "@/types";
 
 type PublicBill = { id: number; name: string; tableNumber: number };
 type SessionLink = { id: number; nickname: string } | null;
@@ -250,7 +251,7 @@ export default function CartDrawer({ tableId, tableNumber, tableSlug, shopClosed
                   </p>
                   {item.selectedAddons.length > 0 && (
                     <p className="text-xs text-gray-400 mt-0.5">
-                      + {item.selectedAddons.map((a) => a.nameTh).join(", ")}
+                      + {item.selectedAddons.map((a) => addonLabel(a)).join(", ")}
                     </p>
                   )}
                   {item.selectedOptions.length > 0 && (

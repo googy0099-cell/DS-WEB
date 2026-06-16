@@ -45,11 +45,11 @@ export async function GET(
   };
 
   const itemsHtml = order.items.map((item) => {
-    const addons: { nameTh: string }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
+    const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
     const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
     const extras = [
       item.selectedSize ?? "",
-      addons.map((a) => a.nameTh).join(", "),
+      addons.map((a) => (a.quantity ?? 1) > 1 ? `${a.nameTh} ×${a.quantity}` : a.nameTh).join(", "),
       options.map((o) => o.choiceName).join(", "),
     ].filter(Boolean).join(" · ");
     return `<tr>

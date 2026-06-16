@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       menuItemId: number;
       quantity: number;
       selectedSize?: string | null;
-      selectedAddons?: { id: number; groupId: number; nameTh: string; priceTHB: number }[];
+      selectedAddons?: { id: number; groupId: number; nameTh: string; priceTHB: number; quantity?: number }[];
       selectedOptions?: { groupId: number; groupName: string; choiceId: number; choiceName: string; priceTHB: number }[];
     }[];
     note?: string;
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     let basePrice = menu.priceTHB;
     if (item.selectedSize === "S" && menu.priceS) basePrice = menu.priceS;
     if (item.selectedSize === "XL" && menu.priceXL) basePrice = menu.priceXL;
-    const addonTotal = (item.selectedAddons ?? []).reduce((s, a) => s + a.priceTHB, 0);
+    const addonTotal = (item.selectedAddons ?? []).reduce((s, a) => s + a.priceTHB * (a.quantity ?? 1), 0);
     const optionTotal = (item.selectedOptions ?? []).reduce((s, o) => s + o.priceTHB, 0);
     return {
       ...item,

@@ -71,8 +71,11 @@ export interface EscPosOrder {
 
 function parseAddons(raw?: string | null): string {
   if (!raw) return "";
-  try { return (JSON.parse(raw) as { nameTh: string }[]).map((a) => a.nameTh).join(", "); }
-  catch { return ""; }
+  try {
+    return (JSON.parse(raw) as { nameTh: string; quantity?: number }[])
+      .map((a) => (a.quantity ?? 1) > 1 ? `${a.nameTh} x${a.quantity}` : a.nameTh)
+      .join(", ");
+  } catch { return ""; }
 }
 
 function parseOptions(raw?: string | null): string {

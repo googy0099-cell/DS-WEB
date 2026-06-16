@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import useSWR from "swr";
 import type { OrderWithItems } from "@/types";
+import { addonLabel } from "@/types";
 
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -228,7 +229,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
         // Number only counts active (non-cancelled) items
         const activeIdx = activeQueueItems.indexOf(qi);
         const isFirst = !qi.cancelled && activeIdx === 0;
-        const addons: { nameTh: string }[] = qi.selectedAddons ? JSON.parse(qi.selectedAddons) : [];
+        const addons: { nameTh: string; quantity?: number }[] = qi.selectedAddons ? JSON.parse(qi.selectedAddons) : [];
         const options: { groupName: string; choiceName: string }[] = qi.selectedOptions ? JSON.parse(qi.selectedOptions) : [];
 
         if (qi.cancelled) {
@@ -312,7 +313,7 @@ export default function KitchenQueue({ type }: { type: "food" | "drink" }) {
                 <div className="flex flex-col gap-0.5 mt-0.5">
                   {addons.map((a, i) => (
                     <span key={i} className="text-sm font-semibold text-emerald-700">
-                      + {a.nameTh}
+                      + {addonLabel(a)}
                     </span>
                   ))}
                 </div>

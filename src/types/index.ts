@@ -37,6 +37,14 @@ export interface CartSelectedAddon {
   groupId: number;
   nameTh: string;
   priceTHB: number;
+  quantity: number;
+}
+
+// Single source of truth for how an add-on is shown everywhere (cart, kitchen,
+// receipt, POS). Older orders stored no quantity, so treat missing as 1.
+export function addonLabel(a: { nameTh: string; quantity?: number }): string {
+  const q = a.quantity ?? 1;
+  return q > 1 ? `${a.nameTh} ×${q}` : a.nameTh;
 }
 
 export interface CartSelectedOption {
