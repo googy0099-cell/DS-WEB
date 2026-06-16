@@ -957,101 +957,21 @@ export default function AdminSettingsPage() {
             <label className="text-sm font-semibold text-navy block mb-2">
               ตัวอย่างใบเสร็จ <span className="font-normal text-gray-400">(58mm · อัปเดต real-time)</span>
             </label>
+            {/* Render the EXACT print HTML (buildReceiptHtml) in an iframe so the
+                preview can never drift from the printed receipt — same source. */}
             <div className="flex justify-center bg-gray-200 rounded-xl py-6 px-3 overflow-x-auto">
-              <div
+              <iframe
+                title="ตัวอย่างใบเสร็จ"
+                srcDoc={sampleReceiptHtml()}
                 style={{
-                  width: "220px",
-                  minWidth: "220px",
-                  padding: "10px 8px 0",
-                  fontFamily: "'Sarabun', 'Helvetica Neue', Arial, sans-serif",
-                  fontSize: `${rHtmlFontSize}px`,
-                  color: "#111",
+                  width: "230px",
+                  minWidth: "230px",
+                  height: `${520 + (rFeedLines + 3) * 20}px`,
+                  border: "none",
                   background: "#fff",
                   boxShadow: "0 3px 16px rgba(0,0,0,0.18)",
                 }}
-              >
-                {/* Logo */}
-                {rLogoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={rLogoUrl} alt="logo"
-                    style={{ display: "block", maxWidth: `${rLogoSize}px`, maxHeight: `${rLogoSize}px`, margin: "0 auto 4px", objectFit: "contain" }} />
-                )}
-
-                {/* Shop name */}
-                <div style={{
-                  textAlign: rHeaderAlign,
-                  fontWeight: "bold",
-                  fontSize: `${rTitleSize === "double" ? rHtmlFontSize * 2 : rHtmlFontSize}px`,
-                  lineHeight: 1.2,
-                  marginBottom: "1px",
-                }}>
-                  {rShopName || "ชื่อร้าน"}
-                </div>
-
-                {/* Shop info + label */}
-                {rShopInfo && (
-                  <div style={{ textAlign: rHeaderAlign, fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, color: "#555" }}>
-                    {rShopInfo}
-                  </div>
-                )}
-                <div style={{ textAlign: rHeaderAlign, fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, marginBottom: "3px" }}>
-                  ใบเสร็จรับเงิน
-                </div>
-
-                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
-
-                {/* Order info */}
-                <div style={{ fontSize: `${Math.round(rHtmlFontSize * 0.92)}px`, marginBottom: "2px" }}>
-                  {rShowCustomer && <div>ออเดอร์: ทดสอบระบบ</div>}
-                  {rShowOrderId  && <div>เลขที่: #999</div>}
-                  {rShowDate     && <div>วันที่: {new Date().toLocaleDateString("th-TH")}</div>}
-                </div>
-
-                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
-
-                {/* Items */}
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span>ชาไทย (XL) x2</span>
-                    {rShowItemPrice && <span>฿110</span>}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span>กาแฟ x1</span>
-                    {rShowItemPrice && <span>฿40</span>}
-                  </div>
-                </div>
-
-                {/* Total */}
-                {rShowTotal && (
-                  <>
-                    <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", fontSize: `${Math.round(rHtmlFontSize * 1.1)}px` }}>
-                      <span>รวม</span>
-                      <span>฿150</span>
-                    </div>
-                  </>
-                )}
-
-                {/* Note */}
-                {rShowNote && (
-                  <>
-                    <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
-                    <div style={{ fontSize: `${Math.round(rHtmlFontSize * 0.85)}px` }}>หมายเหตุ: ไม่ใส่น้ำตาล</div>
-                  </>
-                )}
-
-                {/* Footer */}
-                <div style={{ borderTop: "1px dashed #aaa", margin: "3px 0" }} />
-                <div style={{ textAlign: "center", fontSize: `${Math.round(rHtmlFontSize * 0.85)}px`, color: "#777" }}>
-                  {rFooter}
-                </div>
-
-                {/* Cut line — clean dashed tear guide, clear gap above */}
-                <div style={{ marginTop: "18px", borderTop: "1px dashed #999" }} />
-
-                {/* Feed space LAST — blank fills the print-head→tear-bar dead zone */}
-                <div style={{ height: `${(rFeedLines + 3) * 20}px` }} />
-              </div>
+              />
             </div>
           </div>
 
