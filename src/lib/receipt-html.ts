@@ -107,8 +107,8 @@ ${settings.showTotal ? `<tfoot>${
 </table>
 ${settings.showNote && data.note ? `<div class="note">📝 หมายเหตุ: ${data.note}</div>` : ""}
 <div class="footer">${settings.footer}</div>
-${feedHtml}
 <hr class="cut-line"/>
+${feedHtml}
 ${data.showPrintButton ? `<button style="display:block;width:100%;margin-top:20px;padding:12px;background:#182a47;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer" onclick="window.print()">🖨️ พิมพ์ / ดาวน์โหลด PDF</button>` : ""}
 </body></html>`;
 }

@@ -1046,14 +1046,14 @@ export default function AdminSettingsPage() {
                   {rFooter}
                 </div>
 
-                {/* Feed space — adjustable blank gap before the cut line (+1 base line) */}
-                <div style={{ height: `${(rFeedLines + 1) * 20}px` }} />
-
-                {/* Cut line — closes the receipt, this is where paper is torn */}
+                {/* Cut line — the tear guide, sits just above the blank feed */}
                 <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
                   <div style={{ flex: 1, borderTop: "1.5px dashed #bbb" }} />
                   <span style={{ fontSize: "13px", color: "#bbb", lineHeight: 1 }}>✂</span>
                 </div>
+
+                {/* Feed space LAST — blank fills the print-head→tear-bar dead zone */}
+                <div style={{ height: `${(rFeedLines + 1) * 20}px` }} />
               </div>
             </div>
           </div>
