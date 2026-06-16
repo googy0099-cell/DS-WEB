@@ -1046,14 +1046,14 @@ export default function AdminSettingsPage() {
                   {rFooter}
                 </div>
 
-                {/* Cut line — appears right after footer, matching actual receipt HTML */}
-                <div style={{ display: "flex", alignItems: "center", gap: "4px", margin: "6px 0 0" }}>
+                {/* Feed space — adjustable blank gap before the cut line */}
+                <div style={{ height: `${Math.max(0, rFeedLines * (rHtmlFontSize + 2))}px` }} />
+
+                {/* Cut line — closes the receipt, this is where paper is torn */}
+                <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "2px" }}>
                   <div style={{ flex: 1, borderTop: "1.5px dashed #bbb" }} />
                   <span style={{ fontSize: "13px", color: "#bbb", lineHeight: 1 }}>✂</span>
                 </div>
-
-                {/* Feed space below cut line — controlled by feedLines setting */}
-                <div style={{ height: `${Math.max(4, rFeedLines * (rHtmlFontSize + 2))}px` }} />
               </div>
             </div>
           </div>

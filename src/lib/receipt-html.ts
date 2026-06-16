@@ -82,7 +82,7 @@ export function buildReceiptHtml(data: ReceiptHtmlData, settings: ReceiptHtmlSet
   ].filter(Boolean).join("");
 
   return `<!DOCTYPE html><html lang="th"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>ใบเสร็จ #${data.orderId}</title>
-<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0 auto;padding:3mm 4mm 0}.logo{display:block;max-width:${logoSz}px;max-height:${logoSz}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs * 1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs * 0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}.receipt-no{text-align:center;font-size:11px;color:#999;margin-bottom:4px;letter-spacing:0.05em}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs * 1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(fs * 0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(fs * 0.85)}px;color:#777;margin-top:6px}.cut-line{margin-top:10px;border:none;border-top:1px dashed #999;position:relative;text-align:center}.cut-line::after{content:'✂';position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 4px;font-size:12px;color:#999}.feed{color:#fff;font-size:1px;overflow:hidden}@media print{button{display:none}}</style>
+<style>@page{margin:0;size:${w} auto}*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Sarabun','Helvetica Neue',Arial,sans-serif;font-size:${fs}px;color:#111;width:${w};margin:0 auto;padding:3mm 4mm 0}.logo{display:block;max-width:${logoSz}px;max-height:${logoSz}px;margin:0 auto 4px;object-fit:contain}h1{font-size:${Math.round(fs * 1.4)}px;font-weight:900;text-align:${hAlign};margin-bottom:2px}.sub{font-size:${Math.round(fs * 0.85)}px;text-align:${hAlign};color:#555;margin-bottom:4px}.divider{border:none;border-top:1px dashed #aaa;margin:4px 0}.receipt-no{text-align:center;font-size:11px;color:#999;margin-bottom:4px;letter-spacing:0.05em}table{width:100%;border-collapse:collapse}.total-row td{font-weight:bold;font-size:${Math.round(fs * 1.15)}px;padding-top:4px;border-top:1px dashed #aaa}.note{font-size:${Math.round(fs * 0.92)}px;margin-top:4px}.footer{text-align:center;font-size:${Math.round(fs * 0.85)}px;color:#777;margin-top:6px}.cut-line{margin-top:2px;border:none;border-top:1px dashed #999;position:relative;text-align:center}.cut-line::after{content:'✂';position:absolute;top:-9px;left:50%;transform:translateX(-50%);background:#fff;padding:0 4px;font-size:12px;color:#999}.feed{color:#fff;font-size:1px;overflow:hidden}@media print{button{display:none}}</style>
 </head><body>
 ${settings.logoUrl ? `<img src="${settings.logoUrl}" class="logo" alt="logo"/>` : ""}
 <h1>${settings.logoUrl ? "" : "🎲 "}${settings.shopName}</h1>
@@ -107,8 +107,8 @@ ${settings.showTotal ? `<tfoot>${
 </table>
 ${settings.showNote && data.note ? `<div class="note">📝 หมายเหตุ: ${data.note}</div>` : ""}
 <div class="footer">${settings.footer}</div>
-<hr class="cut-line"/>
 ${feedHtml}
+<hr class="cut-line"/>
 ${data.showPrintButton ? `<button style="display:block;width:100%;margin-top:20px;padding:12px;background:#182a47;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer" onclick="window.print()">🖨️ พิมพ์ / ดาวน์โหลด PDF</button>` : ""}
 </body></html>`;
 }
