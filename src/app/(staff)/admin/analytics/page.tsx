@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 
 const MODULES = [
   {
@@ -35,6 +36,7 @@ const MODULES = [
     desc: "ประวัติการเปิด/ปิดลิ้นชักเงินสด",
     color: "bg-blue-50 border-blue-200",
     iconBg: "bg-blue-100 text-blue-700",
+    ownerOnly: true,
   },
   {
     href: "/admin/analytics/orders",
@@ -51,6 +53,7 @@ const MODULES = [
     desc: "ข้อมูลตี้, ผู้เล่น, แพ็กเกจ, รายได้รวมแต่ละงาน",
     color: "bg-rose-50 border-rose-200",
     iconBg: "bg-rose-100 text-rose-600",
+    ownerOnly: true,
   },
   {
     href: "/admin/analytics/receipts",
@@ -67,6 +70,7 @@ const MODULES = [
     desc: "บันทึกซื้อของเข้าร้านและพนักงานออกเงินก่อน พร้อมรูปหลักฐาน",
     color: "bg-amber-50 border-amber-200",
     iconBg: "bg-amber-100 text-amber-700",
+    ownerOnly: true,
   },
   {
     href: "/admin/analytics/hr-attendance",
@@ -75,6 +79,7 @@ const MODULES = [
     desc: "สรุปการเข้างานรายเดือนต่อคน: ตรงเวลา/สาย/ออกก่อน/รวมชั่วโมง",
     color: "bg-indigo-50 border-indigo-200",
     iconBg: "bg-indigo-100 text-indigo-700",
+    ownerOnly: true,
   },
 ];
 
@@ -94,6 +99,9 @@ function startOfMonthBKK() {
 }
 
 export default function AnalyticsHubPage() {
+  const { data: session } = useSession();
+  const isOwner = session?.user?.role === "OWNER";
+  const visibleModules = MODULES.filter((m) => isOwner || !("ownerOnly" in m));
   const [from, setFrom] = useState(startOfMonthBKK());
   const [to, setTo] = useState(todayBKK());
   const [uploading, setUploading] = useState(false);
@@ -149,7 +157,7 @@ export default function AnalyticsHubPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-3 mb-8">
-        {MODULES.map((m) => (
+        {visibleModules.map((m) => (
           <Link key={m.href} href={m.href}
             className={`flex items-center gap-4 p-5 rounded-2xl border bg-white shadow-sm hover:shadow-md transition-shadow ${m.color}`}>
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shrink-0 ${m.iconBg}`}>
@@ -164,7 +172,8 @@ export default function AnalyticsHubPage() {
         ))}
       </div>
 
-      {/* Export section */}
+      {/* Export section — owner only (bundles owner-only data + Drive upload) */}
+      {isOwner && (
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-sand/50">
         <h2 className="font-bold text-navy mb-1">ดาวน์โหลดข้อมูล</h2>
         <p className="text-xs text-gray-400 mb-4">เลือกช่วงวันที่แล้วดาวน์โหลดเป็น CSV หรืออัปโหลดขึ้น Google Drive เป็น Google Sheets</p>
@@ -245,6 +254,7 @@ export default function AnalyticsHubPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

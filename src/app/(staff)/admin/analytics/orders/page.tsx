@@ -19,7 +19,11 @@ function formatBKK(iso: string) {
   return `${d.slice(8, 10)}/${d.slice(5, 7)} ${d.slice(11, 16)}`;
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("fetch failed");
+  return r.json();
+};
 
 const STATUS_LABELS: Record<string, string> = {
   PENDING: "รอดำเนินการ",

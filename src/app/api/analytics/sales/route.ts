@@ -5,7 +5,7 @@ import { computeRevenue, parseDateRange, addDays } from "@/lib/revenue";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "OWNER") {
+  if (!session?.user?.role || !["OWNER", "CASHIER"].includes(session.user.role)) {
     return NextResponse.json({ error: "ไม่มีสิทธิ์" }, { status: 403 });
   }
 

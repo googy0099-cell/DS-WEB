@@ -14,7 +14,11 @@ function addDays(d: string, n: number) {
   return dt.toISOString().slice(0, 10);
 }
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("fetch failed");
+  return r.json();
+};
 const RANKS = ["🥇", "🥈", "🥉"];
 
 type PackageItem = { menuItemId: number; nameTh: string; qty: number; total: number };

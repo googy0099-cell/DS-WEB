@@ -58,7 +58,11 @@ const PERIODS = [
   { label: "เดือนนี้", getRange: () => [startOfMonthBKK(), todayBKK()] as [string, string] },
 ];
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error("fetch failed");
+  return r.json();
+};
 
 type Receipt = {
   id: number;
