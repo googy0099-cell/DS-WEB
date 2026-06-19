@@ -132,56 +132,6 @@ async function printReceipt(order: OrderWithItems, settings: ReceiptSettings = D
   openPrintWindow(html);
 }
 
-async function printBillGroupReceipt(orders: OrderWithItems[], settings: ReceiptSettings = DEFAULT_RECEIPT) {
-  if (orders.length === 0) return;
-  const first = orders[0];
-  const bill = first.bill;
-  const allItems = orders.flatMap((o) =>
-    o.items.map((i) => ({
-      nameTh: i.menuItem.nameTh,
-      selectedSize: i.selectedSize,
-      selectedAddons: i.selectedAddons,
-      selectedOptions: i.selectedOptions,
-      quantity: i.quantity,
-      unitPriceTHB: i.unitPriceTHB,
-    }))
-  );
-  const totalTHB = orders.reduce((s, o) => s + o.totalTHB, 0);
-  const orderName = bill ? `ตี้ ${bill.name} · โต๊ะ ${bill.table.number}` : `โต๊ะ ${first.tableId ?? ""}`;
-
-  const html = buildReceiptHtml(
-    {
-      orderId: first.id,
-      orderName,
-      totalTHB,
-      dateStr: formatThaiDateTime(first.createdAt),
-      items: allItems,
-    },
-    settings as ReceiptHtmlSettings
-  );
-
-  if (rawbtEnabled()) {
-    try {
-      printImageViaRawbt(await htmlToPng(html));
-      return;
-    } catch (e) { console.error("RawBT print failed", e); }
-  }
-  if (await getGrantedPrinter()) {
-    const escOrder: EscPosOrder = { id: first.id, orderName, totalTHB, note: null, createdAt: first.createdAt, tableId: first.tableId, items: allItems };
-    const escSettings: ReceiptEscPosSettings = {
-      shopName: settings.shopName, shopInfo: settings.shopInfo, footer: settings.footer,
-      showOrderId: false, showDate: settings.showDate, showCustomer: true,
-      showNote: false, showItemPrice: settings.showItemPrice, showTotal: settings.showTotal,
-      titleSize: settings.titleSize, feedLines: settings.feedLines, headerAlign: settings.headerAlign,
-    };
-    const ok = await printToSerial(buildReceiptEscPos(escOrder, escSettings));
-    if (ok) return;
-  }
-
-  // Fallback: browser print window
-  openPrintWindow(html);
-}
-
 async function printKitchen(order: OrderWithItems, settings: KitchenSettings = DEFAULT_KITCHEN) {
   const html = buildKitchenHtml(
     {
@@ -462,21 +412,24 @@ export default function OrderQueue() {
   const [cashOrder, setCashOrder] = useState<OrderWithItems | null>(null);
   const [cashInputStr, setCashInputStr] = useState("");
 
-  // Bill group cash modal (multiple TAB orders from same bill)
+  // Combined-checkout modal: settle a manually-selected set of orders at once
   const [billGroupCash, setBillGroupCash] = useState<{
-    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+    billName: string; orders: OrderWithItems[]; total: number;
   } | null>(null);
   const [billCashInputStr, setBillCashInputStr] = useState("");
   const [billGroupCashLoading, setBillGroupCashLoading] = useState(false);
   const [billGroupScan, setBillGroupScan] = useState<{
-    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+    billName: string; orders: OrderWithItems[]; total: number;
   } | null>(null);
   const [billScanLoading, setBillScanLoading] = useState(false);
   // Split payment modal (cash portion first, then scan for remainder)
   const [billGroupSplit, setBillGroupSplit] = useState<{
-    billId: number; billName: string; orders: OrderWithItems[]; total: number;
+    billName: string; orders: OrderWithItems[]; total: number;
     step: "cash-portion" | "cash-received" | "scan"; cashPaid: number;
   } | null>(null);
+  // Combined-checkout selection mode (merge unpaid order cards)
+  const [mergeMode, setMergeMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [splitCashStr, setSplitCashStr] = useState("");
   const [splitReceivedStr, setSplitReceivedStr] = useState("");
   const [splitLoading, setSplitLoading] = useState(false);
@@ -601,18 +554,8 @@ export default function OrderQueue() {
     return m === "CASH" || m === "PROMPTPAY" || m === "TAB";
   }) ?? []).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // TAB+billId pending orders grouped by bill (shown as a single grouped card)
-  const pendingBillGroupsMap = new Map<number, OrderWithItems[]>();
-  const regularPendingOrders: OrderWithItems[] = [];
-  for (const order of pendingOrders) {
-    if (order.billId && order.payment?.method === "TAB") {
-      const grp = pendingBillGroupsMap.get(order.billId) ?? [];
-      grp.push(order);
-      pendingBillGroupsMap.set(order.billId, grp);
-    } else {
-      regularPendingOrders.push(order);
-    }
-  }
+  // Each pending order shows as its own card — no grouping by bill/party
+  const regularPendingOrders = pendingOrders;
 
   // Orders that still need immediate staff action (alert beeps for these)
   // Cashier counter orders (handledById set) are excluded — staff created them intentionally
@@ -931,34 +874,47 @@ export default function OrderQueue() {
     });
   }
 
-  async function purgeBill(billId: number) {
-    try {
-      await fetch(`/api/pos/bills/${billId}/purge`, { method: "DELETE" });
-      await Promise.all([mutate(), mutateTodayOrders()]);
-    } catch (e) {
-      console.error("purgeBill failed", e);
-    }
+  function exitMergeMode() {
+    setMergeMode(false);
+    setSelectedIds(new Set());
   }
 
-  function handlePurge(orderId: number, billId?: number | null) {
-    const hasBill = !!billId;
-    setConfirmAction({
-      message: "⚠️ ทำลายข้อมูลถาวร?",
-      detail: hasBill
-        ? "บิล ออเดอร์ทั้งหมด เซสชันผู้เล่น ใบเสร็จ และการชำระเงินจะถูกลบออกจากระบบถาวร"
-        : "ออเดอร์ รายการ และการชำระเงินจะถูกลบออกจากระบบถาวร",
-      confirmLabel: "ยืนยัน — ขั้นที่ 1",
-      confirmColor: "bg-red-500 text-white",
-      onConfirm: () => {
-        setConfirmAction({
-          message: "⛔ ยืนยันอีกครั้ง",
-          detail: "ข้อมูลทั้งหมดจะหายถาวร ไม่สามารถกู้คืนได้",
-          confirmLabel: "ทำลายเลย",
-          confirmColor: "bg-red-700 text-white",
-          onConfirm: () => hasBill ? purgeBill(billId!) : deleteOrder(orderId),
-        });
-      },
+  function toggleSelect(order: OrderWithItems) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(order.id)) next.delete(order.id);
+      else next.add(order.id);
+      return next;
     });
+  }
+
+  // An order is eligible for combined checkout when it has an unpaid payment row
+  function isMergeable(o: OrderWithItems): boolean {
+    return o.payment?.status === "PENDING";
+  }
+
+  function openMergeCash(selected: OrderWithItems[]) {
+    const total = selected.reduce((s, o) => s + o.totalTHB, 0);
+    ackAlertOrders(selected.map((o) => o.id));
+    setBillGroupCash({ billName: `รวม ${selected.length} ออเดอร์`, orders: selected, total });
+    setBillCashInputStr("");
+    resetDiscount();
+  }
+
+  function openMergeScan(selected: OrderWithItems[]) {
+    const total = selected.reduce((s, o) => s + o.totalTHB, 0);
+    ackAlertOrders(selected.map((o) => o.id));
+    setBillGroupScan({ billName: `รวม ${selected.length} ออเดอร์`, orders: selected, total });
+    resetDiscount();
+  }
+
+  function openMergeSplit(selected: OrderWithItems[]) {
+    const total = selected.reduce((s, o) => s + o.totalTHB, 0);
+    ackAlertOrders(selected.map((o) => o.id));
+    setBillGroupSplit({ billName: `รวม ${selected.length} ออเดอร์`, orders: selected, total, step: "cash-portion", cashPaid: 0 });
+    setSplitCashStr("");
+    setSplitReceivedStr("");
+    resetDiscount();
   }
 
   function openCashModal(order: OrderWithItems) {
@@ -988,30 +944,6 @@ export default function OrderQueue() {
     setLoading(order.id, false);
   }
 
-  async function handleBillGroupConfirm(grpOrders: OrderWithItems[]) {
-    const ids = grpOrders.map((o) => o.id);
-    setLoadingIds((prev) => new Set([...prev, ...ids]));
-    try {
-      await Promise.all(
-        grpOrders.map((o) =>
-          fetch(`/api/orders/${o.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: "CONFIRMED" }),
-          })
-        )
-      );
-      ackAlertOrders(ids);
-      await mutate();
-    } finally {
-      setLoadingIds((prev) => {
-        const next = new Set(prev);
-        ids.forEach((id) => next.delete(id));
-        return next;
-      });
-    }
-  }
-
   function calcDiscountAmount(total: number): number {
     const n = Number(discount.value);
     if (!n || n <= 0) return 0;
@@ -1033,21 +965,6 @@ export default function OrderQueue() {
 
   function removeOrderDiscount(orderId: number) {
     setOrderDiscounts((prev) => { const n = { ...prev }; delete n[orderId]; return n; });
-  }
-
-  function openDiscountModal(orders: OrderWithItems[]) {
-    const bill = orders[0].bill;
-    const total = orders.reduce((s, o) => s + o.totalTHB, 0);
-    if (bill?.discountType && bill?.discountValue) {
-      setDiscountPickType(bill.discountType as "PERCENT" | "FIXED");
-      setDiscountPickValue(String(bill.discountValue));
-      setDiscountPickNote(bill.discountNote ?? "");
-    } else {
-      setDiscountPickType("FIXED");
-      setDiscountPickValue("");
-      setDiscountPickNote("");
-    }
-    setDiscountModal({ billId: bill?.id ?? orders[0].billId!, billName: bill?.name ?? "", total, currentAmount: bill?.discountAmount ?? null });
   }
 
   async function applyBillDiscount() {
@@ -1107,15 +1024,16 @@ export default function OrderQueue() {
     const snapshot = billGroupCash;
     setBillGroupCashLoading(true);
     try {
-      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
+      await fetch(`/api/pos/orders/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "CASH", ...discountBody() }),
+        body: JSON.stringify({ orderIds: snapshot.orders.map((o) => o.id), memberUserId: null, paymentMethod: "CASH", ...discountBody() }),
       });
       void openCashDrawer(); // pop the cash drawer on cash received
       setBillGroupCash(null);
       setBillCashInputStr("");
       resetDiscount();
+      exitMergeMode();
       await mutate();
     } finally {
       setBillGroupCashLoading(false);
@@ -1127,13 +1045,14 @@ export default function OrderQueue() {
     const snapshot = billGroupScan;
     setBillScanLoading(true);
     try {
-      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
+      await fetch(`/api/pos/orders/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", ...discountBody() }),
+        body: JSON.stringify({ orderIds: snapshot.orders.map((o) => o.id), memberUserId: null, paymentMethod: "PROMPTPAY", ...discountBody() }),
       });
       setBillGroupScan(null);
       resetDiscount();
+      exitMergeMode();
       await mutate();
     } finally {
       setBillScanLoading(false);
@@ -1145,16 +1064,17 @@ export default function OrderQueue() {
     const snapshot = billGroupSplit;
     setSplitLoading(true);
     try {
-      await fetch(`/api/pos/bills/${snapshot.billId}/tab-checkout`, {
+      await fetch(`/api/pos/orders/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ memberUserId: null, paymentMethod: "PROMPTPAY", splitCashTHB: snapshot.cashPaid, ...discountBody() }),
+        body: JSON.stringify({ orderIds: snapshot.orders.map((o) => o.id), memberUserId: null, paymentMethod: "PROMPTPAY", splitCashTHB: snapshot.cashPaid, ...discountBody() }),
       });
       void openCashDrawer(); // split payment includes a cash leg — pop the drawer
       setBillGroupSplit(null);
       setSplitCashStr("");
       setSplitReceivedStr("");
       resetDiscount();
+      exitMergeMode();
       await mutate();
     } finally {
       setSplitLoading(false);
@@ -1264,36 +1184,14 @@ export default function OrderQueue() {
     }
   }
 
+  // Each active order shows as its own card — no grouping by bill/party.
+  // Staff can manually select unpaid cards to settle together (merge mode).
   const activeOrders = (orders?.filter((o) => o.status !== "PENDING") ?? [])
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-  // Group CONFIRMED+TAB orders from the same bill into one card
-  const billTabGroupsMap = new Map<number, OrderWithItems[]>();
-  const standaloneActive: OrderWithItems[] = [];
-  for (const order of activeOrders) {
-    if (order.billId && order.payment?.method === "TAB" && order.status === "CONFIRMED") {
-      const grp = billTabGroupsMap.get(order.billId) ?? [];
-      grp.push(order);
-      billTabGroupsMap.set(order.billId, grp);
-    } else {
-      standaloneActive.push(order);
-    }
-  }
-
-  type ActiveDisplayItem =
-    | { kind: "group"; billId: number; orders: OrderWithItems[]; ts: number }
-    | { kind: "single"; order: OrderWithItems; ts: number };
-
-  const activeDisplayItems: ActiveDisplayItem[] = [
-    ...[...billTabGroupsMap.entries()].map(([billId, orders]) => ({
-      kind: "group" as const, billId, orders,
-      ts: Math.max(...orders.map((o) => new Date(o.createdAt).getTime())),
-    })),
-    ...standaloneActive.map((order) => ({
-      kind: "single" as const, order,
-      ts: new Date(order.createdAt).getTime(),
-    })),
-  ].sort((a, b) => b.ts - a.ts);
+  // Selected orders for combined checkout (across pending + active)
+  const selectedOrders = (orders ?? []).filter((o) => selectedIds.has(o.id));
+  const selectedTotal = selectedOrders.reduce((s, o) => s + o.totalTHB, 0);
 
   if (!orders) return <div className="text-center py-8 text-gray-400">กำลังโหลด...</div>;
 
@@ -1333,6 +1231,42 @@ export default function OrderQueue() {
         </button>
       )}
 
+      {/* Combined-checkout (merge) toggle */}
+      <button
+        onClick={() => (mergeMode ? exitMergeMode() : setMergeMode(true))}
+        className={`w-full flex items-center justify-center gap-2 font-bold py-2.5 rounded-xl text-sm transition-colors ${
+          mergeMode ? "bg-gray-200 text-gray-600 hover:bg-gray-300" : "bg-orange/10 text-orange hover:bg-orange/20 border border-orange/30"
+        }`}
+      >
+        {mergeMode ? "✖ ยกเลิกการรวมบิล" : "🧾 รวมหลายออเดอร์เก็บเงินทีเดียว"}
+      </button>
+
+      {/* Combined-checkout action bar (sticky) — shows while orders are selected */}
+      {mergeMode && selectedOrders.length > 0 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 bg-white border-t border-sand shadow-[0_-4px_16px_rgba(0,0,0,0.08)] px-4 py-3">
+          <div className="max-w-2xl mx-auto space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-bold text-navy">เลือก {selectedOrders.length} ออเดอร์</span>
+              <span className="font-black text-orange text-lg">฿{selectedTotal.toLocaleString()}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => openMergeCash(selectedOrders)}
+                className="flex flex-col items-center gap-0.5 bg-green-600 hover:bg-green-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+                <span className="text-lg">💵</span>เงินสด
+              </button>
+              <button onClick={() => openMergeScan(selectedOrders)}
+                className="flex flex-col items-center gap-0.5 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+                <span className="text-lg">📷</span>สแกน QR
+              </button>
+              <button onClick={() => openMergeSplit(selectedOrders)}
+                className="flex flex-col items-center gap-0.5 bg-violet-600 hover:bg-violet-700 text-white font-bold py-2.5 rounded-xl text-sm transition-colors">
+                <span className="text-lg">✂️</span>แบ่งจ่าย
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ออเดอร์ใหม่ PENDING */}
       {pendingOrders.length > 0 && (
         <div>
@@ -1343,58 +1277,18 @@ export default function OrderQueue() {
             รอรับออเดอร์
           </h3>
           <div className="space-y-3">
-            {/* Grouped pending TAB+bill orders — accept all at once */}
-            {[...pendingBillGroupsMap.entries()].map(([billId, grpOrders]) => {
-              const bill = grpOrders[0]?.bill;
-              const total = grpOrders.reduce((s, o) => s + o.totalTHB, 0);
-              const allItems = grpOrders.flatMap((o) => o.items);
-              const isLoading = grpOrders.some((o) => loadingIds.has(o.id));
-              return (
-                <div key={`pbill-${billId}`} className="bg-white rounded-2xl shadow-sm border-l-4 border-orange overflow-hidden">
-                  <div className="p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <div>
-                        <span className="font-bold text-navy">ตี้ {bill?.name ?? billId}</span>
-                        {bill?.table && <span className="text-sm text-gray-400 ml-1">· โต๊ะ {bill.table.number}</span>}
-                      </div>
-                      <span className="bg-orange/10 text-orange text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
-                        {grpOrders.length} ออเดอร์ใหม่
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-2">รวมบิล TAB · ฿{total.toLocaleString()}</p>
-                    <div className="space-y-0.5 mb-3">
-                      {allItems.slice(0, 6).map((item) => (
-                        <p key={item.id} className="text-xs text-gray-600">
-                          • {item.menuItem.nameTh}{item.selectedSize ? ` (${item.selectedSize})` : ""} ×{item.quantity}
-                        </p>
-                      ))}
-                      {allItems.length > 6 && (
-                        <p className="text-xs text-gray-400">+ อีก {allItems.length - 6} รายการ</p>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleBillGroupConfirm(grpOrders)}
-                      disabled={isLoading}
-                      className="w-full bg-green-500 text-white font-bold py-2.5 rounded-xl text-sm hover:bg-green-600 disabled:opacity-50 transition-colors"
-                    >
-                      {isLoading ? "กำลังรับออเดอร์..." : `✅ รับออเดอร์ทั้งหมด (${grpOrders.length} ออเดอร์)`}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Regular pending orders (CASH / PROMPTPAY / TAB without bill) */}
             {regularPendingOrders.map((order) => (
               <OrderCard
                 key={order.id}
                 order={order}
                 isNew
                 isLoading={loadingIds.has(order.id)}
+                selectable={mergeMode && isMergeable(order)}
+                selected={selectedIds.has(order.id)}
+                onToggleSelect={toggleSelect}
                 onUpdate={handleUpdate}
                 onEdit={openEdit}
                 onDelete={handleDelete}
-                onPurge={handlePurge}
                 onPrint={(o) => printReceipt(o, receiptSettings)}
                 onSplitOrder={(o) => { setOrderSplit({ order: o, step: "cash-portion", cashPaid: 0 }); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
                 onKitchen={(o) => printKitchen(o, kitchenSettings)}
@@ -1419,98 +1313,41 @@ export default function OrderQueue() {
       )}
 
       {/* ออเดอร์กำลังดำเนินการ */}
-      {activeDisplayItems.length > 0 && (
+      {activeOrders.length > 0 && (
         <div>
           <h3 className="font-bold text-navy mb-3">กำลังดำเนินการ</h3>
           <div className="space-y-3">
-            {activeDisplayItems.map((item) =>
-              item.kind === "group" ? (
-                <BillOrderGroupCard
-                  key={`bill-${item.billId}`}
-                  orders={item.orders}
-                  servedAcked={servedAcked}
-                  onServeAck={markServedAck}
-                  isLoading={item.orders.some((o) => loadingIds.has(o.id))}
-                  onOpenCashModal={(orders) => {
-                    ackAlertOrders(orders.map((o) => o.id));
-                    setBillGroupCash({
-                      billId: orders[0].billId!,
-                      billName: orders[0].bill?.name ?? "",
-                      orders,
-                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
-                    });
-                    setBillCashInputStr("");
-                    const b = orders[0].bill;
-                    if (b?.discountType && b?.discountValue) {
-                      setDiscount({ type: b.discountType as "PERCENT" | "FIXED", value: String(b.discountValue), note: b.discountNote ?? "" });
-                    } else { resetDiscount(); }
-                  }}
-                  onScanCheckout={(orders) => {
-                    ackAlertOrders(orders.map((o) => o.id));
-                    setBillGroupScan({
-                      billId: orders[0].billId!,
-                      billName: orders[0].bill?.name ?? "",
-                      orders,
-                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
-                    });
-                    const b = orders[0].bill;
-                    if (b?.discountType && b?.discountValue) {
-                      setDiscount({ type: b.discountType as "PERCENT" | "FIXED", value: String(b.discountValue), note: b.discountNote ?? "" });
-                    } else { resetDiscount(); }
-                  }}
-                  onSplitCheckout={(orders) => {
-                    ackAlertOrders(orders.map((o) => o.id));
-                    setBillGroupSplit({
-                      billId: orders[0].billId!,
-                      billName: orders[0].bill?.name ?? "",
-                      orders,
-                      total: orders.reduce((s, o) => s + o.totalTHB, 0),
-                      step: "cash-portion",
-                      cashPaid: 0,
-                    });
-                    setSplitCashStr("");
-                    setSplitReceivedStr("");
-                    resetDiscount();
-                  }}
-                  onSetDiscount={openDiscountModal}
-                  onRemoveDiscount={removeBillDiscount}
-                  onPurgeBill={(billId) => handlePurge(0, billId)}
-                  kitchenItemAcked={kitchenItemAcked}
-                  onAckKitchenItems={ackKitchenItems}
-                  onPrintReceipt={(orders) => void printBillGroupReceipt(orders, receiptSettings)}
-                  onEdit={openEdit}
-                  onCancelOrder={(id) => handleUpdate(id, "CANCELLED")}
-                />
-              ) : (
-                <OrderCard
-                  key={item.order.id}
-                  order={item.order}
-                  isNew={false}
-                  isLoading={loadingIds.has(item.order.id)}
-                  onUpdate={handleUpdate}
-                  onEdit={openEdit}
-                  onDelete={handleDelete}
-                  onPurge={handlePurge}
-                  onPrint={(o) => printReceipt(o, receiptSettings)}
-                  onSplitOrder={(o) => { setOrderSplit({ order: o, step: "cash-portion", cashPaid: 0 }); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
-                  onKitchen={(o) => printKitchen(o, kitchenSettings)}
-                  kitchenEnabled={kitchenSettings.enabled}
-                  onOpenCashModal={openCashModal}
-                  onConfirmQr={confirmQrPayment}
-                  onChooseScan={chooseScan}
-                  onResetPayment={resetPaymentMethod}
-                  qrUrl={qrMap[item.order.id]}
-                  servedAcked={servedAcked}
-                  onServeAck={markServedAck}
-                  kitchenItemAcked={kitchenItemAcked}
-                  onAckKitchenItems={ackKitchenItems}
-                  onOpenSlip={setSlipLightbox}
-                  onSetOrderDiscount={openOrderDiscountModal}
-                  onRemoveOrderDiscount={removeOrderDiscount}
-                  orderDiscountAmount={orderDiscounts[item.order.id]?.amount}
-                />
-              )
-            )}
+            {activeOrders.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                isNew={false}
+                isLoading={loadingIds.has(order.id)}
+                selectable={mergeMode && isMergeable(order)}
+                selected={selectedIds.has(order.id)}
+                onToggleSelect={toggleSelect}
+                onUpdate={handleUpdate}
+                onEdit={openEdit}
+                onDelete={handleDelete}
+                onPrint={(o) => printReceipt(o, receiptSettings)}
+                onSplitOrder={(o) => { setOrderSplit({ order: o, step: "cash-portion", cashPaid: 0 }); setOrderSplitCashStr(""); setOrderSplitReceivedStr(""); }}
+                onKitchen={(o) => printKitchen(o, kitchenSettings)}
+                kitchenEnabled={kitchenSettings.enabled}
+                onOpenCashModal={openCashModal}
+                onConfirmQr={confirmQrPayment}
+                onChooseScan={chooseScan}
+                onResetPayment={resetPaymentMethod}
+                qrUrl={qrMap[order.id]}
+                servedAcked={servedAcked}
+                onServeAck={markServedAck}
+                kitchenItemAcked={kitchenItemAcked}
+                onAckKitchenItems={ackKitchenItems}
+                onOpenSlip={setSlipLightbox}
+                onSetOrderDiscount={openOrderDiscountModal}
+                onRemoveOrderDiscount={removeOrderDiscount}
+                orderDiscountAmount={orderDiscounts[order.id]?.amount}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -1544,70 +1381,7 @@ export default function OrderQueue() {
             {!todayOrders || todayOrders.length === 0 ? (
               <p className="text-center text-gray-400 py-6 text-sm">ยังไม่มีออเดอร์ที่เสร็จแล้ววันนี้</p>
             ) : (() => {
-              // Group orders by billId (same bill → one card)
-              const billHistoryMap = new Map<number, OrderWithItems[]>();
-              const standaloneHistory: OrderWithItems[] = [];
-              for (const order of todayOrders) {
-                if (order.billId) {
-                  const grp = billHistoryMap.get(order.billId) ?? [];
-                  grp.push(order);
-                  billHistoryMap.set(order.billId, grp);
-                } else {
-                  standaloneHistory.push(order);
-                }
-              }
-              const historyItems = [
-                ...[...billHistoryMap.entries()].map(([billId, grpOrders]) => ({
-                  kind: "billGroup" as const, billId, orders: grpOrders,
-                  ts: Math.max(...grpOrders.map((o) => new Date(o.createdAt).getTime())),
-                })),
-                ...standaloneHistory.map((order) => ({
-                  kind: "single" as const, order,
-                  ts: new Date(order.createdAt).getTime(),
-                })),
-              ].sort((a, b) => b.ts - a.ts);
-
-              return historyItems.map((item) => {
-                if (item.kind === "billGroup") {
-                  const { orders: grpOrders } = item;
-                  const bill = grpOrders[0]?.bill;
-                  const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
-                  const totalTHB = grpOrders.reduce((s, o) => s + o.totalTHB, 0);
-                  const allItems = grpOrders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
-                  return (
-                    <div key={`hist-bill-${item.billId}`} className="bg-white rounded-xl p-4 shadow-sm opacity-80">
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <span className={`inline-block font-black text-sm px-2.5 py-0.5 rounded-full ${bc.bg} ${bc.text} mb-1`}>
-                            ตี้ {bill?.name}
-                          </span>
-                          <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {grpOrders.length} ออเดอร์</p>
-                          <p className="text-xs text-gray-400">{formatThaiDateTime(grpOrders[0].createdAt)}</p>
-                        </div>
-                        <p className="font-bold text-navy">฿{totalTHB.toLocaleString()}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-2 space-y-1">
-                        {allItems.slice(0, 8).map((item, i) => (
-                          <div key={i} className="flex justify-between text-xs text-gray-600">
-                            <span>{item.menuItem.nameTh}{item.selectedSize ? ` (${item.selectedSize})` : ""} ×{item.quantity}</span>
-                            <span>฿{item.unitPriceTHB * item.quantity}</span>
-                          </div>
-                        ))}
-                        {allItems.length > 8 && <p className="text-xs text-gray-400">+ อีก {allItems.length - 8} รายการ</p>}
-                        <div className="border-t border-gray-200 pt-1 flex justify-between text-sm font-bold text-navy">
-                          <span>รวมทั้งหมด</span>
-                          <span>฿{totalTHB.toLocaleString()}</span>
-                        </div>
-                      </div>
-                      <div className="mt-2 flex gap-3">
-                        <button onClick={() => void printBillGroupReceipt(grpOrders, receiptSettings)} className="text-xs text-gray-500 hover:text-gray-700">
-                          🖨️ พิมพ์ใบเสร็จรวมบิล
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
-                const { order } = item;
+              return todayOrders.map((order) => {
                 return (
                   <div key={order.id} className="bg-white rounded-xl p-4 shadow-sm opacity-80">
                     <div className="flex items-start justify-between mb-2">
@@ -1770,7 +1544,7 @@ export default function OrderQueue() {
         return (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
-              <h3 className="font-bold text-navy text-lg text-center">รับเงินสด — ตี้ {billGroupCash.billName}</h3>
+              <h3 className="font-bold text-navy text-lg text-center">รับเงินสด — {billGroupCash.billName}</h3>
               <p className="text-xs text-center text-gray-400">{billGroupCash.orders.length} ออเดอร์รวมกัน</p>
 
               {/* Discount section */}
@@ -1869,7 +1643,7 @@ export default function OrderQueue() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
             <h3 className="font-bold text-navy text-lg text-center">📷 ยืนยันการสแกน</h3>
-            <p className="text-sm text-center text-gray-500">ตี้ {billGroupScan.billName} · {billGroupScan.orders.length} ออเดอร์</p>
+            <p className="text-sm text-center text-gray-500">{billGroupScan.billName} · {billGroupScan.orders.length} ออเดอร์</p>
 
             {/* Discount section */}
             <div className="bg-gray-50 rounded-2xl p-3 space-y-2">
@@ -1955,7 +1729,7 @@ export default function OrderQueue() {
           return (
             <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
               <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
-                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — {billGroupSplit.billName}</h3>
                 <p className="text-xs text-center text-gray-400">{billGroupSplit.orders.length} ออเดอร์รวมกัน</p>
 
                 {/* Discount */}
@@ -2063,7 +1837,7 @@ export default function OrderQueue() {
           return (
             <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 overflow-y-auto">
               <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-3 my-4">
-                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+                <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — {billGroupSplit.billName}</h3>
 
                 <div className="bg-green-50 border border-green-200 rounded-xl p-3 text-center">
                   <p className="text-xs text-green-600">ยอดเงินสด</p>
@@ -2128,7 +1902,7 @@ export default function OrderQueue() {
         return (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-6 w-full max-w-xs shadow-2xl space-y-4">
-              <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — ตี้ {billGroupSplit.billName}</h3>
+              <h3 className="font-bold text-navy text-lg text-center">💵📷 แบ่งจ่าย — {billGroupSplit.billName}</h3>
 
               <div className="flex gap-2">
                 <div className="flex-1 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
@@ -2349,7 +2123,7 @@ export default function OrderQueue() {
         return (
           <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
             <div className="bg-white rounded-3xl p-5 w-full max-w-xs shadow-2xl space-y-4">
-              <h3 className="font-bold text-navy text-lg text-center">💸 ส่วนลด — ตี้ {discountModal.billName}</h3>
+              <h3 className="font-bold text-navy text-lg text-center">💸 ส่วนลด{discountModal.billName ? ` — ${discountModal.billName}` : ""}</h3>
 
               {/* Presets */}
               {discountPresets.length > 0 && (
@@ -2610,253 +2384,6 @@ export default function OrderQueue() {
   );
 }
 
-function BillOrderGroupCard({
-  orders,
-  servedAcked,
-  onServeAck,
-  isLoading,
-  onOpenCashModal,
-  onScanCheckout,
-  onSplitCheckout,
-  kitchenItemAcked,
-  onAckKitchenItems,
-  onPrintReceipt,
-  onEdit,
-  onCancelOrder,
-  onSetDiscount,
-  onRemoveDiscount,
-  onPurgeBill,
-}: {
-  orders: OrderWithItems[];
-  servedAcked: Set<number>;
-  onServeAck: (id: number) => void;
-  isLoading: boolean;
-  onOpenCashModal: (orders: OrderWithItems[]) => void;
-  onScanCheckout: (orders: OrderWithItems[]) => void;
-  onSplitCheckout: (orders: OrderWithItems[]) => void;
-  kitchenItemAcked: Set<number>;
-  onAckKitchenItems: (itemIds: number[]) => void;
-  onPrintReceipt: (orders: OrderWithItems[]) => void;
-  onEdit: (order: OrderWithItems) => void;
-  onCancelOrder: (id: number) => void;
-  onSetDiscount: (orders: OrderWithItems[]) => void;
-  onRemoveDiscount: (billId: number) => void;
-  onPurgeBill: (billId: number) => void;
-}) {
-  const first = orders[0];
-  const bill = first.bill;
-  const bc = BILL_COLOR_MAP[bill?.color ?? "indigo"] ?? BILL_COLOR_MAP.indigo;
-  const rawTotal = orders.reduce((s, o) => s + o.totalTHB, 0);
-  const discountAmt = bill?.discountAmount ?? 0;
-  const totalTHB = rawTotal - discountAmt;
-  const allItems = orders.flatMap((o) => o.items.filter((i) => !i.cancelledAt));
-  const kitchenDone = isKitchenDone(allItems);
-  const allServedAcked = orders.every((o) => servedAcked.has(o.id));
-  // Items in this bill that are kitchen-done but not yet acknowledged
-  const unackedReadyItems = allItems.filter((i) => i.kitchenServedAt && !kitchenItemAcked.has(i.id));
-
-  // Sort orders newest first within the group
-  const sorted = [...orders].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  return (
-    <div className="bg-white rounded-xl shadow-sm border-2 border-transparent p-4">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex-1 min-w-0 pr-2">
-          <span className={`inline-block font-black text-base px-3 py-0.5 rounded-full ${bc.bg} ${bc.text} mb-1`}>
-            ตี้ {bill?.name}
-          </span>
-          <p className="text-xs text-gray-400">โต๊ะ {bill?.table.number} · {orders.length} ออเดอร์รวมกัน</p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-semibold px-2 py-1 rounded-full border bg-amber-100 text-amber-800 border-amber-300">
-            🧾 รอชำระรวม
-          </span>
-        </div>
-      </div>
-
-      {/* All items from all orders */}
-      <div className="bg-gray-50 rounded-xl p-3 mb-3 space-y-3">
-        {sorted.map((order, oi) => (
-          <div key={order.id}>
-            {orders.length > 1 && (
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">
-                  ออเดอร์ {oi + 1} · 👤 {order.orderName} · {formatThaiDateTime(order.createdAt)}
-                </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => onEdit(order)}
-                    className="text-[10px] font-semibold text-gray-400 hover:text-navy border border-gray-200 rounded-lg px-1.5 py-0.5"
-                  >
-                    ✏️ แก้ไข
-                  </button>
-                  {(order.status === "PENDING" || order.status === "CONFIRMED") && (
-                    <button
-                      onClick={() => onCancelOrder(order.id)}
-                      className="text-[10px] font-semibold text-red-400 hover:text-red-600 border border-red-100 rounded-lg px-1.5 py-0.5"
-                    >
-                      ❌ ยกเลิก
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {order.items.map((item) => {
-              const addons: { nameTh: string; quantity?: number }[] = item.selectedAddons ? JSON.parse(item.selectedAddons) : [];
-              const options: { groupName: string; choiceName: string }[] = item.selectedOptions ? JSON.parse(item.selectedOptions) : [];
-              return (
-                <div key={item.id} className="flex justify-between text-sm gap-2 py-0.5">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-gray-800 font-medium">{item.menuItem.nameTh}</span>
-                      {item.selectedSize && <span className="text-xs bg-orange/10 text-orange px-1.5 py-0.5 rounded-full">{item.selectedSize}</span>}
-                      <span className="text-gray-400">×{item.quantity}</span>
-                      {item.menuItem.queueTarget !== "none" && (
-                        item.kitchenServedAt
-                          ? <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">✅ พร้อม</span>
-                          : <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">🍳 กำลังทำ</span>
-                      )}
-                    </div>
-                    {addons.length > 0 && <p className="text-xs text-gray-400">+ {addons.map((a) => addonLabel(a)).join(", ")}</p>}
-                    {options.length > 0 && <p className="text-xs text-gray-400">{options.map((o) => `${o.groupName}: ${o.choiceName}`).join(", ")}</p>}
-                  </div>
-                  <span className="text-navy font-semibold shrink-0">฿{item.unitPriceTHB * item.quantity}</span>
-                </div>
-              );
-            })}
-            {order.note && (
-              <p className="text-xs text-orange bg-orange/10 rounded-lg px-2 py-1 mt-1">📝 {order.note}</p>
-            )}
-          </div>
-        ))}
-        {discountAmt > 0 && (
-          <div className="flex justify-between items-center text-sm text-green-600 font-semibold pt-1">
-            <span className="flex items-center gap-1">
-              💸 {bill?.discountNote || "ส่วนลด"}
-              <button onClick={() => onRemoveDiscount(bill!.id)} className="text-xs text-red-400 hover:text-red-600 ml-1">✕</button>
-            </span>
-            <span>− ฿{discountAmt.toLocaleString()}</span>
-          </div>
-        )}
-        <div className="border-t border-gray-200 pt-1.5 flex justify-between font-black text-navy text-base">
-          <span>รวมทั้งหมด</span>
-          <span>฿{totalTHB.toLocaleString()}</span>
-        </div>
-      </div>
-
-      {/* Discount button */}
-      <button
-        onClick={() => onSetDiscount(orders)}
-        disabled={isLoading}
-        className={`w-full flex items-center justify-center gap-2 font-semibold py-2 rounded-xl text-sm mb-2 border transition-colors disabled:opacity-40 ${
-          discountAmt > 0
-            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-            : "bg-orange/10 border-orange/20 text-orange hover:bg-orange/20"
-        }`}
-      >
-        💸 {discountAmt > 0 ? `ส่วนลด ฿${discountAmt.toLocaleString()} — แก้ไข` : "เพิ่มส่วนลด"}
-      </button>
-
-      {/* Per-item kitchen-done acknowledgment — dismiss alert as items complete */}
-      {unackedReadyItems.length > 0 && (
-        <div className="mb-2">
-          <button
-            onClick={() => onAckKitchenItems(unackedReadyItems.map((i) => i.id))}
-            className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-500 text-navy font-bold py-2.5 rounded-xl text-sm transition-colors"
-          >
-            🔔 รับทราบ ({unackedReadyItems.length} เมนูพร้อม) — หยุดเสียงแจ้งเตือน
-          </button>
-        </div>
-      )}
-
-      {/* Confirm serve — required for all bill groups */}
-      <div className="mb-2">
-        {!allServedAcked ? (
-          <button
-            onClick={() => orders.forEach((o) => onServeAck(o.id))}
-            className={`w-full flex items-center justify-center gap-2 font-bold py-3 rounded-xl text-sm transition-colors ${
-              kitchenDone
-                ? "bg-green-500 hover:bg-green-600 text-white"
-                : "bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300"
-            }`}
-          >
-            🍽️ {kitchenDone ? "ยืนยันการเสิร์ฟ (ครบทุกเมนูแล้ว)" : "ยืนยันการเสิร์ฟ"}
-          </button>
-        ) : (
-          <div className="flex items-center justify-center gap-2 bg-green-50 border border-green-200 rounded-xl py-2.5 text-sm text-green-700 font-semibold">
-            ✅ เสิร์ฟถึงโต๊ะแล้ว
-          </div>
-        )}
-      </div>
-
-      {/* Payment — 3 buttons in one row, consistent with the single-order card */}
-      <div className="grid grid-cols-3 gap-2">
-        <button
-          onClick={() => onOpenCashModal(orders)}
-          disabled={isLoading}
-          className="flex flex-col items-center gap-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-        >
-          <span className="text-xl">💵</span>เงินสด
-        </button>
-        <button
-          onClick={() => onScanCheckout(orders)}
-          disabled={isLoading}
-          className="flex flex-col items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-        >
-          <span className="text-xl">📷</span>{isLoading ? "..." : "สแกน"}
-        </button>
-        <button
-          onClick={() => onSplitCheckout(orders)}
-          disabled={isLoading}
-          className="flex flex-col items-center gap-1 bg-violet-600 hover:bg-violet-700 text-white font-bold py-3 rounded-xl text-sm disabled:opacity-60 transition-colors"
-        >
-          <span className="text-xl">✂️</span>แบ่งจ่าย
-        </button>
-      </div>
-
-      {/* Print receipt */}
-      <button
-        onClick={() => onPrintReceipt(orders)}
-        className="mt-2 w-full flex items-center justify-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl text-sm transition-colors"
-      >
-        🖨️ พิมพ์ใบเสร็จรวมบิล
-      </button>
-
-      {/* Secondary actions — edit + cancel (single-order bill groups only) */}
-      {orders.length === 1 && (orders[0].status === "PENDING" || orders[0].status === "CONFIRMED") && (
-        <div className="flex gap-2 mt-2">
-          <button
-            onClick={() => onEdit(orders[0])}
-            disabled={isLoading}
-            className="flex-1 bg-gray-50 text-gray-600 border border-gray-200 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
-          >
-            ✏️ แก้ไข
-          </button>
-          <button
-            onClick={() => onCancelOrder(orders[0].id)}
-            disabled={isLoading}
-            className="flex-1 bg-red-50 text-red-600 text-sm font-medium py-2 rounded-xl disabled:opacity-40"
-          >
-            ❌ ยกเลิก
-          </button>
-        </div>
-      )}
-      {/* Purge bill — test only */}
-      {first.billId && (
-        <button
-          onClick={() => onPurgeBill(first.billId!)}
-          disabled={isLoading}
-          className="mt-1 w-full flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100 border border-red-100 text-red-400 hover:text-red-700 text-xs font-medium py-2 rounded-xl disabled:opacity-40 transition-colors"
-          title="ทำลายบิลทั้งหมด (สำหรับทดสอบ)"
-        >
-          ⛔ ทำลายบิลนี้ออกจากระบบ
-        </button>
-      )}
-    </div>
-  );
-}
-
 function OrderCard({
   order,
   isNew,
@@ -2864,8 +2391,10 @@ function OrderCard({
   onUpdate,
   onEdit,
   onDelete,
-  onPurge,
   onPrint,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
   onSplitOrder,
   onKitchen,
   kitchenEnabled,
@@ -2889,8 +2418,10 @@ function OrderCard({
   onUpdate: (id: number, status: string) => void;
   onEdit: (order: OrderWithItems) => void;
   onDelete: (id: number) => void;
-  onPurge: (id: number, billId?: number | null) => void;
   onPrint: (order: OrderWithItems) => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (order: OrderWithItems) => void;
   onSplitOrder: (order: OrderWithItems) => void;
   onKitchen: (order: OrderWithItems) => void;
   kitchenEnabled: boolean;
@@ -2917,7 +2448,6 @@ function OrderCard({
   const isPending = order.status === "PENDING";
   const method = order.payment?.method;
   const hasSlip = !!order.payment?.slipUrl;
-  const activeItems = order.items.filter((i) => !i.cancelledAt);
   const kitchenDone = isKitchenDone(order.items);
   // Discount to show: live preview (just entered, not yet paid) OR persisted (after payment)
   const discAmount = orderDiscountAmount ?? order.discountAmount ?? 0;
@@ -2933,16 +2463,30 @@ function OrderCard({
   const isCashPay = isConfirmed && method === "CASH";
   const isQrSlip = isConfirmed && method === "PROMPTPAY" && hasSlip;
   const isQrNoSlip = isConfirmed && method === "PROMPTPAY" && !hasSlip;
-  // TAB order linked to a bill → pays via bill checkout, NOT per-order buttons
-  const isTabOrder = method === "TAB" && isConfirmed && !order.billId;
-  const isBillTab = method === "TAB" && isConfirmed && !!order.billId;
+  // TAB orders (pay-at-checkout) settle individually here, or via combined checkout
+  const isTabOrder = method === "TAB" && isConfirmed;
 
   return (
     <div
       className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
+        selected ? "border-orange ring-2 ring-orange/30" :
         isNew ? "border-yellow-400 shadow-yellow-100 shadow-lg" : "border-transparent"
       }`}
     >
+      {selectable && (
+        <button
+          onClick={() => onToggleSelect?.(order)}
+          className={`w-full flex items-center gap-2 px-4 py-2.5 rounded-t-xl text-sm font-bold transition-colors ${
+            selected ? "bg-orange text-white" : "bg-orange/10 text-orange hover:bg-orange/20"
+          }`}
+        >
+          <span className={`w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 ${
+            selected ? "bg-white border-white text-orange" : "border-orange"
+          }`}>{selected ? "✓" : ""}</span>
+          {selected ? "เลือกแล้ว — แตะเพื่อเอาออก" : "แตะเพื่อเลือกเก็บเงินรวม"}
+          <span className="ml-auto">฿{order.totalTHB.toLocaleString()}</span>
+        </button>
+      )}
       {isNew && (
         <div className={`text-xs font-bold text-center py-1 rounded-t-xl animate-pulse ${
           isPendingCash ? "bg-indigo-500 text-white" :
@@ -3101,7 +2645,7 @@ function OrderCard({
         })()}
 
         {/* Confirm serve — required for ALL CONFIRMED/PAID orders */}
-        {(order.status === "CONFIRMED" || order.status === "PAID") && !isBillTab && (
+        {(order.status === "CONFIRMED" || order.status === "PAID") && (
           <div className="mb-2">
             {!servedAcked.has(order.id) ? (
               <button
@@ -3184,12 +2728,6 @@ function OrderCard({
           >
             {isLoading ? "กำลังบันทึก..." : `✅ ยืนยันสลิป ฿${(order.payment?.amountTHB ?? order.totalTHB).toLocaleString()}`}
           </button>
-        ) : isBillTab ? (
-          // TAB order linked to a bill — payment happens at bill checkout, not here
-          <div className="mb-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center text-sm text-amber-700">
-            <p className="font-semibold">🧾 รวมในบิลตี้ {order.bill?.name}</p>
-            <p className="text-xs text-amber-500 mt-0.5">ชำระรวมตอนเช็กเอาท์ตี้</p>
-          </div>
         ) : isTabOrder ? (
           <div className="mb-2 space-y-2">
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center text-xs text-amber-700">
@@ -3411,14 +2949,6 @@ function OrderCard({
             title="ลบออเดอร์"
           >
             🗑️
-          </button>
-          <button
-            onClick={() => onPurge(order.id, order.billId)}
-            disabled={isLoading}
-            className="bg-red-50 text-red-400 border border-red-100 text-xs px-2 py-2 rounded-xl disabled:opacity-40 hover:text-red-700 hover:border-red-300"
-            title={order.billId ? "ทำลายบิลทั้งหมด" : "ลบออเดอร์นี้"}
-          >
-            ⛔
           </button>
         </div>
       </div>
