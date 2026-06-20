@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { Users, Clock, ChevronLeft } from "lucide-react";
 import Navbar from "@/components/shared/Navbar";
+import GameChat from "@/components/games/GameChat";
 import { renderMarkdown } from "@/lib/game-markdown";
 
 const DIFFICULTY_MAP: Record<string, { label: string; color: string }> = {
@@ -167,6 +168,8 @@ export default function GameDetailPage() {
           </div>
         </div>
       </div>
+
+      <GameChat gameId={game.id} gameName={game.nameTh} />
     </>
   );
 }
