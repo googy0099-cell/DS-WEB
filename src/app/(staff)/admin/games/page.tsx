@@ -439,11 +439,17 @@ export default function AdminGamesPage() {
     setSaving(true);
     const payload = { ...editing, tags: JSON.stringify(selectedTags) };
     const method = editing.id ? "PATCH" : "POST";
-    await fetch("/api/games", {
+    const res = await fetch("/api/games", {
       method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      alert(err?.error || `บันทึกไม่สำเร็จ (${res.status}) กรุณาลองใหม่`);
+      setSaving(false);
+      return;
+    }
     await mutate();
     closeModal();
     setSaving(false);

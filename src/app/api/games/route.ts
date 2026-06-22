@@ -30,9 +30,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(games);
 }
 
+// อนุญาตทุก role ที่เข้าหน้า /admin/games ได้ (ตรงกับ guard ใน admin/layout.tsx) — ต้องรวม CASHIER + MANAGER
+const ADMIN_ROLES = ["CASHIER", "STAFF", "MANAGER", "OWNER"];
 async function requireAdmin() {
   const session = await auth();
-  if (!session?.user || (session.user.role !== "STAFF" && session.user.role !== "OWNER")) return null;
+  if (!session?.user || !ADMIN_ROLES.includes(session.user.role ?? "")) return null;
   return session;
 }
 
