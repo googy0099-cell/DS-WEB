@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import db from "@/lib/db";
 
 // ผู้ช่วยสอนเกม (RAG) — ตอบโดยอ้างอิงเฉพาะ "คู่มือเกม" ที่ร้านกรอกไว้เท่านั้น ห้ามเดา/แต่งกติกาเอง
 export const runtime = "nodejs";
 
-const MODEL = "claude-haiku-4-5";
+const MODEL = "gemini-2.5-flash";
 const MAX_TURNS = 12; // จำกัดประวัติแชทกันยาวเกิน/ค่าใช้จ่ายบาน
 const MAX_CHARS = 2000; // จำกัดความยาวข้อความต่อครั้ง
 
@@ -35,10 +35,10 @@ ${manual}
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return Response.json(
-      { error: "ระบบแชทยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า ANTHROPIC_API_KEY)" },
+      { error: "ระบบแชทยังไม่พร้อมใช้งาน (ยังไม่ได้ตั้งค่า GEMINI_API_KEY)" },
       { status: 503 },
     );
   }
@@ -70,21 +70,32 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return new Response(msg, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
 
-  const client = new Anthropic({ apiKey });
+  const ai = new GoogleGenAI({ apiKey });
   const system = buildSystemPrompt(game, manual);
+
+  // แปลงประวัติแชทเป็นรูปแบบ contents ของ Gemini (assistant -> model)
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const encoder = new TextEncoder();
       try {
-        const ms = client.messages.stream({
+        const res = await ai.models.generateContentStream({
           model: MODEL,
-          max_tokens: 1024,
-          system,
-          messages,
+          contents,
+          config: {
+            systemInstruction: system,
+            maxOutputTokens: 1024,
+            thinkingConfig: { thinkingBudget: 0 }, // ปิด thinking เพื่อลดค่าใช้จ่าย/ความหน่วง
+          },
         });
-        ms.on("text", (delta) => controller.enqueue(encoder.encode(delta)));
-        await ms.finalMessage();
+        for await (const chunk of res) {
+          const text = chunk.text;
+          if (text) controller.enqueue(encoder.encode(text));
+        }
       } catch (err) {
         console.error("[game-chat] error:", err);
         controller.enqueue(encoder.encode("ขออภัยครับ ระบบแชทมีปัญหาชั่วคราว กรุณาลองใหม่อีกครั้งนะครับ"));
