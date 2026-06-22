@@ -328,6 +328,7 @@ model GameGuide {
   nameTh      String
   nameEn      String
   summaryTh   String
+  rulesTh     String? // คู่มือกติกาละเอียดสำหรับแชทบอทผู้ช่วยสอนเกม (markdown)
   youtubeUrl  String?
   imageUrl    String?
   minPlayers  Int

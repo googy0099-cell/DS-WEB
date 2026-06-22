@@ -11,6 +11,7 @@ type GameGuide = {
   nameTh: string;
   nameEn: string;
   summaryTh: string;
+  rulesTh: string | null;
   youtubeUrl: string | null;
   imageUrl: string | null;
   minPlayers: number;
@@ -33,6 +34,7 @@ const EMPTY: Omit<GameGuide, "id"> = {
   nameTh: "",
   nameEn: "",
   summaryTh: "",
+  rulesTh: "",
   youtubeUrl: "",
   imageUrl: null,
   minPlayers: 2,
@@ -768,6 +770,22 @@ export default function AdminGamesPage() {
                   </div>
                 </div>
               )}
+
+              <div>
+                <label className="text-xs font-medium text-navy block mb-1">
+                  คู่มือกติกาละเอียด (สำหรับแชทบอท 🎲)
+                </label>
+                <textarea
+                  value={editing.rulesTh ?? ""}
+                  onChange={(e) => setEditing({ ...editing, rulesTh: e.target.value })}
+                  rows={8}
+                  className="w-full border border-sand rounded-xl px-3 py-2 text-sm focus:border-orange focus:outline-none resize-y font-mono"
+                  placeholder={"ใส่กติกา/วิธีเซ็ตอัป/เงื่อนไขชนะ/กติกาย่อยให้ครบ — ยิ่งละเอียด แชทบอทยิ่งตอบได้ดี\n\nเช่น:\n## การเซ็ตอัป\n- แจกการ์ดคนละ 7 ใบ\n...\n## วิธีเล่น\n...\n## เงื่อนไขชนะ\n..."}
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  แชทบอทผู้ช่วยสอนในหน้าเกมจะตอบคำถามลูกค้าโดยอ้างอิงจากข้อความนี้เท่านั้น ถ้าเว้นว่างจะใช้ช่อง &quot;วิธีเล่น&quot; ด้านบนแทน
+                </p>
+              </div>
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center gap-2 text-sm cursor-pointer">
